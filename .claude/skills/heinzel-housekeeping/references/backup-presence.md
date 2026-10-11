@@ -84,17 +84,53 @@ Two caveats to carry into the report:
 ## macOS Probes
 
 ```
-tmutil destinationinfo
-tmutil latestbackup 2>/dev/null
-tmutil listbackups 2>/dev/null | tail -1
+tmutil destinationinfo -X
 launchctl list | grep -iE 'backup|arq|restic|ccc'
 ls /Applications 2>/dev/null \
   | grep -iE 'arq|carbon copy|backblaze'
 ```
 
+**Multiple destinations are common (e.g. a local disk
+plus a network share) — check each one by name, never
+rely on the bare, undirected form.** `tmutil
+latestbackup` and `tmutil listbackups` without
+`-d <mount_point>` report only on the one destination
+Time Machine currently considers
+active (`LastDestination` in the `-X` output) — not on
+every configured destination. Querying only that one
+and generalizing the result ("no backup found") is how
+a destination with a perfectly good backup history gets
+missed while a sibling destination's first-ever run is
+still copying.
+
+For each `Destinations` entry from `destinationinfo -X`,
+take its `MountPoint` (local) or the mounted path by
+`Name` (network, once mounted) and query it directly:
+
+```
+tmutil latestbackup -d "<mount_point>" 2>&1
+tmutil listbackups -d "<mount_point>" 2>&1 | tail -1
+```
+
+A destination that is not currently mounted cannot be
+queried this way: a network share, or a local disk
+that is unplugged, whose entry then carries no
+`MountPoint` key at all. Note it as "not mounted,
+last-backup unknown" rather than "no backup".
+
+`tmutil status` takes no `-d`. It only describes
+whatever destination is actively copying right now, if
+any. Use it to explain *that* backup's progress, never to
+conclude anything about a destination it is not
+currently touching.
+
 `tmutil` errors can mean missing Full Disk Access
 for the terminal, not a missing backup — treat
 errors as "unknown", not "absent", and say so.
+
+Report each destination on its own line — "one OK, one
+still on its first run" is a materially different
+finding from either extreme and both must be visible.
 
 ## FreeBSD
 
@@ -120,6 +156,14 @@ Scope and limits). Run the closest equivalents —
 - **OK / INFO** — mechanism plus fresh evidence.
   One line in Services, e.g.
   `Backups  OK — restic systemd timer, last run 6h ago`.
+- **Multiple destinations, mixed state** — rate the
+  overall line by the *best* destination with fresh
+  evidence (still OK, not WARN/CRITICAL), but name
+  every destination and its own state on the line.
+  Never collapse this into a single "no backup yet".
+  When no destination can be queried, the mechanism
+  exists and its last run is unknown: say that, never
+  CRITICAL.
 
 ## Recording the Answer
 

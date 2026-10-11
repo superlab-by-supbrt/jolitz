@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.30.1 — 2026-10-11
+
+- **Housekeeping checks every Time Machine destination
+  on its own.** A Mac with two destinations was
+  reported as "no backup" while one had a good history
+  and the other was still on its first run, because
+  `tmutil latestbackup` and `listbackups` without `-d`
+  were read as an answer for all of them. Each
+  destination is now queried by its mount point and
+  gets its own state in the report; one that is not
+  mounted, a network share or an unplugged disk, reads
+  "last backup unknown", not "no backup" (#67, thanks
+  to Stephan Witt).
+
 ## 2.30.0 — 2026-10-11
 
 - **Long jobs run on the host and are read back.**
