@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.31.0 — 2026-10-14
+
+- **Log queries stay inside the time limit.** A check
+  for what Heinzel wrote in the last 48 hours piped the
+  whole journal through `grep` and `tail`, ran into the
+  120-second limit and lost its answer, although a
+  precise query had answered the question already.
+  `rules/log-queries.md` bounds every read with
+  `--since` or `-n`, filters by field or `-g` instead
+  of a pipe, and says not to follow a clear answer with
+  a broad cross-check.
+
 ## 2.30.1 — 2026-10-11
 
 - **Housekeeping checks every Time Machine destination
