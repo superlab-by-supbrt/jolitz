@@ -293,6 +293,14 @@ same `memory/servers/<hostname>/rules.md` file.
 
 Read `rules/anomaly-detection.md`.
 
+## Reading Logs
+
+Read `rules/log-queries.md` before the first
+`journalctl`, `log show` or search through
+`/var/log`. Bound every read with `--since` or
+`-n`, filter by field or `-g`, never pipe a whole
+journal into `grep` or `tail`.
+
 ## Verify a Finding Before Reporting It
 
 Read `rules/verify-before-reporting.md`. Before you
