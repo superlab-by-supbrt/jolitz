@@ -157,7 +157,11 @@ When SSH stops answering, read
 
 Read `rules/access-control.md` for full details.
 Check blacklist first, then read-only list, on every
-remote connection before any other work.
+remote connection before any other work. A server
+can lock itself with `allow_changes = false` in
+`/etc/heinzel.conf`: read it on every connection,
+local mode too, and treat a lock like the read-only
+list. Never write, move or delete that file.
 
 ## Critical Safety Rules
 

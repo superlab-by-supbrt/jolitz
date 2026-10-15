@@ -165,10 +165,10 @@ The safety rules are part of every session.
   `--dangerously-skip-permissions`: halt and poweroff,
   `mkfs`, partition-table writers, boot-loader and EFI
   writers, deleting or overwriting SSH keys, writes to
-  `sshd_config`, deleting accounts, writes to `sudoers` and
-  the account files. It also catches them inside
-  `ssh host "…"`, behind `python3 -c` and when the file-edit
-  tools target one of those files. Read-only forms
+  `sshd_config`, deleting accounts, writes to `sudoers`,
+  the account files and the server lock. It also catches
+  them inside `ssh host "…"`, behind `python3 -c` and when
+  the file-edit tools target one of those files. Read-only forms
   (`fdisk -l`, `efibootmgr -v`, `visudo -c`) stay allowed.
   The hook has no off switch: what it blocks is Heinzel Pro's
   work. OpenCode does not run this hook; there the written
@@ -191,6 +191,22 @@ The safety rules are part of every session.
 - **Blacklist and read-only servers.** Hosts in
   `memory/blacklist.md` are never contacted. Hosts in
   `memory/readonly.md` are inspected but never changed.
+- **Server lock.** A machine's owner can lock it against
+  every Heinzel with a file on the machine itself:
+
+  ```
+  # /etc/heinzel.conf
+  allow_changes = false
+  reason = Database migration until 20 Oct, hands off
+  ```
+
+  Heinzel still connects and inspects, but changes nothing
+  and reports what it would have done. An unreadable file
+  or any value other than `true` locks too. Heinzel never
+  writes, moves or deletes the file; you remove the lock by
+  hand. It is a promise kept by Heinzel, not a security
+  boundary: it stops no tool that ignores it
+  (`rules/access-control.md`).
 - **Protected paths.** `memory/protected-paths.md` marks
   paths per server as `readonly`, `hidden` (content never
   shown) or `confirm` (needs a typed `CONFIRM`).
