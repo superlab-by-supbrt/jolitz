@@ -135,15 +135,15 @@ request to change them with one line pointing to Pro.
 | --- | --- | --- |
 | Who | One admin, their terminal, their servers | A team, one web interface, a fleet |
 | Connect, detect the OS, remember the host | Yes | Yes |
-| Housekeeping, security audit, reports | On request | On a schedule, as a findings list, started by alerts |
-| Packages, configs, services, firewall | Asks first | Rights per person and server, countersigned where needed |
-| Accounts, SSH keys, sudo, deploy users | Inspects and reports | Creates and changes them, with a way back |
-| Secrets and certificates | Finds leaks, reports expiry | Rotation with a plan across every consumer, renewal across the fleet |
-| Partitions, boot loaders, OS replacement | Reads | Switchable per tenant, four eyes before every write |
-| Many servers at once | One after another | Rollouts in waves, fleet comparison, version matrix |
-| At night, with nobody there | No | Schedules, maintenance windows, reads alone, changes collected for the morning |
+| Housekeeping, security audit, reports | On request | On a schedule, as a list of open findings, started by alerts |
+| Packages, configs, services, firewall | Asks first | Rights per person and server, a second person where the tenant wants one |
+| Accounts, SSH keys, sudo, deploy users | Inspects and reports | Creates and changes them, approved and logged |
+| Secrets and certificates | Finds leaks, reports expiry | Rotation as an approved session with the audit trail |
+| Partitions, boot loaders, OS replacement | Reads | Changes them, with a second person before every write where the tenant requires it |
+| Many servers at once | One after another | Rollouts: one task on many servers, a canary first, then waves |
+| At night, with nobody there | No | Schedules that read alone and collect changes for the morning, alerts that start a diagnosis |
 | Evidence | Journal and changelog on the host | Audit chain, access review, policy as a file |
-| Own rules | Files in the checkout | Installation, tenant, server; import from a Heinzel checkout |
+| Own rules | Files in the checkout | Knowledge notes per tenant, the rule set as a versioned bundle in the database |
 
 Resetting the password of an existing account, adding a key
 the operator pastes in, and every package, config, service
