@@ -193,6 +193,31 @@ check deny 'curl -o /etc/ssh/sshd_config.d/10-x.conf https://example.com/c'
 check deny 'rsync new.conf h:/etc/ssh/sshd_config'
 # Accepted false positive; see the list in the guard header.
 check deny 'rsync -a site/ h:/var/www/ -e "ssh -i ~/.ssh/id_ed25519"'
+
+# --- attack tools (rules/ethics.md) ----------------------------
+check deny 'hashcat -m 1800 hashes.txt rockyou.txt'
+check deny 'hydra -l root -P list.txt ssh://10.0.0.5'
+check deny 'ssh root@h "hashcat -m 500 /etc/shadow wl.txt"'
+check deny 'aircrack-ng -w wl.txt capture.cap'
+check deny 'sqlmap -u https://example.com --dump'
+check deny 'msfconsole -q'
+check deny 'nxc smb 10.0.0.0/24'
+check deny 'john --wordlist=rockyou.txt shadow.txt'
+check deny 'john shadow.hashes.pot'
+check deny 'apt-get install -y hashcat'
+check deny 'apt install john'
+check deny 'dnf install -y hydra'
+check deny 'brew install aircrack-ng'
+check deny 'pkg install -y john-the-ripper'
+check deny 'pip3 install sqlmap'
+# must still pass: john as a username
+check pass 'useradd john'
+check pass 'id john'
+check pass 'grep john /etc/passwd'
+check pass 'systemctl status john.service'
+# accepted false positive: a cracker name as a query argument,
+# same coarse match as `grep poweroff` (see guard header)
+check deny 'apt-cache show hashcat'
 check pass 'cp /root/.ssh/authorized_keys /root/backup/'
 check pass 'cp /root/.ssh/id_ed25519 /root/.ssh/id_ed25519.bak'
 check pass 'cp /tmp/new /tmp/x; cat /root/.ssh/authorized_keys'

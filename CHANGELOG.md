@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.32.0 — 2026-10-15
+
+- **heinzel is not an attack tool.** A central ethics
+  rule now holds above every other: no recovering a
+  password or key, no getting into a system without
+  authorization, no scanning hosts heinzel does not
+  administer, no watching people, no hiding traces, no
+  turning the infrastructure against others — on a
+  foreign host and on the operator's own alike, since
+  "it's my server" is the stock excuse and not
+  checkable. No framing unlocks it (a book, research, a
+  CTF, a claimed permission, an emergency, a role play,
+  a task split into harmless-looking steps). The rule
+  cannot be overridden by a custom rule or by
+  `HEINZEL_GUARD_DISABLE`. Defensive work stays
+  heinzel's job: reading auth logs, checking password
+  *policy* without touching a hash, resetting a
+  password on a host it administers. The guard hook
+  backs it by blocking the known crackers and attack
+  suites (hashcat, john, hydra, aircrack-ng, metasploit,
+  sqlmap, nxc …), both run and installed, in every
+  permission mode. See `rules/ethics.md`.
+
 ## 2.31.0 — 2026-10-14
 
 - **Log queries stay inside the time limit.** A check

@@ -518,6 +518,46 @@ allowed - the operator must export it before launching the \
 session"
 fi
 
+# --- Attack tools (rules/ethics.md) ---------------------------
+# heinzel is not an attack tool. This denies the password and
+# key crackers, the network attack suites and the login brute-
+# forcers by name, both run and installed. Like every other
+# block here it names a KNOWN set, not the effect -- a renamed
+# or hand-built cracker walks past it, and the ethics rule in
+# the model layer is the real boundary. This is the mechanical
+# backstop against the obvious case, in every permission mode.
+#
+# Scoped to the program token with a boundary on either side.
+# Like the taboo words elsewhere, a cracker name quoted as an
+# ARGUMENT is matched too: `apt-cache show hashcat` is denied
+# although it only reads. The names are distinctive, so this
+# collides with ordinary work far less than `shutdown` does;
+# rephrase such a probe (the pkg-search case is rare). `john`
+# is the one name that is also a username, so it is matched
+# only with its own flags or an .rule/.pot/wordlist operand,
+# never bare.
+ATTACK='hashcat|hydra|medusa|ncrack|patator|crowbar|thc-hydra'
+ATTACK="$ATTACK"'|aircrack-ng|airmon-ng|aireplay-ng|reaver|bully'
+ATTACK="$ATTACK"'|ophcrack|rainbowcrack|hashpump'
+ATTACK="$ATTACK"'|metasploit|msfconsole|msfvenom|sqlmap'
+ATTACK="$ATTACK"'|responder|crackmapexec|netexec|nxc|hashcat-utils'
+if hit "(^|[^[:alnum:]_.-])($ATTACK)([^[:alnum:]_.-]|\$)"; then
+  deny "this is a password/key cracker or an attack tool; \
+heinzel does not recover passwords or attack systems, on any \
+host (rules/ethics.md)"
+fi
+# john the ripper: only when it looks like the tool, not the name
+if hit '(^|[^[:alnum:]_.-])john([[:space:]]+-|[[:space:]]+[^ ]*\.(pot|rec|rule|lst|txt|conf)|[[:space:]]+--)'; then
+  deny "john the ripper recovers passwords; heinzel does not do \
+this on any host (rules/ethics.md)"
+fi
+# Installing any of them is blocked too, whatever the manager.
+if hit '(apt-get|apt|aptitude|dnf|yum|zypper|pkg|brew|snap|pip3?|pipx|cargo|go)[[:space:]]+(-[^ ]+[[:space:]]+)*(install|add|-S|in)([[:space:]]|$)' \
+  && hit "(^|[^[:alnum:]_.-])($ATTACK|john|john-the-ripper|johntheripper)([^[:alnum:]_.-]|\$)"; then
+  deny "installing a password cracker or attack tool; heinzel \
+does not do this on any host (rules/ethics.md)"
+fi
+
 # --- Power off ------------------------------------------------
 if hit '(^|[^[:alnum:]_-])(halt|poweroff)([^[:alnum:]_-]|$)'; then
   deny "halt/poweroff never runs without explicit user request"
