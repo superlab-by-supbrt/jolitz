@@ -439,6 +439,29 @@ check pass 'sysadminctl -secureTokenStatus alice'
 check pass 'groups alice'
 check pass 'ssh root@h "cat /etc/sudoers.d/deploy"'
 
+# The server lock (/etc/heinzel.conf, rules/access-control.md).
+# The machine's owner sets it; heinzel reads it and never lifts
+# it, by any of the ways a file gets written, moved or deleted.
+check deny 'echo "allow_changes = true" > /etc/heinzel.conf'
+check deny 'echo x >> /etc/heinzel.conf'
+check deny "sed -i 's/false/true/' /etc/heinzel.conf"
+check deny 'rm /etc/heinzel.conf'
+check deny 'rm -f /private/etc/heinzel.conf'
+check deny 'mv /etc/heinzel.conf /etc/heinzel.conf.off'
+check deny 'chmod 000 /etc/heinzel.conf'
+check deny 'truncate -s 0 /etc/heinzel.conf'
+check deny 'cp heinzel.conf /etc/heinzel.conf'
+check deny 'tee /etc/heinzel.conf < x'
+check deny 'vi /etc/heinzel.conf'
+check deny 'ssh root@h "rm /etc/heinzel.conf"'
+check deny 'ssh root@h "sed -i s/false/true/ /etc/heinzel.conf"'
+check deny 'python3 -c "import os; os.remove(\"/etc/heinzel.conf\")"'
+check pass 'cat /etc/heinzel.conf'
+check pass 'ssh root@h "cat /etc/heinzel.conf"'
+check pass 'ssh root@h "if [ -e /etc/heinzel.conf ]; then cat /etc/heinzel.conf || echo HEINZEL_CONF_UNREADABLE; else echo HEINZEL_CONF_ABSENT; fi"'
+check pass 'grep -i allow_changes /etc/heinzel.conf'
+check pass 'ls -l /etc/heinzel.conf'
+
 # --- every code block the skills and rules ship passes ---------
 # A taboo word used as data in a documented probe is denied like
 # the command itself and cancels the whole parallel batch. The
@@ -935,6 +958,8 @@ if command -v jq >/dev/null 2>&1; then
   check_file deny Write file_path /etc/group x
   check_file deny Write file_path /etc/master.passwd x
   check_file deny Write file_path /sys/firmware/efi/efivars/Boot0001-x x
+  check_file deny Write file_path /etc/heinzel.conf x
+  check_file deny Edit file_path /private/etc/heinzel.conf x
   check_file pass Write file_path /etc/sudo.conf x
   check_file pass Write file_path /etc/default/grub x
   check_file pass Write file_path /boot/loader.conf x

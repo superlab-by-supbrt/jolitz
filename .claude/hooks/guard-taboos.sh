@@ -32,6 +32,9 @@
 #     deleting an account or a group, visudo, vipw/vigr, any
 #     write to sudoers(.d/) or to the account files
 #     (/etc/passwd, shadow, group, master.passwd)
+#   - writing, moving or deleting the server lock
+#     /etc/heinzel.conf, which only the machine's owner sets
+#     (rules/access-control.md)
 #   - any of those paths reached through a language
 #     runtime (python/perl/ruby/node/awk ...), whose file
 #     I/O looks nothing like a shell write; awk is exempt
@@ -41,8 +44,8 @@
 #     expansion, whose target nobody sees before it runs
 #     (issue #51)
 #   - a file-edit tool pointed at sshd_config, a key file,
-#     sudoers, an account file, an efivar or a raw disk
-#     device (see the file-mode section)
+#     sudoers, an account file, an efivar, the server lock or
+#     a raw disk device (see the file-mode section)
 #
 # What it deliberately does NOT scan: the body of a heredoc that
 # is written to an ordinary file by cat or tee (issue #8). That
@@ -357,6 +360,12 @@ SUDOERS='/etc/sudoers(\.d(/[[:alnum:]_.-]*)?)?'
 ACCOUNTS='/etc/(passwd|shadow|gshadow|group|master\.passwd|s?pwd\.db)'
 EFIVARS='/sys/firmware/efi/efivars'
 
+# The server lock. The machine's owner writes it to keep heinzel
+# hands-off; a heinzel that could flip it to true or delete it
+# would make it worthless. Unanchored on the left, so macOS's
+# /private/etc matches too. Reading it stays allowed.
+LOCKFILE='/etc/heinzel\.conf'
+
 # A general-purpose language runtime. See the interpreter section
 # at the bottom for why this list, and not a list of the ways
 # those runtimes spell a write.
@@ -539,6 +548,10 @@ useradd and passwd make; account work is a Heinzel Pro feature"
   if target_hit "$EFIVARS"; then
     deny "writing a firmware variable can brick the board; boot \
 work is a Heinzel Pro feature"
+  fi
+  if target_hit "$LOCKFILE"; then
+    deny "/etc/heinzel.conf is the server lock; only the \
+machine's owner changes it, never heinzel"
   fi
   exit 0
 fi
@@ -956,6 +969,23 @@ account work is a Heinzel Pro feature"
   fi
 fi
 
+# --- The server lock ------------------------------------------
+# Same write set as sudoers above: a redirect, sed -i, an editor,
+# a delete, move or re-permission, a copy or tee onto it. Moving
+# or deleting it lifts the lock as surely as writing true.
+if hit "$LOCKFILE"; then
+  if hit '>>?[[:space:]]*["'\'']?[^[:space:];|&]*'"$LOCKFILE" \
+    || { hit '(^|[^[:alnum:]_-])(sed|perl)([^[:alnum:]_-]|$)' \
+         && hit '(^|[[:space:]])-i'; } \
+    || hit "(^|[^[:alnum:]_-])$EDITOR([^[:alnum:]_-]|\$)" \
+    || hit "(^|[^[:alnum:]_-])($CLOBBER|cp)([^[:alnum:]_-]|\$)" \
+    || writes_to "$LOCKFILE"
+  then
+    deny "/etc/heinzel.conf is the server lock; only the \
+machine's owner changes it, never heinzel (cat and grep read it)"
+  fi
+fi
+
 # --- Effects reached through an interpreter -------------------
 # Every rule above recognizes a write by the way it is spelled: a
 # redirect, tee, sed -i, an editor, rm/mv/chmod/truncate. A
@@ -1017,6 +1047,10 @@ rewrite it, and a pattern matcher cannot tell that from a read \
     deny "an interpreter with the efivars mount on its command \
 line can write a firmware variable - read them with cat or ls \
 instead"
+  fi
+  if hit "$LOCKFILE"; then
+    deny "an interpreter with /etc/heinzel.conf on its command \
+line can lift the server lock - read it with cat or grep instead"
   fi
 fi
 if hit "$INTERP_NOAWK" && hit "$ACCOUNTS"; then

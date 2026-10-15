@@ -1,7 +1,8 @@
 # Access Control
 
 Rules for the server blacklist and read-only server
-list. Both use the same file format and lookup logic.
+list, which share one file format and lookup logic,
+and for the server lock a host sets for itself.
 
 ## Shared File Format
 
@@ -103,3 +104,69 @@ unprivileged mode sysadmin report.
 The user must remove the entry from
 `memory/readonly.md` before heinzel will modify the
 server.
+
+## Server Lock: `/etc/heinzel.conf`
+
+The machine's owner can lock it against changes from
+the machine itself, for every heinzel that connects,
+whoever runs it:
+
+```
+# /etc/heinzel.conf
+allow_changes = false
+reason = Database migration until 20 Oct, hands off
+```
+
+`key = value` per line, `#` comments, blank lines
+ignored. The same path on Linux, FreeBSD and macOS
+(`/etc` is `/private/etc` there). Root-owned, mode
+`0644`.
+
+**When to check:** on every connection, as the
+first SSH call once the SSH user and port are known
+(`rules/first-connection.md`, step 6). Local mode
+runs the same probe in the local shell. Read it
+fresh every time, never from server memory. Run the
+probe in a call of its own:
+
+```bash
+if [ -e /etc/heinzel.conf ]; then
+  cat /etc/heinzel.conf || echo HEINZEL_CONF_UNREADABLE
+else
+  echo HEINZEL_CONF_ABSENT
+fi
+echo HEINZEL_CONF_DONE
+```
+
+**How to read it (fails closed):**
+
+- `HEINZEL_CONF_ABSENT`: no lock, work normally.
+- `allow_changes = true`: no lock. Case and the
+  spaces around `=` do not matter.
+- Anything else is a lock: `false`, a missing key,
+  any other value, an empty file,
+  `HEINZEL_CONF_UNREADABLE`.
+- No `HEINZEL_CONF_DONE` means the check did not
+  run. Change nothing until it has.
+
+**On a lock:** switch to read-only mode exactly as
+for `memory/readonly.md` above (same allowed and
+blocked lists, same deferred modification report).
+Tell the user: "This server is locked in
+`/etc/heinzel.conf`. I will inspect, but I will not
+change anything." Quote `reason` when it is set.
+
+Either source is enough: a host listed in
+`memory/readonly.md` stays read-only whatever the
+file says.
+
+**Never lift it.** heinzel never creates, edits,
+moves, deletes or re-permissions `/etc/heinzel.conf`,
+not even on request. The owner changes it by hand.
+When the user asks heinzel to lock or unlock a
+server, give them the command to run themselves. The
+guard hook blocks every write to the file.
+
+The lock is cooperative, not a security boundary: it
+stops every tool that honours it. Only withholding
+root and sudo keeps a tool out that does not.

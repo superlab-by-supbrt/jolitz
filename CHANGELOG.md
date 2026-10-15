@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.1.0 — 2026-10-15
+
+- **A server can lock itself.** `allow_changes = false`
+  in `/etc/heinzel.conf` puts every heinzel that
+  connects into read-only mode: it inspects and
+  reports, but changes nothing. An optional `reason`
+  line is shown to the user. The check fails closed
+  (an unreadable file or any value other than `true`
+  locks), runs on every connection and in local mode,
+  and is step 6 of `rules/first-connection.md`. The
+  guard hook blocks every write, move or deletion of
+  the file, so only the machine's owner lifts the lock.
+
 ## 3.0.0 — 2026-10-15
 
 - **heinzel reads disks, boot, accounts and secrets;

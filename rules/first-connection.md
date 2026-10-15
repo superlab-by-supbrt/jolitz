@@ -37,13 +37,16 @@ port (`rules/ssh-port.md` → Known port).
    the one the user named, else `- SSH port:` from
    the memory read in step 4; a new host without one
    goes through `rules/ssh-port.md` → first contact.
-6. **OS detection.** See `rules/os-detection.md`.
-7. **Server memory file.** Create on first
+6. **Server lock.** Read `/etc/heinzel.conf` and
+   switch to read-only mode if it locks the server.
+   See `rules/access-control.md` → Server Lock.
+7. **OS detection.** See `rules/os-detection.md`.
+8. **Server memory file.** Create on first
    connection, read on every subsequent connection.
    See `rules/server-memory.md`.
-8. **Activity check.** Every connection, not just
+9. **Activity check.** Every connection, not just
    the first. See `rules/activity-check.md`.
-9. **Then** execute the user's request.
+10. **Then** execute the user's request.
 
 ## Local mode
 
@@ -51,8 +54,8 @@ In local mode (`localhost`, the user's own
 hostname), skip steps 1, 2, 4 and 5 — they are
 remote-only
 (see `CLAUDE.md` → How It Works → Local mode).
-Still run OS detection, server memory, and activity
-check.
+Still run the server lock, OS detection, server
+memory, and activity check.
 
 ## Path Access Control
 
@@ -97,8 +100,8 @@ three lists, one glob per line; an optional leading
   shown. See `rules/secrets.md` → "Paths Marked
   Hidden".
 
-Precedence, strongest first: server blacklist and
-read-only list > `hidden` > `confirm` > `readonly`
+Precedence, strongest first: server blacklist,
+read-only list and server lock > `hidden` > `confirm` > `readonly`
 > no entry. A glob is a hint, not a sandbox: also
 treat commands that reach a protected path
 indirectly (a recursive copy of its parent, a
