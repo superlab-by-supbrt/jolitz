@@ -362,9 +362,14 @@ EFIVARS='/sys/firmware/efi/efivars'
 
 # The server lock. The machine's owner writes it to keep heinzel
 # hands-off; a heinzel that could flip it to true or delete it
-# would make it worthless. Unanchored on the left, so macOS's
-# /private/etc matches too. Reading it stays allowed.
-LOCKFILE='/etc/heinzel\.conf'
+# would make it worthless. Matched by its file name alone, in any
+# case: the full path misses /ETC/HEINZEL.CONF on macOS, /etc//
+# and /etc/./, and a relative heinzel.conf after cd /etc. A write
+# to any file of that name is denied with it. Not closable: a
+# glob (/etc/heinzel.c*) or a name built at run time still gets
+# through, so the written rule stays the first line of defence.
+# Reading it stays allowed.
+LOCKFILE='[Hh][Ee][Ii][Nn][Zz][Ee][Ll]\.[Cc][Oo][Nn][Ff]'
 
 # A general-purpose language runtime. See the interpreter section
 # at the bottom for why this list, and not a list of the ways
@@ -970,8 +975,9 @@ account work is a Heinzel Pro feature"
 fi
 
 # --- The server lock ------------------------------------------
-# Same write set as sudoers above: a redirect, sed -i, an editor,
-# a delete, move or re-permission, a copy or tee onto it. Moving
+# Same write set as sudoers above (a redirect, sed -i, an editor,
+# a delete, move or re-permission, a copy or tee onto it), plus
+# find -delete, which deletes by a name it never spells as a path. Moving
 # or deleting it lifts the lock as surely as writing true.
 if hit "$LOCKFILE"; then
   if hit '>>?[[:space:]]*["'\'']?[^[:space:];|&]*'"$LOCKFILE" \
@@ -979,6 +985,7 @@ if hit "$LOCKFILE"; then
          && hit '(^|[[:space:]])-i'; } \
     || hit "(^|[^[:alnum:]_-])$EDITOR([^[:alnum:]_-]|\$)" \
     || hit "(^|[^[:alnum:]_-])($CLOBBER|cp)([^[:alnum:]_-]|\$)" \
+    || hit '(^|[[:space:]])-delete([[:space:]]|$)' \
     || writes_to "$LOCKFILE"
   then
     deny "/etc/heinzel.conf is the server lock; only the \

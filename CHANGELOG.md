@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.1.1 — 2026-10-15
+
+- **The server lock holds under other spellings.** The
+  guard now matches `heinzel.conf` by name in any case,
+  so `/ETC/HEINZEL.CONF` on macOS, `/etc//heinzel.conf`
+  and a relative path after `cd /etc` are blocked too,
+  and so is `find … -delete`.
+
 ## 3.1.0 — 2026-10-15
 
 - **A server can lock itself.** `allow_changes = false`
