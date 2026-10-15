@@ -1,5 +1,5 @@
-# All user state lives under memory/.
-# Solo mode by default; team mode is opt-in below.
+# All user state lives under memory/. One checkout,
+# one person: memory/ is never shared through git.
 
 # Start by ignoring everything in memory/, then
 # explicitly allow the tracked templates and keep
@@ -11,35 +11,16 @@ memory/*
 !memory/service-policy.md.example
 
 # Server memory directory — keep the folder in git
-# but ignore its contents (solo mode). For team
-# mode, un-ignore the contents by uncommenting the
-# `!memory/servers/**` line below.
+# but ignore its contents.
 !memory/servers/
 memory/servers/*
 !memory/servers/.gitkeep
 
 # Custom rule overrides — keep the folder in git
-# but ignore its contents (solo mode). For team
-# mode, un-ignore *.md by uncommenting the
-# `!memory/custom-rules/*.md` line below.
+# but ignore its contents.
 !memory/custom-rules/
 memory/custom-rules/*
 !memory/custom-rules/.gitkeep
-
-# ---- Team mode (opt-in) --------------------------
-# Uncomment the lines you want to share via git.
-# memory/user.md and memory/opencode.json are
-# always personal and must NEVER be shared.
-# !memory/blacklist.md
-# !memory/readonly.md
-# !memory/protected-paths.md
-# !memory/service-policy.md
-# !memory/housekeeping.md
-# !memory/network.md
-# !memory/servers/**
-# memory/servers/localhost/
-# memory/servers/127.0.0.1/
-# !memory/custom-rules/*.md
 
 # Project history (auto-maintained by Claude Code).
 HISTORY.md

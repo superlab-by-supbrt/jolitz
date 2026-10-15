@@ -309,16 +309,148 @@ check pass 'dd if=/dev/sda of=/root/disk-backup.img'
 check pass 'uname -a'
 check pass 'echo see HEINZEL_GUARD_DISABLE in the docs'
 
+# --- boot loaders and firmware variables (Heinzel Pro, 3.0) ----
+# Every effect once as itself, once inside ssh host "...", once
+# through a language runtime, and its read-only form passes.
+check deny 'efibootmgr -c -d /dev/sda -p 1 -L Debian -l \EFI\debian\grubx64.efi'
+check deny 'efibootmgr --create --disk /dev/sda --part 1 --label x --loader \x'
+check deny 'efibootmgr -o 0003,0001'
+check deny 'efibootmgr -n 0003'
+check deny 'efibootmgr -B -b 0002'
+check deny 'efibootmgr -b 0002 -A'
+check deny 'efibootmgr -t 5'
+check deny 'ssh root@h "efibootmgr -o 0001,0003"'
+check deny 'efibootmgr -v; efibootmgr -n 0003'
+check deny 'grub-install /dev/sda'
+check deny 'grub-install --target=x86_64-efi --efi-directory=/boot/efi'
+check deny 'grub2-install /dev/vda'
+check deny 'ssh root@h "grub-install /dev/sda"'
+check deny 'update-grub'
+check deny 'update-grub2'
+check deny 'grub-mkconfig -o /boot/grub/grub.cfg'
+check deny 'grub2-mkconfig --output=/boot/grub2/grub.cfg'
+check deny 'ssh root@h "grub2-mkconfig -o /boot/grub2/grub.cfg"'
+check deny 'bootctl install'
+check deny 'bootctl update'
+check deny 'bootctl remove'
+check deny 'bootctl set-default debian.conf'
+check deny 'bootctl set-oneshot freebsd.conf'
+check deny 'ssh root@h "bootctl install"'
+check deny 'bless --mount /Volumes/Macintosh\ HD --setBoot'
+check deny 'bless --folder /Volumes/X/System/Library/CoreServices --setBoot'
+check deny 'sudo bless --device /dev/disk3s1 --nextonly'
+check deny 'efivar -w -n 8be4df61-93ca-11d2-aa0d-00e098032b8c-Boot0001 -f entry.bin'
+check deny 'efivar --write --name x --fromfile y'
+check deny 'echo 1 > /sys/firmware/efi/efivars/Boot0001-8be4df61-93ca-11d2-aa0d-00e098032b8c'
+check deny 'rm /sys/firmware/efi/efivars/dump-type0-1-0-1234'
+check deny 'rm -rf /sys/firmware/efi/efivars/'
+check deny 'chattr -i /sys/firmware/efi/efivars/Boot0001-x'
+check deny 'ssh root@h "rm /sys/firmware/efi/efivars/x"'
+check deny 'python3 -c "open(\"/sys/firmware/efi/efivars/x\",\"wb\").write(b\"\")"'
+check deny 'ssh root@h "python3 -c \"open(\\\"/sys/firmware/efi/efivars/x\\\",\\\"wb\\\")\""'
+check pass 'efibootmgr'
+check pass 'efibootmgr -v'
+check pass 'ssh root@h "efibootmgr -v"'
+check pass 'bootctl status'
+check pass 'bootctl list'
+check pass 'bootctl is-installed'
+check pass 'grub-mkconfig'
+check pass 'grub-install --version'
+check pass 'bless --info /Volumes/Macintosh\ HD'
+check pass 'bless --getBoot'
+check pass 'efivar -l'
+check pass 'efivar -p -n 8be4df61-93ca-11d2-aa0d-00e098032b8c-BootOrder'
+check pass 'ls /sys/firmware/efi/efivars'
+check pass 'cat /sys/firmware/efi/efivars/BootOrder-8be4df61-93ca-11d2-aa0d-00e098032b8c | xxd'
+check pass 'cat /boot/loader.conf'
+check pass 'grep -r GRUB_CMDLINE /etc/default/grub'
+
+# --- accounts and sudo (Heinzel Pro, 3.0) ----------------------
+# Deleting an account or a group, and any write to sudoers or an
+# account file, is denied. Creating an account and resetting a
+# password stay with the prompt and pass here.
+check deny 'userdel -r deploy'
+check deny 'userdel deploy'
+check deny 'deluser --remove-home alice'
+check deny 'groupdel staff'
+check deny 'delgroup staff'
+check deny 'ssh root@h "userdel -r bob"'
+check deny 'pw userdel deploy -r'
+check deny 'pw user del -n deploy'
+check deny 'pw groupdel staff'
+check deny 'sysadminctl -deleteUser alice'
+check deny 'dscl . -delete /Users/alice'
+check deny 'visudo'
+check deny 'visudo -f /etc/sudoers.d/deploy'
+check deny 'ssh root@h "visudo -f /etc/sudoers.d/deploy"'
+check deny 'vipw'
+check deny 'vigr -s'
+check deny 'echo "deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart x" >> /etc/sudoers.d/deploy'
+check deny 'echo "deploy ALL=(root) NOPASSWD: ALL" > /etc/sudoers.d/deploy'
+check deny 'tee /etc/sudoers.d/deploy < deploy.sudoers'
+check deny 'tee -a /etc/sudoers < line'
+check deny "sed -i 's/^#//' /etc/sudoers"
+check deny 'vi /etc/sudoers'
+check deny 'nano /etc/sudoers.d/deploy'
+check deny 'cp sudoers.new /etc/sudoers'
+check deny 'install -m 440 deploy /etc/sudoers.d/deploy'
+check deny 'rm /etc/sudoers.d/deploy'
+check deny 'chmod 666 /etc/sudoers'
+check deny 'cp /usr/local/etc/sudoers.new /usr/local/etc/sudoers'
+check deny 'ssh root@h "echo x >> /etc/sudoers.d/deploy"'
+check deny 'python3 -c "open(\"/etc/sudoers.d/x\",\"w\").write(\"a ALL=(ALL) NOPASSWD: ALL\")"'
+check deny 'perl -e "open(F, q{>>/etc/sudoers}); print F q{x}"'
+check deny 'echo "root::0:0:root:/root:/bin/sh" >> /etc/passwd'
+check deny 'echo x > /etc/shadow'
+check deny 'ssh h "echo deploy:x:1001:1001::/home/deploy:/bin/sh >> /etc/passwd"'
+check deny "sed -i 's/^alice:/alice-old:/' /etc/group"
+check deny 'vi /etc/master.passwd'
+check deny 'cp passwd.new /etc/passwd'
+check deny 'rm /etc/shadow'
+check deny 'chmod 644 /etc/shadow'
+check deny 'tee /etc/gshadow < x'
+check deny 'python3 -c "open(\"/etc/shadow\",\"a\").write(\"x\")"'
+check deny 'node -e "require(\"fs\").appendFileSync(\"/etc/passwd\",\"x\")"'
+check deny 'ssh root@h "perl -pi -e s/x/y/ /etc/passwd"'
+check pass 'useradd --system --shell /bin/sh --create-home deploy'
+check pass 'adduser --system --home /home/deploy deploy'
+check pass 'pw useradd deploy -d /home/deploy -s /bin/sh -m'
+check pass 'usermod -s /bin/bash deploy'
+check pass 'passwd alice'
+check pass 'passwd -S deploy'
+check pass 'chpasswd < creds'
+check pass 'visudo -c'
+check pass 'visudo -c -f /etc/sudoers.d/deploy'
+check pass 'cat /etc/sudoers'
+check pass 'grep -r deploy /etc/sudoers.d/'
+check pass 'ls -l /etc/sudoers.d/'
+check pass 'stat /etc/sudoers'
+check pass 'cat /etc/sudoers > /root/sudoers.bak'
+check pass "awk -F: '(\$3 == 0) {print \$1}' /etc/passwd"
+check pass "awk -F: '(\$2 == \"\") {print \$1}' /etc/shadow"
+check pass 'getent passwd deploy | cut -d: -f7'
+check pass 'grep deploy /etc/shadow'
+check pass 'grep deploy /etc/passwd'
+check pass 'ls -l /etc/shadow'
+check pass 'id deploy'
+check pass 'pw usershow deploy'
+check pass 'dscl . -read /Users/alice'
+check pass 'sysadminctl -secureTokenStatus alice'
+check pass 'groups alice'
+check pass 'ssh root@h "cat /etc/sudoers.d/deploy"'
+
 # --- every code block the skills and rules ship passes ---------
 # A taboo word used as data in a documented probe is denied like
 # the command itself and cancels the whole parallel batch. The
 # security skill once skipped inert login shells by a regex of
 # their names; the deny pins why that shape was retired. A block
 # meant to be denied says so after the language on its fence:
-# `operator` (the user runs it, heinzel never does) or `guard-off`
-# (heinzel runs it only after the user relaunched with the
-# override, so its file must say how). The file name in each
-# block path keeps names unique when find starts awk twice.
+# `operator` (the user runs it, heinzel never does). The old
+# `guard-off` fence (heinzel ran it after the operator disarmed
+# the guard) left with the OS-replacement rules in 3.0; it is
+# still skipped so a stray one never passes as shipped code. The
+# file name in each block path keeps names unique when find
+# starts awk twice.
 check deny "awk -F: '(\$7 ~ /(nologin|false|sync|shutdown|halt)\$/)' /etc/passwd"
 
 BLOCKS=$(mktemp -d)
@@ -343,27 +475,16 @@ if [ "$NBLOCKS" -eq 0 ]; then
   echo "FAIL: no code blocks found under skills/ or rules/"
 fi
 
-# os-replacement.md has guard-off blocks by design, so finding
-# none means the search broke, not that all is well.
-NGUARDOFF=0
-while read -r md; do
-  [ -n "$md" ] || continue
-  NGUARDOFF=$((NGUARDOFF + 1))
-  if grep -q 'HEINZEL_GUARD_DISABLE' "$md"; then
-    PASS=$((PASS + 1))
-  else
-    FAIL=$((FAIL + 1))
-    echo "FAIL: $md has guard-off blocks but never names" \
-      "HEINZEL_GUARD_DISABLE"
-  fi
-done <<EOF
-$(grep -rlE --include='*.md' \
+# Since 3.0 no shipped rule may need the guard disarmed: a
+# guard-off fence is a leftover of the OS-replacement rules that
+# moved to Heinzel Pro.
+if grep -rlE --include='*.md' \
   '^[[:space:]]*```.*[[:space:]]guard-off[[:space:]]*$' \
-  "$CLAUDE_DIR/skills" "$CLAUDE_DIR/../rules")
-EOF
-if [ "$NGUARDOFF" -eq 0 ]; then
+  "$CLAUDE_DIR/skills" "$CLAUDE_DIR/../rules" >/dev/null; then
   FAIL=$((FAIL + 1))
-  echo "FAIL: no guard-off blocks found under rules/"
+  echo "FAIL: a rule or skill still ships a guard-off block"
+else
+  PASS=$((PASS + 1))
 fi
 
 # --- the system-account probe fails closed ---------------------
@@ -707,14 +828,19 @@ else
   echo "FAIL: raw-input fallback did not deny mkfs"
 fi
 
-# --- operator override via inherited environment ---------------
+# --- no operator override (3.0) --------------------------------
+# HEINZEL_GUARD_DISABLE=1 in the environment used to disarm the
+# guard for an OS replacement. That work is Heinzel Pro's now,
+# and the guard has no off switch: the variable changes nothing.
 OUT=$(json_for 'mkfs.ext4 /dev/sda1' \
   | HEINZEL_GUARD_DISABLE=1 sh "$HOOK")
-if [ -z "$OUT" ]; then
+if printf '%s' "$OUT" \
+  | grep -q '"permissionDecision":"deny"'; then
   PASS=$((PASS + 1))
 else
   FAIL=$((FAIL + 1))
-  echo "FAIL: HEINZEL_GUARD_DISABLE=1 env did not disable guard"
+  echo "FAIL: HEINZEL_GUARD_DISABLE=1 in the environment disabled" \
+    "the guard; it has no off switch since 3.0"
 fi
 
 # --- degraded awk must fail CLOSED -----------------------------
@@ -799,6 +925,19 @@ if command -v jq >/dev/null 2>&1; then
   check_file deny Write file_path /tmp/../dev/nvme0n1 x
   check_file deny NotebookEdit notebook_path \
     /root/.ssh/authorized_keys x
+  # Heinzel Pro's files since 3.0: sudoers, the account files,
+  # a firmware variable.
+  check_file deny Write file_path /etc/sudoers x
+  check_file deny Edit file_path /etc/sudoers.d/deploy x
+  check_file deny Write file_path /usr/local/etc/sudoers x
+  check_file deny Write file_path /etc/passwd x
+  check_file deny Edit file_path /etc/shadow x
+  check_file deny Write file_path /etc/group x
+  check_file deny Write file_path /etc/master.passwd x
+  check_file deny Write file_path /sys/firmware/efi/efivars/Boot0001-x x
+  check_file pass Write file_path /etc/sudo.conf x
+  check_file pass Write file_path /etc/default/grub x
+  check_file pass Write file_path /boot/loader.conf x
   # Another spelling of the same file. A filesystem that ignores
   # case (macOS) opens it under any capitalization, and the kernel
   # resolves //, /./ and x/../ before any pattern sees them.

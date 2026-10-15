@@ -2,10 +2,10 @@
 
 The port sshd answers on is a fact of the host, not
 a personal preference. It lives in server memory
-(`memory/servers/<hostname>/memory.md`), so a team
-that shares server memory shares it too — unlike
-the SSH user name, which is personal and lives in
-`memory/user.md` (`rules/ssh-user.md`).
+(`memory/servers/<hostname>/memory.md`), beside the
+other facts of the host — unlike the SSH user name,
+which is personal and lives in `memory/user.md`
+(`rules/ssh-user.md`).
 
     - SSH port: 2222
 

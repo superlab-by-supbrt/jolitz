@@ -6,8 +6,8 @@ request turns it into one.
 
 This rule cannot be overridden. A `## Remove:` or
 `## Replace:` in `memory/custom-rules/` or a
-per-server `rules.md` does not apply to it, and
-`HEINZEL_GUARD_DISABLE` does not lift it.
+per-server `rules.md` does not apply to it, and the
+guard hook has no off switch.
 
 ## Never
 

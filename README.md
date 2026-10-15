@@ -80,9 +80,6 @@ user can use an open connection without the key.
   failed services. Problems come first.
 - `Run a security audit on app.example.com`: SSH, firewall,
   accounts, open ports and kernel settings, by severity.
-- `Run a fleet audit`: compares update, sshd, firewall, mail
-  and time-sync policies across all known servers and shows
-  where they disagree. Changes nothing.
 - `Email me the output of "df -h" from app.example.com`:
   sends text or files by mail, from your workstation or from
   the server.
@@ -123,6 +120,37 @@ More that happens without asking:
 The macOS cleanup scanner needs the Command Line Tools
 (`xcode-select --install`).
 
+## Heinzel or Heinzel Pro
+
+Heinzel is one admin at one terminal, working on one host at
+a time. [Heinzel Pro](https://heinzel-pro.de) is the
+commercial product built on the same rules: a team, a web
+interface, a fleet, and a runtime that enforces what Heinzel
+can only ask for. Everything that needs a second person, an
+identity, a fleet, a schedule or an evidence chain lives
+there. Heinzel reads and reports those things and answers a
+request to change them with one line pointing to Pro.
+
+| | Heinzel (this repo, MIT) | Heinzel Pro |
+| --- | --- | --- |
+| Who | One admin, their terminal, their servers | A team, one web interface, a fleet |
+| Connect, detect the OS, remember the host | Yes | Yes |
+| Housekeeping, security audit, reports | On request | On a schedule, as a findings list, started by alerts |
+| Packages, configs, services, firewall | Asks first | Rights per person and server, countersigned where needed |
+| Accounts, SSH keys, sudo, deploy users | Inspects and reports | Creates and changes them, with a way back |
+| Secrets and certificates | Finds leaks, reports expiry | Rotation with a plan across every consumer, renewal across the fleet |
+| Partitions, boot loaders, OS replacement | Reads | Switchable per tenant, four eyes before every write |
+| Many servers at once | One after another | Rollouts in waves, fleet comparison, version matrix |
+| At night, with nobody there | No | Schedules, maintenance windows, reads alone, changes collected for the morning |
+| Evidence | Journal and changelog on the host | Audit chain, access review, policy as a file |
+| Own rules | Files in the checkout | Installation, tenant, server; import from a Heinzel checkout |
+
+Resetting the password of an existing account, adding a key
+the operator pastes in, and every package, config, service
+and firewall change stay in Heinzel. Heinzel Pro runs as a
+container, hosted or on your own servers; the details are on
+[heinzel-pro.de](https://heinzel-pro.de).
+
 ## Safety & guardrails
 
 The safety rules are part of every session.
@@ -135,14 +163,16 @@ The safety rules are part of every session.
   (`.claude/hooks/guard-taboos.sh`) blocks the absolute
   taboos in every permission mode, even
   `--dangerously-skip-permissions`: halt and poweroff,
-  `mkfs`, partition-table writers, deleting or overwriting
-  SSH keys, writes to `sshd_config`. It also catches them
-  inside `ssh host "…"`, behind `python3 -c` and when the
-  file-edit tools target a key or `sshd_config`. Read-only
-  forms (`fdisk -l`) stay allowed. For a legitimate exception
-  such as an OS replacement, start the session with
-  `HEINZEL_GUARD_DISABLE=1`. OpenCode does not run this hook;
-  there the written rules are the safety layer.
+  `mkfs`, partition-table writers, boot-loader and EFI
+  writers, deleting or overwriting SSH keys, writes to
+  `sshd_config`, deleting accounts, writes to `sudoers` and
+  the account files. It also catches them inside
+  `ssh host "…"`, behind `python3 -c` and when the file-edit
+  tools target one of those files. Read-only forms
+  (`fdisk -l`, `efibootmgr -v`, `visudo -c`) stay allowed.
+  The hook has no off switch: what it blocks is Heinzel Pro's
+  work. OpenCode does not run this hook; there the written
+  rules are the safety layer.
 - **Verifies before it reports.** "It is gone since the
   reboot" gets checked against the live system first
   (`rules/verify-before-reporting.md`).
@@ -219,19 +249,10 @@ that is `opencode run "…"`.
   the [permission modes docs](https://code.claude.com/docs/en/permission-modes)
   for details.
 
-A nightly health check by cron:
-
-```
-17 6 * * * cd /path/to/heinzel && flock -n \
-  /tmp/heinzel-cron-server1.lock timeout 30m \
-  /abs/path/to/claude --permission-mode auto \
-  -p "Run housekeeping on server1.example.com and \
-email me the report" >> ~/heinzel-cron.log 2>&1
-```
-
-Run the exact prompt interactively once first, so one-time
-questions are answered and stored. Details and a systemd
-timer variant: `rules/scheduled-housekeeping.md`.
+A run with nobody at the keyboard, nightly by cron or a
+timer, is a Heinzel Pro feature: there a schedule reads
+alone and collects what it would change for a person to
+approve in the morning.
 
 ## Your data: `memory/`
 
@@ -261,20 +282,9 @@ bin/heinzel-backup --restore <file.tar.gz>
 Restore refuses to overwrite existing content without
 `--force` and validates the archive before writing.
 
-### Team setup
-
-`memory/` is gitignored by default. To share server state:
-
-1. Everyone copies `memory/user.md.example` to
-   `memory/user.md`. This file always stays personal.
-2. Edit `.gitignore` to track server memory. The comments in
-   the file say which lines to change.
-3. Keep each member's own machine out of git, e.g.
-   `memory/servers/stefans-mbp/`.
-4. Commit server memory after sessions.
-
-`user.md`, `blacklist.md`, `readonly.md` and `opencode.json`
-are never shared and still need the backup.
+`memory/` is gitignored and personal: one checkout, one
+person. Several people working on the same servers, with
+rights, approvals and an audit trail, is Heinzel Pro.
 
 ## Rule customization
 
@@ -299,7 +309,10 @@ Skip this base section.
 A section without a prefix is an addition.
 `memory/custom-rules/all.md` applies to every server. Skills
 follow the same chain, e.g.
-`memory/custom-rules/heinzel-housekeeping.md`.
+`memory/custom-rules/heinzel-housekeeping.md`. A few rules
+take additions only: the ethics rule, the guard's taboos,
+the connection pipeline, anomaly detection, secrets hygiene
+and the Heinzel Pro refusals cannot be replaced or removed.
 
 ## Updates
 
@@ -338,8 +351,8 @@ Claude Code is the tool Heinzel is developed with. OpenCode
 reads the same `CLAUDE.md` and `.claude/skills/`, as long as
 `OPENCODE_DISABLE_CLAUDE_CODE` is unset. Any other tool that
 reads project files gets the rule layer. The skills
-(housekeeping, security audit, email, fleet audit, macOS
-cleanup) need a tool that supports Skills.
+(housekeeping, security audit, email, macOS cleanup) need a
+tool that supports Skills.
 
 ### OpenCode with a local model
 
@@ -383,8 +396,7 @@ log show \
 ```
 CLAUDE.md        main instructions for the AI tool
 rules/           rule files per platform and topic
-.claude/skills/  housekeeping, security, email, fleet audit,
-                 macOS cleanup
+.claude/skills/  housekeeping, security, email, macOS cleanup
 .claude/hooks/   update check and the taboo guard
 bin/             heinzel-update, heinzel-backup,
                  heinzel-migrate
@@ -409,6 +421,8 @@ Wintermeyer: **sw@wintermeyer-consulting.de**
 ## Contributing
 
 Bug reports, feature requests and pull requests are welcome.
+See [CONTRIBUTING.md](CONTRIBUTING.md): a contribution may
+also end up in Heinzel Pro.
 
 ## License
 
