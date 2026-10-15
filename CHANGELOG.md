@@ -1,5 +1,36 @@
 # Changelog
 
+## 3.0.0 — 2026-10-15
+
+- **heinzel reads disks, boot, accounts and secrets;
+  Heinzel Pro changes them.** Partition tables, boot
+  loaders and EFI entries, OS replacement, cloud
+  images, creating or widening access (accounts, SSH
+  keys, sudoers, deploy users), rotating secrets,
+  runs with nobody at the keyboard and comparisons
+  across all servers are Heinzel Pro features now.
+  heinzel still inspects and reports all of them and
+  answers a request to change them with one line
+  (`CLAUDE.md` → What Heinzel does not do). Gone
+  with it: `rules/efi-boot.md`, `dual-boot.md`,
+  `partition-staging.md`, `cloud-image.md`,
+  `os-replacement.md`, `scheduled-housekeeping.md`,
+  the `heinzel-fleet-audit` skill, the boot and QEMU
+  sections of `rules/freebsd.md`, team mode (one
+  checkout, one person) and the cron recipe in the
+  README. Kept: package work, config edits with a
+  backup, reloads and restarts that ask, the
+  firewall that asks, and resetting the password of
+  an existing account. The guard hook has no off
+  switch any more (`HEINZEL_GUARD_DISABLE` changes
+  nothing) and blocks the boot writers (efibootmgr,
+  grub-install, update-grub, bootctl, bless, efivar,
+  writes under efivars), account and group deletion
+  and every write to sudoers or the account files,
+  in every permission mode. The README carries a
+  table of what heinzel and Heinzel Pro each do
+  (#70).
+
 ## 2.32.0 — 2026-10-15
 
 - **heinzel is not an attack tool.** A central ethics

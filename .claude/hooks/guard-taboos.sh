@@ -23,14 +23,26 @@
 #     and other output flags)
 #   - writes to sshd_config(.d/) under any .../etc/ssh, or
 #     to a file an appliance merges into it (/etc/sshd_extra)
-#   - any of the last three reached through a language
+#   - boot loaders and firmware variables (Heinzel Pro's
+#     work since 3.0): efibootmgr write forms, grub-install,
+#     update-grub, grub-mkconfig -o, bootctl install/update/
+#     remove/set-*, bless write forms, efivar -w, a write or
+#     delete under /sys/firmware/efi/efivars/
+#   - accounts and sudo (Heinzel Pro's work since 3.0):
+#     deleting an account or a group, visudo, vipw/vigr, any
+#     write to sudoers(.d/) or to the account files
+#     (/etc/passwd, shadow, group, master.passwd)
+#   - any of those paths reached through a language
 #     runtime (python/perl/ruby/node/awk ...), whose file
-#     I/O looks nothing like a shell write
+#     I/O looks nothing like a shell write; awk is exempt
+#     for the account files, which the security skill reads
+#     with it
 #   - a redirect onto a $( ) lookup, or an arrow onto any
 #     expansion, whose target nobody sees before it runs
 #     (issue #51)
-#   - a file-edit tool pointed at sshd_config, a key file or a
-#     raw disk device (see the file-mode section)
+#   - a file-edit tool pointed at sshd_config, a key file,
+#     sudoers, an account file, an efivar or a raw disk
+#     device (see the file-mode section)
 #
 # What it deliberately does NOT scan: the body of a heredoc that
 # is written to an ordinary file by cat or tee (issue #8). That
@@ -91,9 +103,11 @@
 #     either side: sshd_config.bak, /etc/sshd_extra.bak and a
 #     copy staged under another root (mnt/etc/ssh/sshd_config)
 #     count as the real file. The left side stays open on
-#     purpose, so /usr/local/etc/ssh and an offline image are
-#     covered (rules/cloud-image.md). Keep backups outside the
-#     guarded path, e.g. /root/backup/sshd_config.
+#     purpose, so /usr/local/etc/ssh and a copy under a mount
+#     point are covered. Keep backups outside the guarded
+#     path, e.g. /root/backup/sshd_config. The same holds for
+#     sudoers and the account files: cp /etc/sudoers /root/ is
+#     denied, cat /etc/sudoers > /root/sudoers.bak is not.
 #   - ssh-keygen with a private key path ANYWHERE in the command:
 #     `file /etc/ssh/ssh_host_ed25519_key; ssh-keygen -lf
 #     ...key.pub` is denied although each part passes alone.
@@ -120,17 +134,12 @@
 # the message to a file with a non-Bash tool and use
 # `git commit -F <file>` — that executes nothing on any server.
 #
-# Override for legitimate flows (e.g. rules/os-replacement.md
-# runs mkfs/sgdisk by design): the OPERATOR sets
-# HEINZEL_GUARD_DISABLE=1 in the environment BEFORE launching
-# the session. An inline assignment inside a proposed command
-# does not count and is itself blocked, so the model cannot
-# disarm the guard.
-
-# Operator-level override: inherited environment only.
-if [ "${HEINZEL_GUARD_DISABLE:-}" = "1" ]; then
-  exit 0
-fi
+# There is no off switch. Up to 2.x the operator could export
+# HEINZEL_GUARD_DISABLE=1 for an OS replacement; since 3.0 that
+# work is Heinzel Pro's (CLAUDE.md -> What Heinzel does not do),
+# and the variable changes nothing. An inline assignment of it
+# inside a proposed command is still denied: a model that tries
+# to disarm the guard is the thing to stop.
 
 INPUT=$(cat)
 
@@ -337,10 +346,26 @@ KEYPRIV="$KEYFILE"'([^.[:alnum:]]|$)'
 SSHD='/etc/(ssh/sshd_config(\.d(/[[:alnum:]_.-]*)?)?|sshd_extra)'
 EDITOR='(vi|vim|nvim|nano|emacs|ed)'
 
+# Heinzel Pro's work since 3.0, backed here where a write locks
+# people out or cannot be undone (CLAUDE.md -> What Heinzel does
+# not do). sudoers and its drop-ins, unanchored on the left like
+# SSHD so /usr/local/etc/sudoers (FreeBSD) matches; the account
+# files, where a direct write bypasses every check useradd and
+# passwd make; and the firmware variables, where a deleted entry
+# has bricked boards. All three stay readable.
+SUDOERS='/etc/sudoers(\.d(/[[:alnum:]_.-]*)?)?'
+ACCOUNTS='/etc/(passwd|shadow|gshadow|group|master\.passwd|s?pwd\.db)'
+EFIVARS='/sys/firmware/efi/efivars'
+
 # A general-purpose language runtime. See the interpreter section
 # at the bottom for why this list, and not a list of the ways
 # those runtimes spell a write.
 INTERP='(^|[^[:alnum:]_.-])(python[0-9.]*|perl|ruby|node|nodejs|deno|bun|php[0-9.]*|lua[0-9.]*|tclsh|osascript|Rscript|julia|elixir|escript|erl|[gmn]?awk)([^[:alnum:]_.-]|$)'
+# The same set without awk, for the account files: the security
+# skill reads /etc/passwd and /etc/shadow with awk -F:, and awk
+# writes a file only through an explicit > that the redirect
+# rules see anyway.
+INTERP_NOAWK='(^|[^[:alnum:]_.-])(python[0-9.]*|perl|ruby|node|nodejs|deno|bun|php[0-9.]*|lua[0-9.]*|tclsh|osascript|Rscript|julia|elixir|escript|erl)([^[:alnum:]_.-]|$)'
 
 # True when command $1 occurs somewhere WITHOUT its read-only
 # exemption $2 applying to that occurrence. Two conditions make
@@ -503,6 +528,18 @@ with a file-edit tool as much as with a command"
     deny "writing onto a raw disk device overwrites its content \
 and partition table"
   fi
+  if target_hit "$SUDOERS"; then
+    deny "writing sudoers or a sudoers.d file grants or revokes \
+root rights; sudo work is a Heinzel Pro feature"
+  fi
+  if target_hit "$ACCOUNTS"; then
+    deny "writing an account file directly bypasses every check \
+useradd and passwd make; account work is a Heinzel Pro feature"
+  fi
+  if target_hit "$EFIVARS"; then
+    deny "writing a firmware variable can brick the board; boot \
+work is a Heinzel Pro feature"
+  fi
   exit 0
 fi
 
@@ -513,9 +550,8 @@ fi
 # assignment into a file or commit message also triggers
 # this; phrase such text without the equals sign.
 if hit 'HEINZEL_GUARD_DISABLE='; then
-  deny "inline HEINZEL_GUARD_DISABLE assignment is not \
-allowed - the operator must export it before launching the \
-session"
+  deny "the guard has no off switch since Heinzel 3.0; what it \
+blocks is Heinzel Pro's work"
 fi
 
 # --- Attack tools (rules/ethics.md) ---------------------------
@@ -800,6 +836,126 @@ replaces the keys there"
   fi
 fi
 
+# --- Boot loaders and firmware variables (Heinzel Pro) --------
+# A boot entry, the boot order or the loader itself is the way
+# back into a host that has no console. heinzel reads them
+# (efibootmgr -v, bootctl status, bless --info) and never writes
+# them since 3.0: that is Heinzel Pro's work (CLAUDE.md -> What
+# Heinzel does not do). Writers, by effect: efibootmgr in any
+# form that creates, deletes, reorders, activates or times an
+# entry (the read forms are bare, -v and -V); grub-install and
+# update-grub, which rewrite the loader or its config, and
+# grub-mkconfig only with -o (without it, it prints); the
+# bootctl verbs that install, update, remove or set; bless in
+# any form but --info and --getBoot; efivar -w; and a write,
+# delete or re-permission under the efivars mount, where a
+# removed variable has bricked boards.
+if hit '(^|[^[:alnum:]_.-])efibootmgr([^[:alnum:]_.-]|$)' \
+  && hit '(^|[[:space:]])(-[bBcCaAoOnNtTDwy@]|--(bootnum|delete-bootnum|create|create-only|active|inactive|bootorder|delete-bootorder|bootnext|delete-bootnext|timeout|delete-timeout|remove-dups|write-signature|sysprep|delete|append-binary-args|label|loader|disk|part))([[:space:]]|=|$)'
+then
+  deny "efibootmgr in a write form changes the boot entries or \
+the boot order (efibootmgr -v reads them); boot work is a \
+Heinzel Pro feature"
+fi
+if hit_without '(^|[^[:alnum:]_.-])grub2?-install([^[:alnum:]_.-]|$)' \
+  '(^|[[:space:]])(-V|--version|--help)([[:space:]]|$)'; then
+  deny "grub-install rewrites the boot loader; boot work is a \
+Heinzel Pro feature"
+fi
+if hit '(^|[^[:alnum:]_.-])update-grub2?([^[:alnum:]_.-]|$)' \
+  || { hit '(^|[^[:alnum:]_.-])grub2?-mkconfig([^[:alnum:]_.-]|$)' \
+       && hit '(^|[[:space:]])(-o|--output)([[:space:]]|=)'; }
+then
+  deny "update-grub and grub-mkconfig -o rewrite the boot loader \
+config (grub-mkconfig without -o only prints it); boot work is \
+a Heinzel Pro feature"
+fi
+if hit '(^|[^[:alnum:]_.-])bootctl([^[:alnum:]_.-]|$)' \
+  && hit '(^|[[:space:]])(install|update|remove|cleanup|unlink|set-default|set-oneshot|set-timeout|set-timeout-oneshot|random-seed|reboot-to-firmware)([[:space:]]|$)'
+then
+  deny "this bootctl verb installs, removes or reconfigures the \
+boot loader (bootctl status and list read it); boot work is a \
+Heinzel Pro feature"
+fi
+if hit_without '(^|[^[:alnum:]_.-])bless([^[:alnum:]_.-]|$)' \
+  '(^|[[:space:]])(--info|--getBoot|--version|--help)([[:space:]]|$)'; then
+  deny "bless in a write form changes what the Mac boots \
+(bless --info and --getBoot read it); boot work is a Heinzel \
+Pro feature"
+fi
+if hit '(^|[^[:alnum:]_.-])efivar([^[:alnum:]_.-]|$)' \
+  && hit '(^|[[:space:]])(-w|--write|-a|--append)([[:space:]]|$)'; then
+  deny "efivar -w writes a firmware variable; boot work is a \
+Heinzel Pro feature"
+fi
+if hit "$EFIVARS"; then
+  if hit ">>?[[:space:]]*[\"']?[^[:space:];|&]*$EFIVARS" \
+    || hit "(^|[^[:alnum:]_-])($CLOBBER|cp|dd|chattr)([^[:alnum:]_-]|\$)" \
+    || hit '(^|[[:space:]])-delete([[:space:]]|$)' \
+    || writes_to "$EFIVARS"
+  then
+    deny "writing to or deleting under the efivars mount changes \
+firmware variables and can brick the board (cat and ls read \
+them); boot work is a Heinzel Pro feature"
+  fi
+fi
+
+# --- Accounts and sudo (Heinzel Pro) --------------------------
+# Creating or widening access is Heinzel Pro's work since 3.0;
+# heinzel reads and reports it (CLAUDE.md -> What Heinzel does
+# not do). The hook backs only the part that locks someone out
+# or cannot be undone: deleting an account or a group, and any
+# write to sudoers or to the account files themselves, where one
+# bad line is "sudo: parse error" for everybody. Creating an
+# account (useradd, pw useradd) and resetting a password stay
+# with the prompt: nothing breaks, and a reset is heinzel's own
+# everyday work (rules/ethics.md).
+if hit '(^|[^[:alnum:]_.-])(userdel|deluser|luserdel|groupdel|delgroup|lgroupdel)([^[:alnum:]_.-]|$)' \
+  || hit '(^|[^[:alnum:]_.-])pw[[:space:]]+(userdel|groupdel|user[[:space:]]+del|group[[:space:]]+del)([^[:alnum:]_-]|$)' \
+  || hit '(^|[^[:alnum:]_.-])sysadminctl[[:space:]].*-deleteUser([^[:alnum:]_-]|$)' \
+  || hit '(^|[^[:alnum:]_.-])dscl[[:space:]].*-delete[[:space:]]+/(Users|Groups)/'
+then
+  deny "deleting an account or a group locks people out and \
+cannot be undone; account work is a Heinzel Pro feature"
+fi
+# visudo edits sudoers; visudo -c only checks a file.
+if hit_without '(^|[^[:alnum:]_.-])visudo([^[:alnum:]_.-]|$)' \
+  '(^|[[:space:]])-c([[:space:]]|$)'; then
+  deny "visudo edits sudoers, and one bad line locks everybody \
+out of sudo (visudo -c only checks); sudo work is a Heinzel Pro \
+feature"
+fi
+if hit '(^|[^[:alnum:]_.-])(vipw|vigr)([^[:alnum:]_.-]|$)'; then
+  deny "vipw and vigr edit the account files in place; account \
+work is a Heinzel Pro feature"
+fi
+if hit "$SUDOERS"; then
+  if hit '>>?[[:space:]]*["'\'']?[^[:space:];|&]*'"$SUDOERS" \
+    || { hit '(^|[^[:alnum:]_-])(sed|perl)([^[:alnum:]_-]|$)' \
+         && hit '(^|[[:space:]])-i'; } \
+    || hit "(^|[^[:alnum:]_-])$EDITOR([^[:alnum:]_-]|\$)" \
+    || hit "(^|[^[:alnum:]_-])($CLOBBER|cp)([^[:alnum:]_-]|\$)" \
+    || writes_to "$SUDOERS"
+  then
+    deny "writing sudoers or a sudoers.d file grants or revokes \
+root rights (cat and visudo -c read it); sudo work is a Heinzel \
+Pro feature"
+  fi
+fi
+if hit "$ACCOUNTS"; then
+  if hit '>>?[[:space:]]*["'\'']?[^[:space:];|&]*'"$ACCOUNTS" \
+    || { hit '(^|[^[:alnum:]_-])(sed|perl)([^[:alnum:]_-]|$)' \
+         && hit '(^|[[:space:]])-i'; } \
+    || hit "(^|[^[:alnum:]_-])$EDITOR([^[:alnum:]_-]|\$)" \
+    || hit "(^|[^[:alnum:]_-])($CLOBBER|cp)([^[:alnum:]_-]|\$)" \
+    || writes_to "$ACCOUNTS"
+  then
+    deny "writing an account file directly bypasses every check \
+useradd and passwd make (getent, grep and awk read them); \
+account work is a Heinzel Pro feature"
+  fi
+fi
+
 # --- Effects reached through an interpreter -------------------
 # Every rule above recognizes a write by the way it is spelled: a
 # redirect, tee, sed -i, an editor, rm/mv/chmod/truncate. A
@@ -852,6 +1008,21 @@ read - read it with cat, grep or sshd -T instead"
 line can overwrite the device, which destroys everything the \
 partition table points at"
   fi
+  if hit "$SUDOERS"; then
+    deny "an interpreter with sudoers on its command line can \
+rewrite it, and a pattern matcher cannot tell that from a read \
+- read it with cat or visudo -c instead"
+  fi
+  if hit "$EFIVARS"; then
+    deny "an interpreter with the efivars mount on its command \
+line can write a firmware variable - read them with cat or ls \
+instead"
+  fi
+fi
+if hit "$INTERP_NOAWK" && hit "$ACCOUNTS"; then
+  deny "an interpreter with an account file on its command line \
+can rewrite it, and a pattern matcher cannot tell that from a \
+read - read it with getent, grep or awk instead"
 fi
 
 # --- A redirect onto a computed target (issue #51) ------------
