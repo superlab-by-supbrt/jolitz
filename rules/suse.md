@@ -39,6 +39,10 @@ Enterprise Server (SLES).
   service covers port 22 only: add every other port
   sshd listens on with `--add-port=<port>/tcp`
   (`CLAUDE.md` → Firewall & network).
+- Over SSH, arm a rollback timer before any firewall
+  or network change (`rules/rollback-timer.md`).
+  Change the runtime config first and persist with
+  `--permanent` only after a fresh login worked.
 - Verify the default zone drops unsolicited traffic:
   `firewall-cmd --get-default-zone` (should be `public`).
   Then `firewall-cmd --info-zone=public` — the target

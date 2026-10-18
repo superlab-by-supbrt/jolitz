@@ -914,6 +914,32 @@ check pass 'ls | tee >(wc -l) > list.txt'
 # count quote depth.
 check deny 'echo "editor -> $(readlink -f /usr/bin/editor)"'
 
+# --- rollback timer (rules/rollback-timer.md) ------------------
+# Every step of the recipe must pass, and a rollback script is
+# scanned like any other script: a taboo inside it still denies.
+check pass 'ssh root@h "cp -p /etc/netplan/50-cloud-init.yaml /var/backups/heinzel/50-cloud-init.yaml.20261018-0930"'
+check pass 'ssh root@h "cat > /var/backups/heinzel/rollback-20261018-0930.sh" <<'\''EOF'\''
+#!/bin/sh
+cp -p /var/backups/heinzel/50-cloud-init.yaml.20261018-0930 /etc/netplan/50-cloud-init.yaml
+netplan apply
+logger -t heinzel "rollback-20261018-0930 ran"
+EOF'
+check pass 'ssh root@h "chmod 700 /var/backups/heinzel/rollback-20261018-0930.sh"'
+check pass 'ssh root@h "systemctl list-timers --all heinzel-rollback-*"'
+check pass 'ssh root@h "systemd-run --unit=heinzel-rollback-20261018-0930 --on-active=120 /var/backups/heinzel/rollback-20261018-0930.sh"'
+check pass 'ssh root@h "systemd-run --unit=heinzel-apply-20261018-0930 --wait netplan apply"'
+check pass 'ssh -o BatchMode=yes -o ConnectTimeout=5 -o ControlMaster=no -o ControlPath=none -o HostKeyAlias=h root@192.0.2.10 true'
+check pass 'ssh root@h "systemctl stop heinzel-rollback-20261018-0930.timer"'
+check pass 'ssh root@h "nft list ruleset > /var/backups/heinzel/ruleset-20261018-0930.nft"'
+check pass 'ssh root@h "firewall-cmd --reload"'
+check pass 'ssh root@h "daemon -f -p /var/run/heinzel-rollback-20261018-0930.pid sh -c '\''sleep 120; sh /var/backups/heinzel/rollback-20261018-0930.sh'\''"'
+check pass 'ssh root@h "pkill -F /var/run/heinzel-rollback-20261018-0930.pid"'
+check pass 'ssh root@h "nohup sh -c '\''echo \$\$ > /var/run/heinzel-rollback-20261018-0930.pid; sleep 120; sh /var/backups/heinzel/rollback-20261018-0930.sh'\'' >/dev/null 2>&1 &"'
+check deny 'ssh root@h "cat > /var/backups/heinzel/rollback-20261018-0930.sh" <<'\''EOF'\''
+#!/bin/sh
+cp -p /var/backups/heinzel/sshd_config.20261018-0930 /etc/ssh/sshd_config
+EOF'
+
 # --- file-edit tools (Edit, Write, NotebookEdit) ---------------
 # These tools write a file without any command line, so no rule
 # above ever sees them. In file mode the guard judges the TARGET

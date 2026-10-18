@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.2.0 — 2026-10-18
+
+- **heinzel rolls back what would lock it out.** Before
+  a change that can cut off the SSH login (IP address,
+  route, interface, firewall, VPN, network sysctl, PAM)
+  it arms a timer on the host that restores the old
+  state after 120 seconds. Only a fresh login after the
+  change disarms it, never the old session, which the
+  control socket and connection tracking keep alive.
+  The window is set per server with
+  `- Rollback window:` in `memory.md`. New:
+  `rules/rollback-timer.md`, protected like the
+  connection pipeline. On FreeBSD the pf safety net
+  reloads the saved ruleset instead of disabling pf.
+
 ## 3.1.1 — 2026-10-15
 
 - **The server lock holds under other spellings.** The

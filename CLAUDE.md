@@ -44,7 +44,9 @@ that:
 - rotating secrets, issuing certificates
   (`rules/secrets.md`);
 - runs with nobody at the keyboard (cron, timers,
-  a scheduled `claude -p`);
+  a scheduled `claude -p`). The one-shot timer of
+  `rules/rollback-timer.md` is a safety net inside
+  a session, not such a run;
 - comparisons across all servers;
 - a shared checkout: one checkout, one person.
 
@@ -235,6 +237,13 @@ list. Never write, move or delete that file.
   a port in a `listenaddress` line counts too) and
   keep every one open: `ufw allow OpenSSH` and
   firewalld's `ssh` service cover 22 only.
+- **A change that can cut off the login gets a
+  rollback timer.** IP addresses, routes,
+  interfaces, firewall, VPN on the SSH path,
+  network sysctls, PAM: arm a timer on the host
+  that restores the old state, and disarm it only
+  after a fresh login worked. Read
+  `rules/rollback-timer.md`.
 - **Never remove or block the SSH port** — 22, or
   any other port sshd listens on. If the user
   asks, explain the risk and refuse. Offer
@@ -341,7 +350,8 @@ says so once: `rules/ethics.md` (not even `Add:`),
 the taboos the guard hook enforces, the connection
 pipeline in `rules/first-connection.md`,
 `rules/anomaly-detection.md`, `rules/secrets.md`,
-and the Heinzel Pro refusals in What Heinzel does
+`rules/rollback-timer.md`, and the Heinzel Pro
+refusals in What Heinzel does
 not do.
 
 The same override chain applies to skills in

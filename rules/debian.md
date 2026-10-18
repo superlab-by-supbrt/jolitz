@@ -151,6 +151,8 @@ third-party PPAs.
   `ufw allow OpenSSH && ufw enable`. Both cover
   port 22 only: allow every other port sshd listens
   on as well (`CLAUDE.md` → Firewall & network).
+- Over SSH, arm a rollback timer before any firewall
+  or network change (`rules/rollback-timer.md`).
 - After enabling, verify the default policy:
   `ufw status verbose` — look for
   `Default: deny (incoming)`. If incoming is set to
