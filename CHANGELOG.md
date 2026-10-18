@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.2.1 — 2026-10-18
+
+- **Heinzel Pro follows a server to its new address.**
+  `rules/rollback-timer.md` no longer asks to enter a
+  new address in the server's form before the disarm:
+  Pro's `follow_address` tool moves the server once the
+  new address shows the pinned host key.
+
 ## 3.2.0 — 2026-10-18
 
 - **Every change has a way back, decided first.**

@@ -159,8 +159,10 @@ guard hook denies a redirect onto a computed target.
    `pkill -F /var/run/heinzel-rollback-<ts>.pid`.
    Heinzel Pro sends every command naming
    `heinzel-rollback-` over a new login of its own,
-   so there the disarm is its own confirmation; enter
-   a new address in the server's form first.
+   so there the disarm is its own confirmation. After
+   an address change call its `follow_address` tool
+   first; it moves the server once the new address
+   shows the pinned host key.
    Check the timer is gone, then persist the runtime
    change (firewalld: repeat the command with
    `--permanent`) and update server memory with the
