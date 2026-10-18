@@ -220,7 +220,7 @@ re-runs are no-ops:
 
 ```bash
 [ -f ~/.bash_profile ] && \
-  cp ~/.bash_profile ~/.bash_profile.bak.$(date +%F)
+  command cp ~/.bash_profile ~/.bash_profile.bak.$(date +%F)
 grep -q '# mise shims' ~/.bash_profile 2>/dev/null || \
 cat >> ~/.bash_profile << 'EOF'
 # mise shims

@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.2.2 — 2026-10-18
+
+- **Aliased `cp`, `mv` and `rm` no longer trip
+  heinzel.** It writes them as `command cp` etc., so
+  an `rm -i` alias cannot prompt. Without a TTY that
+  prompt reads EOF: `mv -i` failed and cost a
+  roundtrip, `rm -i` kept the file and exited 0
+  (#77).
+
 ## 3.2.1 — 2026-10-18
 
 - **Heinzel Pro follows a server to its new address.**
