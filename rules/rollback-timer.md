@@ -118,8 +118,10 @@ guard hook denies a redirect onto a computed target.
            sleep 120; sh /var/backups/heinzel/rollback-<ts>.sh' \
            >/dev/null 2>&1 &
 
-   No timer, no change: if arming fails, stop and
-   tell the user.
+   No timer, no change: join steps 4 and 5 with
+   `&&` in one command. The change then never runs
+   without a timer, and no approval or turn of the
+   agent eats into the window between them.
 
 5. **Apply detached** where the change itself can
    drop the session, so a dying SSH connection does
@@ -155,6 +157,10 @@ guard hook denies a redirect onto a computed target.
 
    FreeBSD and the rest:
    `pkill -F /var/run/heinzel-rollback-<ts>.pid`.
+   Heinzel Pro sends every command naming
+   `heinzel-rollback-` over a new login of its own,
+   so there the disarm is its own confirmation; enter
+   a new address in the server's form first.
    Check the timer is gone, then persist the runtime
    change (firewalld: repeat the command with
    `--permanent`) and update server memory with the
