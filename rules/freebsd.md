@@ -58,15 +58,12 @@ Rules for FreeBSD (all versions).
 - **Mandatory before any load:** the parse-only
   config test `pfctl -nf /etc/pf.conf` must pass
   first.
-- When changing pf rules over SSH, schedule a safety
-  net before loading, e.g.:
-  ```
-  echo "pfctl -d" | at now + 5 minutes
-  ```
-  If the new rules cut you off, pf disables itself
-  and you can get back in. After confirming the
-  session survived, cancel the job (`atq`, then
-  `atrm <job>`) — do not leave it behind.
+- When changing pf rules over SSH, arm a rollback
+  timer first (`rules/rollback-timer.md`). It
+  reloads the saved ruleset
+  (`pfctl -f /var/backups/heinzel/pf.conf.<ts>`)
+  rather than disabling pf, which would leave the
+  host without a firewall.
 - After enabling, verify the default policy blocks
   incoming traffic.
 - Start/stop: `service pf start`, `service pf stop`

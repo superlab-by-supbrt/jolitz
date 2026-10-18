@@ -180,6 +180,22 @@ The safety rules are part of every session.
   (`rules/verify-before-reporting.md`).
 - **Backs up config files** to `/var/backups/heinzel/` before
   editing. Cleaned up after 30 days.
+- **Knows the way back before it changes anything.** Every
+  question before a change ends with `Way back: <how>` or
+  `Way back: none`. Heinzel prefers changes that last only
+  until the next reload until they are proven (`sysctl -w`
+  before `sysctl.d`, `mount` before `fstab`), keeps the old
+  kernel, cluster or binary until the new one works, and
+  tests failures that would only show at the next boot now
+  (`rules/way-back.md`).
+- **Rolls back what locks it out.** Before a change that can
+  cut off the login (IP address, route, firewall, VPN, PAM),
+  Heinzel arms a timer on the server that restores the old
+  state after 120 seconds. Only a fresh SSH login after the
+  change stops it. If the new address is wrong, the server
+  undoes it by itself and Heinzel reports what happened
+  (`rules/rollback-timer.md`). Set a longer window per server
+  with `- Rollback window: 300` in its `memory.md`.
 - **Tests before applying** with dry-run or validation modes
   where a tool has one.
 - **Logs everything.** Each change is one plain-language line

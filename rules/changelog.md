@@ -122,6 +122,8 @@ technical detail the journal omitted:
 A new entry starts with `[` in column 1; indented
 lines continue the previous entry. Use the labels
 `Detail:`, `Rollback:`, `Verify:`, `Flags:` as
-applicable — skip empty ones.
+applicable — skip empty ones. `Rollback:` is
+written before the change runs
+(`rules/way-back.md`); `none` is a valid value.
 
 Trim entries older than 2 years when writing.

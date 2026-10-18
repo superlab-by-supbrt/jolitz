@@ -1,5 +1,29 @@
 # Changelog
 
+## 3.2.0 — 2026-10-18
+
+- **Every change has a way back, decided first.**
+  `rules/way-back.md` asks four questions before any
+  change (worst outcome, repair path, can the change
+  hit it, when does a failure show) and picks the way
+  back: on probation first, a dead man's switch, or
+  keep the old until the new is proven. Every "may
+  I?" ends with `Way back: <how>` or `Way back: none`,
+  and the changelog's `Rollback:` line is written
+  before the change. Protected like the rest.
+- **heinzel rolls back what would lock it out.** Before
+  a change that can cut off the SSH login (IP address,
+  route, interface, firewall, VPN, network sysctl, PAM)
+  it arms a timer on the host that restores the old
+  state after 120 seconds. Only a fresh login after the
+  change disarms it, never the old session, which the
+  control socket and connection tracking keep alive.
+  The window is set per server with
+  `- Rollback window:` in `memory.md`. New:
+  `rules/rollback-timer.md`, protected like the
+  connection pipeline. On FreeBSD the pf safety net
+  reloads the saved ruleset instead of disabling pf.
+
 ## 3.1.1 — 2026-10-15
 
 - **The server lock holds under other spellings.** The

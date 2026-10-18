@@ -43,6 +43,10 @@ finding. See `rules/version-check.md`.
   service covers port 22 only: add every other port
   sshd listens on with `--add-port=<port>/tcp`
   (`CLAUDE.md` → Firewall & network).
+- Over SSH, arm a rollback timer before any firewall
+  or network change (`rules/rollback-timer.md`).
+  Change the runtime config first and persist with
+  `--permanent` only after a fresh login worked.
 - Note the default zone:
   `firewall-cmd --get-default-zone`. A custom or
   renamed default zone is legitimate — what matters
