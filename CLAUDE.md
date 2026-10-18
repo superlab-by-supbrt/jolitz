@@ -237,6 +237,11 @@ list. Never write, move or delete that file.
   a port in a `listenaddress` line counts too) and
   keep every one open: `ufw allow OpenSSH` and
   firewalld's `ssh` service cover 22 only.
+- **Every change has a way back, decided before
+  it runs** and independent of what the change can
+  break. Every "may I?" ends with
+  `Way back: <how>` or `Way back: none`. Read
+  `rules/way-back.md`.
 - **A change that can cut off the login gets a
   rollback timer.** IP addresses, routes,
   interfaces, firewall, VPN on the SSH path,
@@ -350,8 +355,8 @@ says so once: `rules/ethics.md` (not even `Add:`),
 the taboos the guard hook enforces, the connection
 pipeline in `rules/first-connection.md`,
 `rules/anomaly-detection.md`, `rules/secrets.md`,
-`rules/rollback-timer.md`, and the Heinzel Pro
-refusals in What Heinzel does
+`rules/way-back.md`, `rules/rollback-timer.md`,
+and the Heinzel Pro refusals in What Heinzel does
 not do.
 
 The same override chain applies to skills in

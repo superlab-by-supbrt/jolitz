@@ -1,5 +1,7 @@
 # Rollback Timer
 
+Technique B of `rules/way-back.md`.
+
 Some changes, when they go wrong, take away the
 only way to fix them: heinzel's SSH connection. A
 new IP address with a typo, a firewall rule in the

@@ -2,6 +2,15 @@
 
 ## 3.2.0 — 2026-10-18
 
+- **Every change has a way back, decided first.**
+  `rules/way-back.md` asks four questions before any
+  change (worst outcome, repair path, can the change
+  hit it, when does a failure show) and picks the way
+  back: on probation first, a dead man's switch, or
+  keep the old until the new is proven. Every "may
+  I?" ends with `Way back: <how>` or `Way back: none`,
+  and the changelog's `Rollback:` line is written
+  before the change. Protected like the rest.
 - **heinzel rolls back what would lock it out.** Before
   a change that can cut off the SSH login (IP address,
   route, interface, firewall, VPN, network sysctl, PAM)
