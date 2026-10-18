@@ -5,7 +5,7 @@ Before editing any config file, back it up:
 ```
 BACKUP_DIR="/var/backups/heinzel"
 mkdir -p "$BACKUP_DIR"
-cp /etc/some/config.conf \
+command cp /etc/some/config.conf \
   "$BACKUP_DIR/config.conf.$(date +%Y%m%d-%H%M%S)"
 # Clean backups older than 30 days
 find "$BACKUP_DIR" -type f -mtime +30 -delete

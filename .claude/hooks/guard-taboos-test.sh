@@ -283,6 +283,18 @@ check deny "node -e \"require('fs').writeFileSync('/dev/vda','')\""
 # denied (see the accepted false positives in the guard).
 check pass 'ssh -o ControlMaster=auto -o ControlPath=~/.cache/heinzel/ssh-%C root@h "rm -f /var/tmp/old.log; chmod 644 /etc/motd"'
 
+# --- the command prefix (issue #77) -----------------------------
+# heinzel writes cp/mv/rm as `command cp` to skip an rm -i alias.
+# The prefix must not hide a taboo from the guard.
+check deny 'command rm -rf ~/.ssh'
+check deny 'command mv /etc/ssh/sshd_config /tmp/'
+check deny 'command cp /tmp/x /etc/sudoers'
+check deny 'command dd if=/dev/zero of=/dev/sda'
+check deny 'command fdisk /dev/sda'
+check deny 'ssh root@h "command rm /etc/ssh/ssh_host_ed25519_key"'
+check pass 'command cp -p /etc/nginx/nginx.conf /var/backups/heinzel/'
+check pass 'command rm /var/tmp/old.log'
+
 # --- must pass -------------------------------------------------
 check pass 'fdisk -l'
 check pass 'sfdisk -l /dev/sda'

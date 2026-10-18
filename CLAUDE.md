@@ -615,6 +615,18 @@ operator the report from the rule file.
 Read `rules/backups.md`. Back up every config file
 before editing it.
 
+## Shell Aliases
+
+Write `cp`, `mv` and `rm` as `command cp`,
+`command mv`, `command rm`, locally and over SSH.
+Many admins alias them to `-i`, and without a TTY
+the prompt reads EOF: `mv -i` fails, `rm -i` keeps
+the file and exits 0. `command` skips aliases and
+functions, so heinzel never needs to know which
+exist. After `sudo`, write the tool plainly: sudo
+already skips aliases and `command` is no binary
+there.
+
 ## Renaming, Moving, Retention Changes
 
 Read `rules/file-naming-changes.md` before changing
