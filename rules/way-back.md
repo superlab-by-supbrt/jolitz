@@ -39,6 +39,14 @@ verified from outside. A mistake then undoes itself.
 - a new service on a second port before the proxy
   switches to it.
 
+Making it permanent is a step of its own, with its
+own proof: read the stored setting back, then
+reload or reboot once without the probation and
+check the result. Do it before anything removes
+the old state. Until then a plain reload or reboot
+returns to the old state, so removing it first
+leaves the default pointing at nothing.
+
 **B. A dead man's switch** when the failure cuts
 off the access needed to repair it: a timer on the
 host restores the old state unless a fresh login
@@ -54,7 +62,10 @@ stops it. Recipe: `rules/rollback-timer.md`.
   `/var/backups/heinzel/`;
 - DNS TTLs drop a day before a move;
 - before deleting, a copy whose readability is
-  proven (`rules/backups.md`).
+  proven (`rules/backups.md`);
+- the old system stays until the new one is the
+  permanent default (technique A) and has come up
+  that way once.
 
 ## No way back
 
@@ -92,6 +103,11 @@ provider the user takes.
 - A changed renewal or rotation config: run its dry
   run (`certbot renew --dry-run`,
   `logrotate -d`).
+- A one-shot boot (`BootNext`, `grub-reboot`,
+  `bootctl set-oneshot`): the boot after it takes
+  the old default again. Set the default, read it
+  back and reboot once without the one-shot before
+  relying on it.
 
 Boot loaders, partition tables and EFI entries are
 Heinzel Pro's work (`CLAUDE.md` → What Heinzel does
