@@ -175,6 +175,8 @@ end-of-life date. Use official sources:
 - **Ubuntu:** ubuntu.com/about/release-cycle
 - **RHEL/CentOS:** Red Hat lifecycle policy
 - **FreeBSD:** freebsd.org/security
+- **NetBSD:** netbsd.org/releases (supported
+  series)
 - **SUSE:** suse.com/lifecycle
 - **macOS:** Apple typically supports current and
   two prior major versions

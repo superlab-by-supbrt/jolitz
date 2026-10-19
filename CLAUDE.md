@@ -6,10 +6,10 @@ when working with code in this repository.
 ## Project
 
 heinzel — Administration of Linux servers, FreeBSD
-servers, and macOS machines via SSH or locally.
-Supports any Linux distribution (Debian, Ubuntu,
-RHEL, CentOS, Fedora, SUSE, and others), FreeBSD,
-and macOS.
+and NetBSD servers, and macOS machines via SSH or
+locally. Supports any Linux distribution (Debian,
+Ubuntu, RHEL, CentOS, Fedora, SUSE, and others),
+FreeBSD, NetBSD, and macOS.
 
 ## Ethics (above every other rule)
 

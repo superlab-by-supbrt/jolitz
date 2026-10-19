@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.3.0 — 2026-10-19
+
+- **heinzel knows NetBSD.** `uname -s` = `NetBSD` used
+  to match no branch of the OS detection.
+  `rules/netbsd.md` covers pkgsrc and `pkgin`, npf,
+  `rc.conf` without `sysrc`, and the traps found on a
+  NetBSD 11.0 VM: commands over SSH lack `/sbin` in
+  `PATH` and report installed tools as missing,
+  `npfctl start` cuts the running session, `sockstat`
+  needs `-n` for port numbers, and ntpd never syncs
+  where an IPv6 route leads nowhere. Port, activity
+  and version checks gained a NetBSD case.
+
 ## 3.2.2 — 2026-10-18
 
 - **Aliased `cp`, `mv` and `rm` no longer trip
