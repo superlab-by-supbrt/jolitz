@@ -249,6 +249,12 @@ list. Never write, move or delete that file.
   that restores the old state, and disarm it only
   after a fresh login worked. Read
   `rules/rollback-timer.md`.
+- **Work with the disk the server has.** Never grow
+  a disk, volume or VM at the provider or in the
+  hypervisor, and do not propose it as a way out of
+  a space problem: it costs money and is the user's
+  decision at the provider. Only when the user
+  brings it up, take it into the plan.
 - **Never remove or block the SSH port** — 22, or
   any other port sshd listens on. If the user
   asks, explain the risk and refuse. Offer
