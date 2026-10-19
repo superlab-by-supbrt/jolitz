@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.3.1 — 2026-10-19
+
+- **A change on probation becomes the default before
+  the old state goes.** `rules/way-back.md` makes
+  "permanent after proof" a step with its own proof:
+  read the setting back, then reload or reboot once
+  without the probation. A one-shot boot joins the
+  failures that show later, because the boot after
+  it takes the old default again.
+- **heinzel works with the disk the server has.** It
+  never grows a disk, volume or VM at the provider or
+  in the hypervisor, and does not propose it unless
+  the user brings it up.
+
 ## 3.3.0 — 2026-10-19
 
 - **heinzel knows NetBSD.** `uname -s` = `NetBSD` used
