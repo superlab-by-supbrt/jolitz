@@ -112,7 +112,7 @@ guard hook denies a redirect onto a computed target.
 
      Not `at`: `atrun` runs from cron every five
      minutes, so the window becomes unpredictable.
-   - Anything else (macOS, OpenRC):
+   - Anything else (macOS, NetBSD, OpenRC):
 
          nohup sh -c 'echo $$ > /var/run/heinzel-rollback-<ts>.pid; \
            sleep 120; sh /var/backups/heinzel/rollback-<ts>.sh' \

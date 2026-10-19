@@ -82,6 +82,18 @@ Note: this shows the last 20 matches, not a strict
 (`messages.0`). Older rotated logs are usually
 compressed; mention the limitation if relevant.
 
+**NetBSD:** as FreeBSD, but with `grep -a`. After an
+unclean shutdown `/var/log/messages` can hold NUL
+bytes, and plain `grep` then prints only `Binary
+file matches`:
+
+```
+grep -ah heinzel /var/log/messages 2>/dev/null \
+  | tail -20
+```
+
+Rotated copies are gzipped (`messages.0.gz`).
+
 If the command returns nothing — and it actually ran,
 and journal visibility is not limited (see above) —
 skip silently: no activity to report.

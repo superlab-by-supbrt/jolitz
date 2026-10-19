@@ -11,7 +11,8 @@ its OS.
    (see `rules/dns-aliases.md`). If the hostname is
    an alias for a known server, skip OS detection.
 
-1. Determine Linux, macOS, or FreeBSD: `uname -s`
+1. Determine Linux, macOS, FreeBSD or NetBSD:
+   `uname -s`
 
 2. **If Linux** — detect distro and version:
    ```
@@ -48,7 +49,16 @@ its OS.
    (`sysctl` for CPU/RAM, `df -h`,
    `zpool status` if ZFS).
 
-5. Create a server memory file.
+5. **If NetBSD** — detect version and arch:
+   ```
+   uname -r && uname -p
+   ```
+   Read `rules/netbsd.md` first: commands over SSH
+   lack `/sbin` and `/usr/sbin` in `PATH`. Gather
+   hardware info (`sysctl hw.model hw.ncpu
+   hw.physmem64`, `df -h`).
+
+6. Create a server memory file.
 
 ## On subsequent connections
 

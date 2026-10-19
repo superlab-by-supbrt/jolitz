@@ -108,6 +108,16 @@ sockstat -4 -6 -l | grep -E ':<port>\b'
 No root needed. Shows user, command, PID, protocol,
 and local address.
 
+### NetBSD
+
+```bash
+sockstat -n -4 -6 -l | grep -E '\.<port> '
+```
+
+`-n` is required: without it NetBSD prints service
+names (`*.ssh`). The port follows a dot, not a
+colon.
+
 ### macOS
 
 ```bash

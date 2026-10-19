@@ -7,7 +7,7 @@ your OS, explains each one, and waits for your approval. It
 backs up configs, tests before applying, and remembers every
 server it has worked on.
 
-It manages Linux, FreeBSD and macOS, remote over SSH or on
+It manages Linux, FreeBSD, NetBSD and macOS, remote over SSH or on
 the local machine, and runs in
 [Claude Code](https://docs.anthropic.com/en/docs/claude-code),
 [OpenCode](https://opencode.ai) or any terminal AI tool that
@@ -375,6 +375,7 @@ to a 1.x tag, run `bin/heinzel-update --unpin` first.
 | SUSE    | openSUSE, SLES                    | `rules/suse.md`    |
 | macOS   | Apple Silicon and Intel           | `rules/macos.md`   |
 | FreeBSD | all versions                      | `rules/freebsd.md` |
+| NetBSD  | 10.x and 11.x                     | `rules/netbsd.md`  |
 | Unraid  | observed on 7.3                   | `rules/unraid.md`  |
 
 Other distributions work with general best practices.
