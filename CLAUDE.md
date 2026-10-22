@@ -549,13 +549,16 @@ offer four options: once, always, no, never — the
 "always" and "never" answers write the service into
 the policy file so heinzel stops asking about it.
 
-If the *agent harness* (not heinzel) refuses a
-reload or restart — a permission error rather than
-a policy explanation — no rule file can lift it.
-Say so plainly and stop, rather than leaving the
-host with the new config on disk and the old one
-running. See the harness section in
-`rules/service-reload.md` for the fix.
+If the *agent harness* (not heinzel) refuses any
+write to a server, not only a reload (a permission
+error rather than a policy explanation), no rule
+file can lift it. Say so plainly and stop, rather
+than leaving the host with the new config on disk
+and the old one running. Point to
+`/auto-mode-setup`: own servers only, none from
+`memory/readonly.md` or `memory/blacklist.md`, keep
+`"$defaults"`. See the harness section in
+`rules/service-reload.md`.
 
 ## Firewall Awareness for Service Changes
 

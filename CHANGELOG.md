@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.3.3 — 2026-10-22
+
+- **A blocked write points to `/auto-mode-setup`.**
+  When the harness refuses any write to a server,
+  not only a reload, heinzel stops and names the
+  command, with three checks for its draft: own
+  servers only, nothing from the read-only list or
+  the blacklist, `"$defaults"` kept.
+
 ## 3.3.2 — 2026-10-22
 
 - **The auto-mode fix names the file Claude Code
