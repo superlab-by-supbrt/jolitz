@@ -270,6 +270,12 @@ claude --permission-mode auto \
   -p "Run housekeeping on server1.example.com"
 ```
 
+Auto mode trusts this checkout, not your servers, and refuses
+changes over SSH until you name them under `autoMode` in
+`~/.claude/settings.json`. It ignores that key in the
+project's settings files. The block is in
+`rules/service-reload.md`, and `/auto-mode-setup` drafts it.
+
 `-p` runs one prompt without the interactive UI. In OpenCode
 that is `opencode run "…"`.
 

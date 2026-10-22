@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.3.2 — 2026-10-22
+
+- **The auto-mode fix names the file Claude Code
+  reads.** `rules/service-reload.md` sent the
+  `autoMode` block to `.claude/settings.json`, which
+  the classifier ignores, as it does
+  `.claude/settings.local.json`. It belongs in
+  `~/.claude/settings.json`, now with the servers as
+  trusted hosts, and covers every write over SSH,
+  not only reloads. The README says so where it
+  recommends auto mode.
+
 ## 3.3.1 — 2026-10-19
 
 - **A change on probation becomes the default before

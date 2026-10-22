@@ -206,26 +206,45 @@ custom rule, or a per-server override can lift —
 editing `memory/service-policy.md` in response to
 one changes nothing at all.
 
-**In Claude Code**, note that `permissions.allow`
-does NOT override the auto-mode classifier: a
-session can carry `Bash(ssh *)` in its allow list
-and still have `systemctl reload nginx` refused.
-The classifier has its own key. Add to
-`.claude/settings.json`:
+**In Claude Code**, `permissions.allow` does not
+reach the auto-mode classifier: a session can carry
+`Bash(ssh *)` in its allow list and still have
+`systemctl reload nginx`, an `apt-get purge` or any
+other write over SSH refused, typically as "Modify
+Shared Resources". The classifier trusts only the
+working directory and the repo's remotes, so every
+server is a foreign system until the operator names
+it.
+
+The classifier has its own key, `autoMode`, and
+reads it only from `~/.claude/settings.json`,
+managed settings or `--settings`. It ignores the
+key in `.claude/settings.json` and
+`.claude/settings.local.json`, so a repo cannot
+trust itself and heinzel cannot ship the fix. The
+operator adds it once, to the user file:
 
 ```json
 "autoMode": {
+  "environment": [
+    "$defaults",
+    "Trusted hosts I administer: server1.example.com, server2.example.com"
+  ],
   "allow": [
     "$defaults",
-    "Reloading/restarting services heinzel administers, over ssh."
+    "Changes I asked for on trusted hosts over SSH: packages, configs, services"
   ]
 }
 ```
 
-The literal `"$defaults"` entry is required — it
-inherits the built-in rules. Omit it and you
-replace the harness's own safety rules with just
-your line.
+`/auto-mode-setup`, run in the heinzel directory,
+drafts such entries from recent sessions, and
+`claude auto-mode config` shows what took effect.
+Keep the literal `"$defaults"` in every array:
+without it your lines replace the built-in rules
+instead of adding to them. heinzel never edits the
+file itself; the classifier rightly refuses to let
+an agent widen its own permissions.
 
 This does not weaken heinzel's taboos. Those are
 enforced by `.claude/hooks/guard-taboos.sh`, a
