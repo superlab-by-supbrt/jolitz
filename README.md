@@ -84,6 +84,17 @@ user can use an open connection without the key.
   you approve goes to the Trash.
 - `Update all Homebrew packages on this Mac`: local mode, no
   SSH, same rules.
+- `Show me an overview of my servers`: builds
+  `memory/overview/index.html` from memory, without SSH (see
+  [Fleet overview](#fleet-overview)).
+- `Give me the handover sheet for web1.example.com`: one page
+  with facts, open to-dos, standing constraints, own rules
+  and every change with its way back.
+- `Run a fleet audit for prod`: the audit, limited to servers
+  tagged `prod`, with what changed since the last audit.
+- `Email me the weekly fleet summary`: changes, to-dos,
+  stale servers, end-of-life dates and audit drift as one
+  plain-text mail from your workstation.
 - `/plan Migrate the database on db.example.com`: explores
   and drafts a plan, changes nothing until you approve.
   `/plan` is Claude Code. In OpenCode, ask Heinzel to plan
@@ -155,6 +166,15 @@ The safety rules are part of every session.
   or in a written file is always denied, so the agent cannot
   lift the guard itself. OpenCode does not run this hook;
   there the written rules are the safety layer.
+- **Guard log, opt-in.** Start the session with
+  `HEINZEL_GUARD_LOG=1` and every denial is written to
+  `~/.cache/heinzel/guard.log` (mode 0600): time, reason and
+  the first 200 characters of the command, or only the path
+  of a file edit. The overview counts them by reason. A
+  denial that blocked real work is a false positive worth an
+  issue. A command line can contain a secret, which is why
+  the log is off by default. Writing it never changes a
+  decision.
 - **Verifies before it reports.** "It is gone since the
   reboot" gets checked against the live system first
   (`rules/verify-before-reporting.md`).
@@ -283,6 +303,156 @@ Run the exact prompt interactively once first, so one-time
 questions are answered and stored. Details and a systemd
 timer variant: `rules/scheduled-housekeeping.md`.
 
+## Fleet overview
+
+Everything heinzel learns about your servers is in
+`memory/`. `bin/heinzel-overview` turns it into pages you can
+read at a glance, without connecting to any server:
+
+```bash
+bin/heinzel-overview            # memory/overview/index.html
+bin/heinzel-overview --eol      # first fetch end-of-life dates
+bin/heinzel-overview --tag prod # only servers tagged prod
+bin/heinzel-overview --text     # plain text, last 7 days
+```
+
+![Fleet overview with servers, end-of-life dates, to-dos, changes and audit drift](assets/overview/overview.png)
+
+The start page shows:
+
+- **Needs attention:** releases past or within 180 days of
+  their end of life, servers not connected for 90 days,
+  settings that differ between servers or changed since the
+  last fleet audit, and memory files with a problem.
+- **Servers:** OS, end of life, IP, SSH port, aliases, tags,
+  own rule overrides, last connection (amber after 30 days,
+  red after 90), open to-dos and the last change.
+- **Open to-dos** of all servers, **changes** of the last 30
+  days with their detail and way back, the **fleet audit**
+  table, and, if you enabled it, the **guard denials**.
+
+Tag buttons filter the page. Each server gets a handover
+sheet, `memory/overview/hosts/<hostname>.html`: facts, open
+to-dos, standing constraints (the `Flags:` of its
+changelog), its `rules.md`, every change with detail and
+rollback, its audit values and the full `memory.md`. It
+prints cleanly.
+
+![Handover sheet of one server](assets/overview/host.png)
+
+Try it on the demo data in the repository:
+
+```bash
+bin/heinzel-overview -d assets/overview/demo -o /tmp/fleet-demo
+open /tmp/fleet-demo/index.html   # xdg-open on Linux
+```
+
+### Tags
+
+Tell heinzel what a server is for, and it records it in the
+server's `memory.md`:
+
+```markdown
+# web1.example.com
+- IP: 203.0.113.10
+- OS: Ubuntu 24.04.3 LTS
+- Tags: prod, web
+- Last connected: 2026-10-27
+```
+
+`Run a fleet audit for prod`, `bin/heinzel-overview --tag
+prod` and the fleet summary mail all take a tag.
+
+### End of life
+
+`--eol` asks [endoflife.date](https://endoflife.date) for the
+releases of the systems in your memory and caches the answer
+in `memory/eol/`. Only product names such as `debian` leave
+your machine, never a host name. The page names the source
+and the fetch date. Without `--eol` it uses the cache. Known
+products: Debian, Ubuntu, RHEL, Rocky, AlmaLinux, CentOS
+Stream, Fedora, openSUSE Leap, SLES, FreeBSD, NetBSD, macOS,
+Alpine, Proxmox VE and OPNsense.
+
+### Plain text and mail
+
+`--text` prints the same summary for a terminal or a mail.
+On the demo data:
+
+```
+$ bin/heinzel-overview -d assets/overview/demo --text --tag prod
+jolitz fleet summary, 2026-10-28, tag prod
+Hosts: 2, open to-dos: 2, changes in 7 days: 1
+
+Changes, last 7 days
+  2026-10-27 web1.example.com: nginx now sends HSTS for app.example.com — because the security audit flagged its absence
+
+Open to-dos
+  db1.example.com: Upgrade to Debian 12 (Bookworm)
+  db1.example.com: Move PostgreSQL 13 to 17 with pg_upgradecluster
+
+Not connected for 30 days or more
+  none
+
+End of life
+  db1.example.com: Debian 11 (Bullseye), ended 2026-08-31
+
+Fleet audit 2026-10-27 09:00: 3 settings differ, 2 changed since 2026-09-30 09:00
+  db1.example.com firewall.state: active -> inactive
+  db1.example.com time.service: chrony -> systemd-timesyncd
+
+Memory lint: 0 warnings
+EOL dates: endoflife.date, fetched debian 2026-10-28, macos 2026-10-28, rocky-linux 2026-10-28, ubuntu 2026-10-28
+```
+
+`Email me the weekly fleet summary` sends this from your
+workstation. Scheduled every Monday by cron:
+
+```
+23 7 * * 1 cd /path/to/jolitz && flock -n \
+  /tmp/heinzel-cron-fleet.lock timeout 10m \
+  /abs/path/to/claude --permission-mode auto \
+  -p "Email me the weekly fleet summary" \
+  >> ~/heinzel-cron.log 2>&1
+```
+
+### Fleet audit history
+
+Each fleet audit saves its values in
+`memory/audits/<YYYY-MM-DD-HHMM>.json` and reports what
+changed since the previous one. A change no changelog entry
+explains was made outside heinzel, and the report says so.
+Format: `.claude/skills/heinzel-fleet-audit/references/snapshot.md`.
+
+### Memory lint
+
+`bin/heinzel-memory-lint` checks the memory files. Heinzel
+runs it after each memory update, and the overview runs it
+before it writes a page:
+
+```
+$ bin/heinzel-memory-lint
+WARN  db1.example.com: memory.md: tag "DB" is not lowercase letters, digits and -
+ERROR web1.example.com: servers/web1.example.com/memory.md:14: looks like a secret value; record its location, not the value (rules/secrets.md)
+memory lint: 4 hosts, 1 errors, 1 warnings
+```
+
+- **ERROR:** something that looks like a credential: a
+  private key block, a known token format, a password in a
+  URL or in `PASSWORD=`, a password hash. The line number is
+  printed, the value never is. The overview refuses to build
+  until it is gone, so a secret never lands in a page you
+  might forward. `Database password: in /root/.pgpass
+  (0600)` is a location and passes.
+- **WARN:** no `OS:` or `Last connected:` line, a date that
+  is not `YYYY-MM-DD`, a tag that is not lowercase, a
+  `memory.md` over 40 lines, a `todo.md` with nothing open, a
+  changelog entry without timestamp. `--strict` fails on
+  warnings too.
+
+The patterns are a backstop. A secret in a format they do not
+know passes.
+
 ## Your data: `memory/`
 
 All your state is plain text in one directory:
@@ -297,6 +467,9 @@ All your state is plain text in one directory:
 - `custom-rules/`: your global rule overrides
 - `network.md`, `housekeeping.md`: cross-server facts and
   your own checks
+- `audits/`: one snapshot per fleet audit
+- `overview/`, `eol/`: pages and cached end-of-life dates
+  from `bin/heinzel-overview`; safe to delete
 - `opencode.json`: your OpenCode config
 
 ### Backup and restore
@@ -438,9 +611,13 @@ rules/           rule files per platform and topic
                  macOS cleanup
 .claude/hooks/   update check and the taboo guard
 bin/             heinzel-update, heinzel-backup,
-                 heinzel-migrate
+                 heinzel-migrate, heinzel-overview,
+                 heinzel-memory-lint
+lib/             the renderer behind heinzel-overview
+tests/           tests for lint and overview
 memory/          your state (gitignored)
 assets/trailer/  script that renders the README trailer
+assets/overview/ screenshots and demo data for the overview
 ```
 
 ## Why the name?

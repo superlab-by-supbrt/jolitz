@@ -37,6 +37,7 @@ memory/custom-rules/*
 # !memory/housekeeping.md
 # !memory/network.md
 # !memory/servers/**
+# !memory/audits/
 # memory/servers/localhost/
 # memory/servers/127.0.0.1/
 # !memory/custom-rules/*.md

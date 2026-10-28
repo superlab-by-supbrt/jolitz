@@ -165,6 +165,8 @@ if command -v jq >/dev/null 2>&1; then
     | jq -r '.tool_input.command // empty' 2>/dev/null) || CMD=""
 fi
 [ -n "$CMD" ] || CMD="$INPUT"
+GUARD_MODE=bash
+LOG_SUBJECT=$CMD
 
 # --- Heredoc bodies that are DATA, not code -------------------
 # Documentation is the one thing that legitimately contains taboo
@@ -444,7 +446,30 @@ hit_without() {
   return 0
 }
 
+# Opt-in denial log for the operator: HEINZEL_GUARD_LOG=1
+# in the environment Claude Code starts with. One line per
+# denial in ~/.cache/heinzel/guard.log (time, mode, reason,
+# the first 200 characters of the command or the edited
+# path). It shows which blocks get in the way of real work,
+# so false positives reach the test matrix. A command line
+# can carry a secret, hence opt-in and mode 0600. Writing
+# it never changes the decision: every failure is ignored
+# and deny() denies either way.
+guard_log() {
+  [ "${HEINZEL_GUARD_LOG:-}" = "1" ] || return 0
+  (
+    umask 077
+    d="$HOME/.cache/heinzel"
+    mkdir -p "$d" && [ -d "$d" ] && [ ! -L "$d/guard.log" ] || exit 0
+    s=$(printf '%s' "$LOG_SUBJECT" | tr '\t\n\r' '   ' | cut -c1-200)
+    r=$(printf '%s' "$1" | tr '\t\n\r' '   ')
+    printf '%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      "${GUARD_MODE:-bash}" "$r" "$s" >> "$d/guard.log"
+  ) >/dev/null 2>&1 || true
+}
+
 deny() {
+  guard_log "$1"
   # JSON decision on stdout; blocks in all permission modes.
   # Reasons must stay plain ASCII without quotes/backslashes.
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse",'
@@ -519,6 +544,9 @@ if [ "${1:-}" = "file" ]; then
       | if startswith("/") then . else $c + "/" + . end' \
       2>/dev/null) || TARGET=""
   fi
+  # The log names the path, never the text being written.
+  GUARD_MODE=file
+  LOG_SUBJECT=${TARGET:-"(target unreadable)"}
   if [ -z "$TARGET" ]; then
     TARGET="$INPUT"
     if printf '%s\n' "$TARGET" | LC_ALL=C grep -Eq \

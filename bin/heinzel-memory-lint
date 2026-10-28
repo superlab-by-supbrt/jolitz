@@ -1,0 +1,187 @@
+#!/bin/sh
+# heinzel-memory-lint — check memory/ for shape and for
+# anything that looks like a secret. Reads local files
+# only; never connects to a server.
+#
+# Usage:
+#   heinzel-memory-lint                 Check every server
+#   heinzel-memory-lint <host> ...      Check these servers
+#   heinzel-memory-lint --strict        Warnings fail too
+#   heinzel-memory-lint -d <dir>        Use <dir> as memory/
+#   heinzel-memory-lint --help          Show this help
+#
+# ERROR: a value that looks like a credential (private
+# key block, known token format, password in a URL or an
+# assignment, password hash). The line number is printed,
+# the value never is.
+# WARN: shape problems — no OS or Last connected line, a
+# date that is not YYYY-MM-DD, a tag that is not
+# lowercase, memory.md over 40 lines, a todo.md without
+# open items, a changelog entry without a timestamp.
+#
+# Exit status: 0 clean, 1 errors (or warnings with
+# --strict), 2 usage. The pattern list is a backstop,
+# not a proof: a secret in an unknown format passes.
+set -e
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+REPO_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
+SELF="$SCRIPT_DIR/$(basename "$0")"
+
+usage() {
+  awk '/^# heinzel-memory-lint/{in_help=1} in_help{if(/^[^#]/)exit; sub(/^# ?/,""); print}' "$SELF"
+}
+
+MEM="$REPO_DIR/memory"
+STRICT=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --strict) STRICT=1 ;;
+    -d) [ $# -ge 2 ] || { usage >&2; exit 2; }
+        MEM=$2; shift ;;
+    -h|--help) usage; exit 0 ;;
+    -*) echo "error: unknown option $1" >&2; usage >&2; exit 2 ;;
+    *) break ;;
+  esac
+  shift
+done
+
+if [ ! -d "$MEM/servers" ]; then
+  echo "error: $MEM/servers does not exist" >&2
+  exit 2
+fi
+
+ERRORS=0
+WARNINGS=0
+HOSTS=0
+
+err() {
+  echo "ERROR $1"
+  ERRORS=$((ERRORS + 1))
+}
+warn() {
+  echo "WARN  $1"
+  WARNINGS=$((WARNINGS + 1))
+}
+
+# Token formats with a fixed prefix, matched case-
+# sensitively and not inside a longer word.
+B='(^|[^A-Za-z0-9_])'
+TOKENS="-----BEGIN ([A-Z0-9]+ )*PRIVATE KEY-----"
+TOKENS="$TOKENS|${B}gh[pousr]_[A-Za-z0-9]{36}"
+TOKENS="$TOKENS|${B}github_pat_[A-Za-z0-9_]{22,}"
+TOKENS="$TOKENS|${B}glpat-[A-Za-z0-9_-]{20}"
+TOKENS="$TOKENS|${B}xox[abprs]-[A-Za-z0-9-]{10,}"
+TOKENS="$TOKENS|${B}AKIA[0-9A-Z]{16}"
+TOKENS="$TOKENS|${B}sk-(ant-|proj-)?[A-Za-z0-9_-]{32,}"
+TOKENS="$TOKENS|${B}sk_live_[A-Za-z0-9]{20,}"
+TOKENS="$TOKENS|[A-Za-z][A-Za-z0-9+.-]*://[^/[:space:]:@]+:[^/[:space:]@\$<{]+@"
+TOKENS="$TOKENS|\\\$(1|2[abxy]|5|6)\\\$[./A-Za-z0-9]+\\\$[./A-Za-z0-9]{20,}"
+TOKENS="$TOKENS|\\\$y\\\$[./A-Za-z0-9]+\\\$[./A-Za-z0-9]+\\\$[./A-Za-z0-9]{20,}"
+# An assignment with "=" and a literal value, also
+# as part of a name (DB_PASSWORD=). Memory
+# records "Password: in /root/.my.cnf (0600)", with a
+# colon; that stays allowed.
+ASSIGN="(^|[^A-Za-z0-9])(password|passwd|passphrase|secret|token|api[_-]?key)[[:space:]]*=[[:space:]]*[^[:space:]\$<{\"']"
+
+# secrets <file> <label>: one ERROR per matching line.
+secrets() {
+  [ -f "$1" ] || return 0
+  rel=${1#"$MEM"/}
+  { LC_ALL=C grep -nE -- "$TOKENS" "$1" || true
+    LC_ALL=C grep -niE -- "$ASSIGN" "$1" || true
+  } | cut -d: -f1 | sort -un | while read -r n; do
+    echo "ERROR $2: $rel:$n: looks like a secret value;" \
+      "record its location, not the value (rules/secrets.md)"
+  done
+}
+
+# The secret check above runs in a pipeline, so its
+# count is taken from its output.
+count_secrets() {
+  out=$(secrets "$@")
+  [ -n "$out" ] || return 0
+  printf '%s\n' "$out"
+  ERRORS=$((ERRORS + $(printf '%s\n' "$out" | wc -l)))
+}
+
+lint_host() {
+  dir="$MEM/servers/$1"
+  h=$1
+  if [ -L "$dir" ]; then
+    return 0
+  fi
+  if [ ! -d "$dir" ]; then
+    err "$h: no directory memory/servers/$h"
+    return 0
+  fi
+  HOSTS=$((HOSTS + 1))
+  mf="$dir/memory.md"
+  if [ ! -f "$mf" ]; then
+    warn "$h: no memory.md"
+  else
+    head=$(awk '/^# /{sub(/^# +/,""); print; exit}' "$mf")
+    [ "$head" = "$h" ] \
+      || warn "$h: memory.md: heading is \"$head\", not \"$h\""
+    grep -q '^- OS:' "$mf" \
+      || warn "$h: memory.md: no \"- OS:\" line"
+    lc=$(awk '/^- Last connected:/{sub(/^- Last connected:[[:space:]]*/,""); print; exit}' "$mf")
+    if [ -z "$lc" ]; then
+      warn "$h: memory.md: no \"- Last connected:\" line"
+    elif ! printf '%s\n' "$lc" \
+        | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}([[:space:]]|$)'; then
+      warn "$h: memory.md: Last connected \"$lc\" is not YYYY-MM-DD"
+    fi
+    tags=$(awk '/^- Tags:/{sub(/^- Tags:[[:space:]]*/,""); print; exit}' "$mf")
+    if [ -n "$tags" ]; then
+      for t in $(printf '%s\n' "$tags" | tr ',' ' '); do
+        printf '%s\n' "$t" | grep -Eq '^[a-z0-9][a-z0-9-]*$' \
+          || warn "$h: memory.md: tag \"$t\" is not lowercase letters, digits and -"
+      done
+    fi
+    n=$(wc -l < "$mf" | tr -d ' ')
+    [ "$n" -le 40 ] \
+      || warn "$h: memory.md has $n lines; keep it near 30 (rules/server-memory.md)"
+    count_secrets "$mf" "$h"
+  fi
+  if [ -f "$dir/todo.md" ]; then
+    grep -q '^[[:space:]]*- \[ \]' "$dir/todo.md" \
+      || warn "$h: todo.md has no open item; delete it when all is done"
+    count_secrets "$dir/todo.md" "$h"
+  fi
+  if [ -f "$dir/changelog.log" ]; then
+    bad=$(grep -n '^\[' "$dir/changelog.log" \
+      | grep -Ev '^[0-9]+:\[[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}\]' \
+      | cut -d: -f1 | tr '\n' ' ')
+    [ -z "$bad" ] \
+      || warn "$h: changelog.log: entry without [YYYY-MM-DD HH:MM] on line ${bad% }"
+    count_secrets "$dir/changelog.log" "$h"
+  fi
+  for f in "$dir"/*; do
+    case "${f##*/}" in
+      memory.md|todo.md|changelog.log|'*') ;;
+      *) [ -f "$f" ] && count_secrets "$f" "$h" ;;
+    esac
+  done
+  return 0
+}
+
+if [ $# -gt 0 ]; then
+  for h in "$@"; do lint_host "$h"; done
+else
+  for d in "$MEM"/servers/*; do
+    [ -e "$d" ] || continue
+    [ -d "$d" ] || continue
+    lint_host "${d##*/}"
+  done
+  # State outside the server folders. opencode.json is
+  # tool config that may carry a provider key by design.
+  for f in "$MEM"/*.md "$MEM"/custom-rules/* "$MEM"/audits/*; do
+    [ -f "$f" ] && count_secrets "$f" memory
+  done
+fi
+
+echo "memory lint: $HOSTS hosts, $ERRORS errors, $WARNINGS warnings"
+[ "$ERRORS" -eq 0 ] || exit 1
+[ "$STRICT" -eq 0 ] || [ "$WARNINGS" -eq 0 ] || exit 1
+exit 0

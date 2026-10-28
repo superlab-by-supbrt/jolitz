@@ -1,0 +1,3 @@
+[2026-06-30 14:00] [alice as root]
+dnf-automatic now installs security updates nightly
+  Rollback: systemctl disable --now dnf-automatic.timer

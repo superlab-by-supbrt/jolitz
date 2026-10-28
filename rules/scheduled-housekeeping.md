@@ -92,6 +92,19 @@ email me the report" >> ~/heinzel-cron.log 2>&1
 - `timeout 30m` caps a stuck run.
 - Pick an off-peak minute that is not :00.
 
+A weekly summary of all servers needs no SSH at
+all: it is built from `memory/` by
+`bin/heinzel-overview --text` and mailed from the
+workstation (`heinzel-email` → Fleet summary):
+
+```
+23 7 * * 1 cd /path/to/heinzel && flock -n \
+  /tmp/heinzel-cron-fleet.lock timeout 10m \
+  /abs/path/to/claude --permission-mode auto \
+  -p "Email me the weekly fleet summary" \
+  >> ~/heinzel-cron.log 2>&1
+```
+
 ## systemd Timer Alternative (Linux)
 
 A `heinzel-housekeeping.service` (Type=oneshot,

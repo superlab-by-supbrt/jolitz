@@ -1,0 +1,13 @@
+# web1.example.com
+- IP: 203.0.113.10
+- OS: Ubuntu 24.04.3 LTS
+- Distro family: debian
+- CPU: 4x AMD EPYC
+- RAM: 8 GB
+- Disk: 80 GB (/ ext4, 41% used)
+- Tags: prod, web
+- Web server: nginx 1.24, vhosts app.example.com, www
+- App: Rails via app@blue/app@green (ports 4003/4005)
+- TLS: certbot, renew timer active
+- Firewall: ufw, 22/80/443 open
+- Last connected: 2026-10-27
