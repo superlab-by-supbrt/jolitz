@@ -81,7 +81,7 @@ func TestSettingsPage(t *testing.T) {
 		"<th>listen</th><td>127.0.0.1:7331</td>", "<th>retention.sessions_days</th><td>90</td>", "<th>summary.weekday</th><td>mon</td>",
 		"<th>notify.ntfy.topic</th><td>fleet-a8f3</td>", "ntfy-auth", "hub.toml",
 		"<td>retention</td>", "<td>eol</td>", "<td>summary</td>", `<span class="pill ok">ok</span>`, `<span class="pill bad">failed</span>`,
-		"armed; next mon 07:00", "0 sessions, 0 guard rows removed",
+		"armed; next mon 07:00", "0 sessions, 0 guard rows, 0 old file versions removed",
 		`<input type="hidden" name="channel" value="ntfy">`, "send test message", "not configured", "token-protected", `href="/settings" class="on"`,
 	} {
 		if !strings.Contains(body, w) {

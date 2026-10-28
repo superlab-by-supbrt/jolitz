@@ -7,19 +7,17 @@
 package api
 
 import (
-	"archive/tar"
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/superlab-by-supbrt/jolitz/hub/internal/config"
-	"github.com/superlab-by-supbrt/jolitz/hub/internal/lint"
 	"github.com/superlab-by-supbrt/jolitz/hub/internal/parse"
 	"github.com/superlab-by-supbrt/jolitz/hub/internal/store"
 )
@@ -55,12 +53,14 @@ var Endpoints = []Endpoint{
 	{"GET", "health", "", "Liveness, no token needed.", `curl -sS $HUB/api/v1/health`},
 	{"GET", "whoami", "viewer", "Name and role of the token's user.", `curl -sS -H @"$T" $HUB/api/v1/whoami`},
 	{"GET", "files", "viewer", "Manifest: path, sha256, size, updated_at, updated_by of every file.", `curl -sS -H @"$T" $HUB/api/v1/files`},
-	{"GET", "files/{path}", "viewer", "Raw bytes of one file; ETag is its sha256.", `curl -sS -H @"$T" $HUB/api/v1/files/servers/web1.example.com/memory.md`},
-	{"PUT", "files/{path}", "operator", "Store a file (raw body). If-Match: <sha256> gives 412 on a mismatch; a value that looks like a secret gives 422 {line, reason}; a path outside the allowed set 400.", `curl -sS -H @"$T" -X PUT --data-binary @memory/servers/web1.example.com/memory.md -H 'If-Match: <sha256>' $HUB/api/v1/files/servers/web1.example.com/memory.md`},
+	{"GET", "files/{path}", "viewer", "Raw bytes of one file; ETag is its sha256, X-Version its version. ?version=N returns that version from the history.", `curl -sS -H @"$T" $HUB/api/v1/files/servers/web1.example.com/memory.md`},
+	{"GET", "files/{path}/history", "viewer", "Versions of one file, newest first: version, sha256, size, updated_at, updated_by.", `curl -sS -H @"$T" $HUB/api/v1/files/servers/web1.example.com/memory.md/history`},
+	{"PUT", "files/{path}", "operator", "Store a file (raw body) as a new version. Once the file exists If-Match: <sha256> is required (428 without it): a mismatch gives 409 {error, version, sha256, yours_sha256, diff, lines_added, lines_removed} with a unified diff of the hub's body against yours; If-Match: * overwrites. A value that looks like a secret gives 422 {line, reason}; a path outside the allowed set 400.", `curl -sS -H @"$T" -X PUT --data-binary @memory/servers/web1.example.com/memory.md -H 'If-Match: <sha256>' $HUB/api/v1/files/servers/web1.example.com/memory.md`},
 	{"DELETE", "files/{path}", "operator", "Remove a file and what was derived from it.", `curl -sS -H @"$T" -X DELETE $HUB/api/v1/files/servers/old.example.com/todo.md`},
 	{"GET", "export", "viewer", "Every file as a tar archive; unpack into memory/.", `curl -sS -H @"$T" $HUB/api/v1/export | tar -x -C memory/`},
 	{"GET", "hosts", "viewer", "The fleet, parsed: the fields of overview.json plus claim and sessions.", `curl -sS -H @"$T" $HUB/api/v1/hosts`},
 	{"GET", "hosts/{name}", "viewer", "One host with changes, to-dos, rules.md, memory.md and audit values.", `curl -sS -H @"$T" $HUB/api/v1/hosts/web1.example.com`},
+	{"GET", "hosts/{name}/handover", "viewer", "The handover block: claim, sessions, open to-dos, running jobs (to-do lines naming ~/.jolitz/jobs/), the last three changes with rollback.", `curl -sS -H @"$T" $HUB/api/v1/hosts/web1.example.com/handover`},
 	{"GET", "changes", "viewer", "Changelog entries, newest first. ?host= ?since=YYYY-MM-DD ?q= ?limit=", `curl -sS -H @"$T" "$HUB/api/v1/changes?host=web1.example.com&limit=20"`},
 	{"GET", "todos", "viewer", "To-do items. ?host=", `curl -sS -H @"$T" "$HUB/api/v1/todos?host=db1.example.com"`},
 	{"GET", "audits", "viewer", "Fleet audit values of every snapshot. ?host=", `curl -sS -H @"$T" $HUB/api/v1/audits`},
@@ -100,6 +100,7 @@ func New(cfg Config) http.Handler {
 	mux.HandleFunc("GET "+p+"export", s.auth(store.RoleViewer, s.export))
 	mux.HandleFunc("GET "+p+"hosts", s.auth(store.RoleViewer, s.hosts))
 	mux.HandleFunc("GET "+p+"hosts/{name}", s.auth(store.RoleViewer, s.host))
+	mux.HandleFunc("GET "+p+"hosts/{name}/handover", s.auth(store.RoleViewer, s.handover))
 	mux.HandleFunc("GET "+p+"changes", s.auth(store.RoleViewer, s.changes))
 	mux.HandleFunc("GET "+p+"todos", s.auth(store.RoleViewer, s.todos))
 	mux.HandleFunc("GET "+p+"audits", s.auth(store.RoleViewer, s.audits))
@@ -132,9 +133,44 @@ func TokenFromRequest(r *http.Request) string {
 		return ""
 	}
 	if c, err := r.Cookie(CookieName); err == nil {
+		// The cookie is the browser login. A state-changing
+		// request a browser sent from another origin must not
+		// ride on it, whichever handler serves the path (the UI
+		// forms and every API write alike).
+		if !SafeMethod(r.Method) && !SameOrigin(r) {
+			return ""
+		}
 		return c.Value
 	}
 	return ""
+}
+
+// SafeMethod reports a method that changes nothing.
+func SafeMethod(m string) bool {
+	return m == http.MethodGet || m == http.MethodHead || m == http.MethodOptions
+}
+
+// SameOrigin reports whether a browser sent r from this host.
+// Browsers send Sec-Fetch-Site and Origin with every POST; a
+// request that carries one of them must name this host. A
+// request with neither is not a browser form (curl,
+// jolitz-sync) and authenticates with its own bearer token,
+// which no other page can read.
+func SameOrigin(r *http.Request) bool {
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "", "same-origin", "none":
+	default:
+		return false
+	}
+	o := r.Header.Get("Origin")
+	if o == "" {
+		return true
+	}
+	u, err := url.Parse(o)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	return strings.EqualFold(u.Host, r.Host)
 }
 
 // Authenticate resolves the request's user; nil without a valid
@@ -204,140 +240,6 @@ func (s *server) health(w http.ResponseWriter, _ *http.Request) {
 
 func (s *server) whoami(w http.ResponseWriter, _ *http.Request, u *store.User) {
 	writeJSON(w, http.StatusOK, map[string]string{"user": u.Name, "role": u.Role})
-}
-
-func (s *server) listFiles(w http.ResponseWriter, _ *http.Request, _ *store.User) {
-	files, err := s.cfg.Store.ListFiles()
-	if err != nil {
-		internal(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, files)
-}
-
-// filePath validates the path wildcard; "" with a 400 written.
-func filePath(w http.ResponseWriter, r *http.Request) string {
-	p := r.PathValue("path")
-	if kind, _ := store.Classify(p); kind == store.KindInvalid {
-		fail(w, http.StatusBadRequest, "path outside the allowed set: servers/<host>/(memory.md|changelog.log|todo.md|rules.md), servers/<alias>, network.md, audits/<YYYY-MM-DD-HHMM>.json; host names are [A-Za-z0-9][A-Za-z0-9.-]*")
-		return ""
-	}
-	return p
-}
-
-func (s *server) getFile(w http.ResponseWriter, r *http.Request, _ *store.User) {
-	p := filePath(w, r)
-	if p == "" {
-		return
-	}
-	body, info, err := s.cfg.Store.GetFile(p)
-	if errors.Is(err, store.ErrNotFound) {
-		fail(w, http.StatusNotFound, "no such file")
-		return
-	}
-	if err != nil {
-		internal(w, err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("ETag", `"`+info.SHA256+`"`)
-	w.Header().Set("Last-Modified", info.UpdatedAt.UTC().Format(http.TimeFormat))
-	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(body)
-}
-
-func (s *server) putFile(w http.ResponseWriter, r *http.Request, u *store.User) {
-	p := filePath(w, r)
-	if p == "" {
-		return
-	}
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		fail(w, http.StatusRequestEntityTooLarge, "body too large or unreadable")
-		return
-	}
-	if hit := lint.Check(body); hit != nil {
-		writeJSON(w, http.StatusUnprocessableEntity, hit)
-		return
-	}
-	ifMatch := strings.Trim(strings.TrimPrefix(r.Header.Get("If-Match"), "W/"), `" `)
-	if ifMatch == "*" {
-		ifMatch = ""
-	}
-	_, _, getErr := s.cfg.Store.GetFile(p)
-	created := errors.Is(getErr, store.ErrNotFound)
-	info, err := s.cfg.Store.PutFile(p, body, u.Name, ifMatch)
-	switch {
-	case errors.Is(err, store.ErrMismatch):
-		fail(w, http.StatusPreconditionFailed, "If-Match does not match the stored sha256; pull first")
-		return
-	case errors.Is(err, store.ErrInvalid):
-		fail(w, http.StatusBadRequest, err.Error())
-		return
-	case err != nil:
-		internal(w, err)
-		return
-	}
-	code := http.StatusOK
-	if created {
-		code = http.StatusCreated
-	}
-	writeJSON(w, code, info)
-}
-
-func (s *server) deleteFile(w http.ResponseWriter, r *http.Request, _ *store.User) {
-	p := filePath(w, r)
-	if p == "" {
-		return
-	}
-	err := s.cfg.Store.DeleteFile(p)
-	if errors.Is(err, store.ErrNotFound) {
-		fail(w, http.StatusNotFound, "no such file")
-		return
-	}
-	if err != nil {
-		internal(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
-}
-
-// Export writes every file as a tar archive with paths relative
-// to memory/.
-func Export(st *store.Store, w io.Writer) error {
-	files, err := st.ListFiles()
-	if err != nil {
-		return err
-	}
-	tw := tar.NewWriter(w)
-	for _, f := range files {
-		body, info, err := st.GetFile(f.Path)
-		if err != nil {
-			return err
-		}
-		if err := tw.WriteHeader(&tar.Header{
-			Typeflag: tar.TypeReg, Name: f.Path, Mode: 0o644, Size: int64(len(body)), ModTime: info.UpdatedAt,
-		}); err != nil {
-			return err
-		}
-		if _, err := tw.Write(body); err != nil {
-			return err
-		}
-	}
-	return tw.Close()
-}
-
-func (s *server) export(w http.ResponseWriter, _ *http.Request, _ *store.User) {
-	var buf bytes.Buffer
-	if err := Export(s.cfg.Store, &buf); err != nil {
-		internal(w, err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/x-tar")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="jolitz-memory-%s.tar"`, s.cfg.Store.Now().UTC().Format("2006-01-02")))
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(buf.Bytes())
 }
 
 func (s *server) hosts(w http.ResponseWriter, _ *http.Request, _ *store.User) {
@@ -489,77 +391,6 @@ func (s *server) sessions(w http.ResponseWriter, _ *http.Request, _ *store.User)
 		return
 	}
 	writeJSON(w, http.StatusOK, ss)
-}
-
-func (s *server) claims(w http.ResponseWriter, _ *http.Request, _ *store.User) {
-	cs, err := s.cfg.Store.Claims()
-	if err != nil {
-		internal(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, cs)
-}
-
-func (s *server) putClaim(w http.ResponseWriter, r *http.Request, u *store.User) {
-	host := r.PathValue("host")
-	if !parse.ValidHost(host) {
-		fail(w, http.StatusBadRequest, "host names are [A-Za-z0-9][A-Za-z0-9.-]*")
-		return
-	}
-	var in struct {
-		Note string `json:"note"`
-	}
-	if r.ContentLength != 0 && !readJSON(w, r, &in) {
-		return
-	}
-	if len(in.Note) > 200 || strings.ContainsAny(in.Note, "\n\r") {
-		fail(w, http.StatusBadRequest, "note: one line, up to 200 characters")
-		return
-	}
-	c, err := s.cfg.Store.SetClaim(host, u.Name, in.Note, false)
-	if errors.Is(err, store.ErrConflict) {
-		held, herr := s.cfg.Store.Claim(host)
-		if herr != nil {
-			internal(w, herr)
-			return
-		}
-		if u.Role != store.RoleAdmin {
-			writeJSON(w, http.StatusConflict, map[string]any{
-				"error":      "the host is claimed by " + held.User + "; only they or an admin release it",
-				"claimed_by": held.User, "since": held.Since, "note": held.Note,
-			})
-			return
-		}
-		log.Printf("api: admin %s takes over the claim on %s from %s", u.Name, host, held.User)
-		c, err = s.cfg.Store.SetClaim(host, u.Name, in.Note, true)
-	}
-	if err != nil {
-		internal(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, c)
-}
-
-func (s *server) deleteClaim(w http.ResponseWriter, r *http.Request, u *store.User) {
-	host := r.PathValue("host")
-	c, err := s.cfg.Store.Claim(host)
-	if errors.Is(err, store.ErrNotFound) {
-		fail(w, http.StatusNotFound, "no claim on that host")
-		return
-	}
-	if err != nil {
-		internal(w, err)
-		return
-	}
-	if c.User != u.Name && u.Role != store.RoleAdmin {
-		fail(w, http.StatusForbidden, "the claim belongs to "+c.User+"; only they or an admin release it")
-		return
-	}
-	if err := s.cfg.Store.DeleteClaim(host); err != nil && !errors.Is(err, store.ErrNotFound) {
-		internal(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (s *server) postGuard(w http.ResponseWriter, r *http.Request, u *store.User) {

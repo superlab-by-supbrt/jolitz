@@ -434,8 +434,11 @@ and looks alarming to new users.
 
 **What to say:** one short line before any reads:
 
-- Fresh install (nothing in memory yet):
-  *"Fresh install, memory empty."*
+- Fresh install (`memory/user.md` missing): show
+  `assets/welcome.txt` verbatim in a code block, then
+  one line `jolitz <content of VERSION>, memory
+  empty.` Only on that first start; the welcome is
+  shown again only when the user asks for it.
 - Returning user: *"Loading preferences and access
   lists."*
 

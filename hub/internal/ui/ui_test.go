@@ -393,3 +393,284 @@ func TestPagesContent(t *testing.T) {
 		t.Errorf("tar has %d entries, want %d", n, len(fixture))
 	}
 }
+
+// fileOf reads a file from the store for the edit tests.
+func (e *env) fileOf(p string) (string, *store.FileInfo) {
+	e.t.Helper()
+	b, info, err := e.st.GetFile(p)
+	if err != nil {
+		e.t.Fatalf("%s: %v", p, err)
+	}
+	return string(b), info
+}
+
+func TestHandoverBlock(t *testing.T) {
+	e := newEnv(t)
+	_, body := e.get("viewer", "/hosts/web1.example.com")
+	i := strings.Index(body, `<section class="handover">`)
+	j := strings.Index(body, "<h2>facts</h2>")
+	if i < 0 || j < 0 || i > j {
+		t.Fatalf("handover block missing or below facts (%d, %d)", i, j)
+	}
+	block := body[i:j]
+	for _, want := range []string{"Rollback: re-enable app.service", "2026-06-13 08:00", "alices-mbp", "bobs-pc", "not claimed", "nothing open"} {
+		if !strings.Contains(block, want) {
+			t.Errorf("handover block lacks %q", want)
+		}
+	}
+	if strings.Contains(block, "<script>alert(1)") || !strings.Contains(block, "&lt;script&gt;alert(1)") {
+		t.Error("handover block does not escape the headline")
+	}
+	_, body = e.get("viewer", "/hosts/db1.example.com")
+	block = body[strings.Index(body, `<section class="handover">`):strings.Index(body, "<h2>facts</h2>")]
+	for _, want := range []string{"migration until 20:00", "Upgrade to Debian 12", "PostgreSQL 15 installed", "no way back recorded"} {
+		if !strings.Contains(block, want) {
+			t.Errorf("db1 handover block lacks %q", want)
+		}
+	}
+	if strings.Contains(block, "Back up pg_hba.conf") {
+		t.Error("handover lists a done to-do")
+	}
+	// A running job is listed apart from the to-dos.
+	e.st.UpdateFile("servers/db1.example.com/todo.md", "alice", func(old []byte) ([]byte, error) {
+		return append(old, []byte("- [ ] dist-upgrade running in ~/.jolitz/jobs/20261028-1200-upgrade\n")...), nil
+	})
+	_, body = e.get("viewer", "/hosts/db1.example.com")
+	block = body[strings.Index(body, `<section class="handover">`):strings.Index(body, "<h2>facts</h2>")]
+	if !strings.Contains(block, "running jobs") || !strings.Contains(block, "~/.jolitz/jobs/20261028-1200-upgrade") {
+		t.Error("handover lacks the running job")
+	}
+}
+
+func TestTodoEdits(t *testing.T) {
+	e := newEnv(t)
+	p := "/hosts/db1.example.com/todos"
+	res, _ := e.req("viewer", "POST", p, url.Values{"action": {"toggle"}, "text": {"Upgrade to Debian 12"}, "done": {"1"}})
+	if res.StatusCode != 403 {
+		t.Errorf("viewer toggle = %d", res.StatusCode)
+	}
+	_, body := e.get("viewer", "/hosts/db1.example.com")
+	if strings.Contains(body, `action="/hosts/db1.example.com/todos"`) {
+		t.Error("viewer sees to-do forms")
+	}
+	_, body = e.get("alice", "/hosts/db1.example.com")
+	if !strings.Contains(body, `action="/hosts/db1.example.com/todos"`) || !strings.Contains(body, `name="done" value="1"`) {
+		t.Error("operator sees no to-do forms")
+	}
+	res, _ = e.req("alice", "POST", p, url.Values{"action": {"toggle"}, "text": {"Upgrade to Debian 12"}, "done": {"1"}})
+	if res.StatusCode != 303 || res.Header.Get("Location") != "/hosts/db1.example.com" {
+		t.Fatalf("toggle = %d %s", res.StatusCode, res.Header.Get("Location"))
+	}
+	got, info := e.fileOf("servers/db1.example.com/todo.md")
+	if got != "# To-do\n- [x] Back up pg_hba.conf\n- [x] Upgrade to Debian 12\n" || info.Version != 2 || info.UpdatedBy != "alice" {
+		t.Errorf("after check: %q %+v", got, info)
+	}
+	res, _ = e.req("alice", "POST", p, url.Values{"action": {"toggle"}, "text": {"Back up pg_hba.conf"}, "done": {"0"}})
+	if res.StatusCode != 303 {
+		t.Errorf("uncheck = %d", res.StatusCode)
+	}
+	got, info = e.fileOf("servers/db1.example.com/todo.md")
+	if got != "# To-do\n- [ ] Back up pg_hba.conf\n- [x] Upgrade to Debian 12\n" || info.Version != 3 {
+		t.Errorf("after uncheck: %q", got)
+	}
+	// A toggle that changes nothing is no new version.
+	e.req("alice", "POST", p, url.Values{"action": {"toggle"}, "text": {"nope"}, "done": {"1"}})
+	if _, info = e.fileOf("servers/db1.example.com/todo.md"); info.Version != 3 {
+		t.Errorf("no-op toggle made version %d", info.Version)
+	}
+	res, _ = e.req("bob", "POST", p, url.Values{"action": {"add"}, "text": {"Vacuum <b>now</b>"}})
+	if res.StatusCode != 303 {
+		t.Errorf("add = %d", res.StatusCode)
+	}
+	got, info = e.fileOf("servers/db1.example.com/todo.md")
+	if !strings.HasSuffix(got, "- [x] Upgrade to Debian 12\n- [ ] Vacuum <b>now</b>\n") || info.UpdatedBy != "bob" || info.Version != 4 {
+		t.Errorf("after add: %q %+v", got, info)
+	}
+	_, body = e.get("viewer", "/hosts/db1.example.com")
+	if !strings.Contains(body, "Vacuum &lt;b&gt;now&lt;/b&gt;") || strings.Contains(body, "<b>now</b>") {
+		t.Error("added to-do not escaped")
+	}
+	_, body = e.get("viewer", "/")
+	if !strings.Contains(body, "Vacuum &lt;b&gt;now&lt;/b&gt;") || strings.Contains(body, "Upgrade to Debian 12") {
+		t.Error("fleet page does not follow the edit")
+	}
+	// A host without todo.md gets one.
+	res, _ = e.req("alice", "POST", "/hosts/web1.example.com/todos", url.Values{"action": {"add"}, "text": {"Rotate logs"}})
+	if res.StatusCode != 303 {
+		t.Errorf("add on a new file = %d", res.StatusCode)
+	}
+	got, info = e.fileOf("servers/web1.example.com/todo.md")
+	if got != "# To-do\n- [ ] Rotate logs\n" || info.Version != 1 {
+		t.Errorf("new todo.md: %q", got)
+	}
+	// The lint applies to UI edits too.
+	tok := "gh" + "p_" + "abcdefghijklmnopqrstuvwxyz0123456789"
+	res, body = e.req("alice", "POST", "/hosts/web1.example.com/todos", url.Values{"action": {"add"}, "text": {"token " + tok}})
+	if res.StatusCode != 422 || strings.Contains(body, tok) {
+		t.Errorf("lint on an edit = %d (echoed secret: %v)", res.StatusCode, strings.Contains(body, tok))
+	}
+	if got, _ = e.fileOf("servers/web1.example.com/todo.md"); strings.Contains(got, tok) {
+		t.Error("a refused edit was stored")
+	}
+	// Empty, multi-line and unknown hosts are refused.
+	for _, f := range []url.Values{{"action": {"add"}, "text": {"  "}}, {"action": {"add"}, "text": {"a\nb"}}, {"action": {"x"}, "text": {"a"}}} {
+		if res, _ = e.req("alice", "POST", p, f); res.StatusCode != 400 {
+			t.Errorf("bad form %v = %d", f, res.StatusCode)
+		}
+	}
+	if res, _ = e.req("alice", "POST", "/hosts/nope.example.com/todos", url.Values{"action": {"add"}, "text": {"x"}}); res.StatusCode != 404 {
+		t.Errorf("unknown host = %d", res.StatusCode)
+	}
+}
+
+func TestFactEdits(t *testing.T) {
+	e := newEnv(t)
+	p := "/hosts/web1.example.com/facts"
+	if res, _ := e.req("viewer", "POST", p, url.Values{"owner": {"x"}, "tags": {"y"}}); res.StatusCode != 403 {
+		t.Errorf("viewer facts = %d", res.StatusCode)
+	}
+	res, _ := e.req("bob", "POST", p, url.Values{"owner": {"bob"}, "tags": {"prod, web, <i>x</i>"}})
+	if res.StatusCode != 303 {
+		t.Fatalf("facts = %d", res.StatusCode)
+	}
+	got, info := e.fileOf("servers/web1.example.com/memory.md")
+	if !strings.Contains(got, "- Owner: bob\n- Services: nginx 1.26") || !strings.Contains(got, "- Tags: prod, web, <i>x</i>\n- SSH port: 2222") ||
+		strings.Contains(got, "alice") || info.Version != 2 || info.UpdatedBy != "bob" {
+		t.Errorf("memory.md after facts: %q %+v", got, info)
+	}
+	if strings.Count(got, "\n") != 10 {
+		t.Errorf("line count changed: %q", got)
+	}
+	_, body := e.get("viewer", "/")
+	if !strings.Contains(body, "<td>bob</td>") || !strings.Contains(body, "&lt;i&gt;x&lt;/i&gt;") || strings.Contains(body, "<i>x</i>") {
+		t.Error("fleet does not show the new owner and escaped tag")
+	}
+	// A host without the lines gets them after its facts; an
+	// empty value removes the line.
+	res, _ = e.req("alice", "POST", "/hosts/mac.local/facts", url.Values{"owner": {"carol"}, "tags": {""}})
+	if res.StatusCode != 303 {
+		t.Errorf("facts on mac = %d", res.StatusCode)
+	}
+	got, _ = e.fileOf("servers/mac.local/memory.md")
+	if got != "# mac.local\n- OS: macOS 15.1 Sequoia\n- Mode: local\n- Last connected: yesterday\n- Owner: carol\n" {
+		t.Errorf("mac memory.md: %q", got)
+	}
+	res, _ = e.req("alice", "POST", p, url.Values{"owner": {""}, "tags": {"web"}})
+	got, _ = e.fileOf("servers/web1.example.com/memory.md")
+	if strings.Contains(got, "Owner:") || !strings.Contains(got, "- Tags: web\n") {
+		t.Errorf("owner not removed: %q", got)
+	}
+	for _, f := range []url.Values{{"owner": {"a\nb"}, "tags": {""}}, {"owner": {strings.Repeat("x", 201)}, "tags": {""}}} {
+		if res, _ = e.req("alice", "POST", p, f); res.StatusCode != 400 {
+			t.Errorf("bad facts %v = %d", f, res.StatusCode)
+		}
+	}
+	// A host whose memory.md was never pushed: 404, no file made.
+	e.st.DeleteFile("servers/mac.local/memory.md")
+	if res, _ = e.req("alice", "POST", "/hosts/mac.local/facts", url.Values{"owner": {"x"}}); res.StatusCode != 404 {
+		t.Errorf("facts without memory.md = %d", res.StatusCode)
+	}
+}
+
+func TestLinkEdits(t *testing.T) {
+	e := newEnv(t)
+	if res, _ := e.req("viewer", "POST", "/links", url.Values{"action": {"add"}, "from": {"a.example.com"}, "to": {"b.example.com"}}); res.StatusCode != 403 {
+		t.Errorf("viewer link = %d", res.StatusCode)
+	}
+	_, body := e.get("viewer", "/")
+	if !strings.Contains(body, "web1.example.com -&gt; db1.example.com") && !strings.Contains(body, "web1.example.com → db1.example.com") {
+		t.Error("fleet lacks the existing link")
+	}
+	if strings.Contains(body, `action="/links"`) {
+		t.Error("viewer sees the link form")
+	}
+	_, body = e.get("alice", "/")
+	if !strings.Contains(body, `action="/links"`) {
+		t.Error("operator sees no link form")
+	}
+	res, _ := e.req("alice", "POST", "/links", url.Values{"action": {"add"}, "from": {"db1.example.com"}, "to": {"backup.example.com"}, "label": {"ssh <b>"}})
+	if res.StatusCode != 303 || res.Header.Get("Location") != "/" {
+		t.Fatalf("add link = %d", res.StatusCode)
+	}
+	got, info := e.fileOf("network.md")
+	if !strings.HasSuffix(got, "- Link: web1.example.com -> db1.example.com (postgresql 5432)\n- Link: db1.example.com -> backup.example.com (ssh <b>)\n") || info.Version != 2 || info.UpdatedBy != "alice" {
+		t.Errorf("network.md after add: %q %+v", got, info)
+	}
+	links, _ := e.st.Links()
+	if len(links) != 2 || links[1].Label != "ssh <b>" {
+		t.Errorf("links %+v", links)
+	}
+	_, body = e.get("viewer", "/")
+	if !strings.Contains(body, "ssh &lt;b&gt;") || strings.Contains(body, "ssh <b>") {
+		t.Error("link label not escaped")
+	}
+	res, _ = e.req("bob", "POST", "/links", url.Values{"action": {"remove"}, "from": {"web1.example.com"}, "to": {"db1.example.com"}, "label": {"postgresql 5432"}})
+	if res.StatusCode != 303 {
+		t.Errorf("remove link = %d", res.StatusCode)
+	}
+	got, info = e.fileOf("network.md")
+	if got != "# Network\nAll servers sit in one VLAN; db1 is reached over the private IP.\n- Link: db1.example.com -> backup.example.com (ssh <b>)\n" || info.Version != 3 {
+		t.Errorf("network.md after remove: %q", got)
+	}
+	// A link without a label; a bad host; a label with parens.
+	res, _ = e.req("alice", "POST", "/links", url.Values{"action": {"add"}, "from": {"a.example.com"}, "to": {"b.example.com"}})
+	got, _ = e.fileOf("network.md")
+	if res.StatusCode != 303 || !strings.HasSuffix(got, "- Link: a.example.com -> b.example.com\n") {
+		t.Errorf("unlabeled link: %d %q", res.StatusCode, got)
+	}
+	for _, f := range []url.Values{
+		{"action": {"add"}, "from": {"a<b"}, "to": {"b.example.com"}},
+		{"action": {"add"}, "from": {"a.example.com"}, "to": {""}},
+		{"action": {"add"}, "from": {"a.example.com"}, "to": {"b.example.com"}, "label": {"x (y)"}},
+		{"action": {"drop"}, "from": {"a.example.com"}, "to": {"b.example.com"}},
+	} {
+		if res, _ = e.req("alice", "POST", "/links", f); res.StatusCode != 400 {
+			t.Errorf("bad link %v = %d", f, res.StatusCode)
+		}
+	}
+	// Without network.md the first link creates it.
+	e.st.DeleteFile("network.md")
+	res, _ = e.req("alice", "POST", "/links", url.Values{"action": {"add"}, "from": {"a.example.com"}, "to": {"b.example.com"}, "label": {"x"}})
+	got, info = e.fileOf("network.md")
+	if res.StatusCode != 303 || got != "# Network\n- Link: a.example.com -> b.example.com (x)\n" {
+		t.Errorf("network.md created: %d %q", res.StatusCode, got)
+	}
+}
+
+// A form posted from another origin is refused before any
+// handler runs; the same form from the hub itself passes.
+func TestCrossOriginPostRefused(t *testing.T) {
+	e := newEnv(t)
+	post := func(hdr map[string]string) int {
+		req, _ := http.NewRequest("POST", e.srv.URL+"/hosts/web1.example.com/claim",
+			strings.NewReader(url.Values{"note": {"x"}}.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(&http.Cookie{Name: api.CookieName, Value: e.tokens["alice"]})
+		for k, v := range hdr {
+			req.Header.Set(k, v)
+		}
+		c := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		res, err := c.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+	if c := post(map[string]string{"Sec-Fetch-Site": "same-site", "Origin": "https://wiki.example.com"}); c != 403 {
+		t.Errorf("same-site post = %d, want 403", c)
+	}
+	if c := post(map[string]string{"Origin": "https://evil.example.org"}); c != 403 {
+		t.Errorf("foreign origin = %d, want 403", c)
+	}
+	if c := post(map[string]string{"Origin": "null"}); c != 403 {
+		t.Errorf("null origin = %d, want 403", c)
+	}
+	if c, err := e.st.Claim("web1.example.com"); err == nil && c != nil {
+		t.Errorf("a refused post claimed the host for %q", c.User)
+	}
+	u, _ := url.Parse(e.srv.URL)
+	if c := post(map[string]string{"Sec-Fetch-Site": "same-origin", "Origin": "http://" + u.Host}); c != 303 {
+		t.Errorf("same-origin post = %d, want 303", c)
+	}
+}

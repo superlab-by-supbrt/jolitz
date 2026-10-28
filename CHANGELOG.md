@@ -1,5 +1,39 @@
 # Changelog
 
+## 3.3.3-jolitz.10 — 2026-10-28
+
+- **The hub is the source of memory now.** Every accepted
+  write is a file version; an existing file needs the sha it
+  builds on (428 without, 409 with a unified diff when it is
+  stale). `jolitz-sync resolve --mine|--theirs` ends a
+  conflict, `history` lists versions, `handover <host>` prints
+  claim, sessions, open to-dos, running jobs and the last
+  changes with their way back. A claim made in a session is
+  released at its end unless `--keep`. A failed pull marks the
+  copy stale.
+- **The browser edits** to-dos, Owner, Tags and network links;
+  every edit is a version by that user, through the same
+  secret check, and reaches the workstations with the next
+  pull. The host page opens with the handover.
+- **The connection pipeline knows the hub:** a stale copy is
+  pulled first, a claim by someone else is named and asked
+  about before work starts; the activity check reports the
+  handover.
+- **Retention removes old file versions** after
+  `retention.versions_years`, never the current one, and the
+  whole history of a deleted file once it is that old.
+- **Forms from other origins are refused** by the hub's web
+  UI, also from another host of the same site.
+- **A welcome on the first start.** With `memory/user.md`
+  still missing, jolitz shows `assets/welcome.txt` (an ASCII
+  banner, what it does, three first steps) and its version,
+  then the one-time setup question. Later starts stay quiet.
+- **A shorter README.** Start first, then what you can ask,
+  the skills, the hub and the safety rules in brief. The long
+  forms moved unchanged to `docs/` (overview, safety,
+  automation, data, OpenCode); the layout to
+  `CONTRIBUTING.md`.
+
 ## 3.3.3-jolitz.9 — 2026-10-28
 
 - **A team hub, optional.** `hub/` is a Go service, one

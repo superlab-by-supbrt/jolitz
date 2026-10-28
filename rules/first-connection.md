@@ -37,16 +37,24 @@ port (`rules/ssh-port.md` → Known port).
    the one the user named, else `- SSH port:` from
    the memory read in step 4; a new host without one
    goes through `rules/ssh-port.md` → first contact.
-6. **Server lock.** Read `/etc/jolitz.conf` and
+6. **Hub, when configured.** `~/.config/jolitz/hub.conf`
+   exists: run `bin/jolitz-sync status`. `stale` in
+   its output: `bin/jolitz-sync pull` first, the
+   session is working on an old copy. A claim by
+   another person on this host: name the person and
+   the note and ask before step 11. See
+   `rules/hub.md` → Claims and handover. Without
+   `hub.conf` this step does nothing.
+7. **Server lock.** Read `/etc/jolitz.conf` and
    switch to read-only mode if it locks the server.
    See `rules/access-control.md` → Server Lock.
-7. **OS detection.** See `rules/os-detection.md`.
-8. **Server memory file.** Create on first
+8. **OS detection.** See `rules/os-detection.md`.
+9. **Server memory file.** Create on first
    connection, read on every subsequent connection.
    See `rules/server-memory.md`.
-9. **Activity check.** Every connection, not just
-   the first. See `rules/activity-check.md`.
-10. **Then** execute the user's request.
+10. **Activity check.** Every connection, not just
+    the first. See `rules/activity-check.md`.
+11. **Then** execute the user's request.
 
 ## Local mode
 

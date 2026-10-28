@@ -76,6 +76,10 @@ details[open] summary::before{content:'▾ '}
 pre{background:var(--code);padding:6px 10px;border-radius:4px;overflow-x:auto;font-size:12px;white-space:pre-wrap;word-break:break-word;margin:4px 0 4px 16px}
 pre.ex{margin:4px 0 0}
 .box{background:var(--card);border:1px solid var(--line);border-radius:6px;overflow-x:auto}
+.handover{padding:8px 10px 4px;margin:0 0 14px;border:1px solid var(--accent);border-radius:6px;background:var(--card)}
+.handover h2{margin-top:0}
+.handover .claimbox{margin-bottom:8px}
+.editrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 10px}
 .claimbox{padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--card);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .login{display:flex;gap:8px;align-items:center;margin:16px 0}
 .login input{min-width:28em}

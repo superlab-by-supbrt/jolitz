@@ -120,8 +120,9 @@ shows them.
 
 The summary job is armed at the first start and sends from the
 next scheduled hour on; a hub that was down at that hour sends
-when it is back. `retention.versions_years` is read and shown
-but has no job: phase 1 keeps one version per file. The hub
+when it is back. Retention removes file versions older than
+`retention.versions_years`; the current version of every file
+stays. The hub
 holds no memory-lint output (the lint runs before every push
 and a hit is refused with 422), so the summary has no "Memory
 lint" section.
@@ -278,13 +279,15 @@ with a curl example per line.
 |---|---|---|---|
 | GET | `health` | none | `{ok, version}` |
 | GET | `whoami` | viewer | `{user, role}` of the token |
-| GET | `files` | viewer | manifest: path, sha256, size, updated_at, by |
-| GET | `files/{path}` | viewer | raw bytes; `ETag` is the sha256 |
-| PUT | `files/{path}` | operator | raw body; 412, 422, 400: see below |
+| GET | `files` | viewer | manifest: path, sha256, version, size, updated_at, by |
+| GET | `files/{path}` | viewer | raw bytes; `ETag` sha256, `X-Version`; `?version=N` |
+| GET | `files/{path}/history` | viewer | every version: sha256, size, when, by |
+| PUT | `files/{path}` | operator | raw body; 428, 409, 422, 400: see below |
 | DELETE | `files/{path}` | operator | remove a file and its derived rows |
 | GET | `export` | viewer | tar of every file, `application/x-tar` |
 | GET | `hosts` | viewer | fleet as in `overview.json` + claim, sessions |
 | GET | `hosts/{name}` | viewer | host: changes, to-dos, rules, memory, audit |
+| GET | `hosts/{name}/handover` | viewer | claim, sessions, open to-dos, jobs, last 3 changes |
 | GET | `changes` | viewer | `?host= &since= &q= &limit=`, newest first |
 | GET | `todos` | viewer | `?host=` |
 | GET | `audits` | viewer | every snapshot's values, `?host=` |
@@ -301,8 +304,15 @@ with a curl example per line.
 | GET | `overview.json` | viewer | the shape of `bin/jolitz-overview --json` |
 | POST | `notify/test` | admin | `{channel}`; 404 not configured, 502 failed |
 
-`PUT files/{path}`: `If-Match: <sha256>` gives 412 when the stored
-file differs; a value that looks like a credential gives 422 with
+`PUT files/{path}`: a new file needs no `If-Match`; an existing
+one needs `If-Match: <sha256>` of the version it builds on, else
+428. A sha that is not the stored one gives 409 with
+`{error, version, sha256, yours_sha256, diff, lines_added,
+lines_removed}`, `diff` being a unified diff of the hub's body
+against yours; `If-Match: *` overwrites on purpose. Every
+accepted write is a new version, kept in the history until
+retention removes it (never the current one). A value that
+looks like a credential gives 422 with
 `{line, reason}` and nothing is stored; a path outside the allowed
 set gives 400. `PUT claims/{host}` on a host another person holds
 gives 409 with `{claimed_by, since, note}`; an admin takes the
@@ -316,9 +326,14 @@ todo.md|rules.md)`, `servers/<alias>`, `network.md`,
 ## UI
 
 `/login` (paste the token once; HttpOnly cookie, `Secure` behind
-TLS, SameSite=Lax), `/` fleet with filter bar and presence strip,
-`/hosts/<name>` handover sheet with claim and release,
-`/timeline`, `/activity` (every changelog, searchable),
+TLS, SameSite=Lax), `/` fleet with filter bar, presence strip
+and the network links to add or remove, `/hosts/<name>`
+handover sheet: claim and release, who is on it, open to-dos
+with check and add, running jobs, the last changes with their
+way back, and Owner and Tags to edit. Every edit is a new file
+version by the UI user, through the same secret check, and
+reaches the workstations with their next pull; viewers see no
+forms. `/timeline`, `/activity` (every changelog, searchable),
 `/presence`, `/audit`, `/guard`, `/api`, `/export`; for admins
 `/settings` with the effective configuration (paths of the
 secret files, never their content), the last run of each job

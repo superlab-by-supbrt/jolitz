@@ -5,9 +5,9 @@
 // the settings page reads it. The clock is a field so tests
 // drive it.
 //
-// Retention of file versions (retention.versions_years) is read
-// from the config but has no job: phase 1 keeps one version per
-// file, so there is nothing to expire yet.
+// Retention also expires old file versions
+// (retention.versions_years); the current version of every file
+// is always kept.
 package jobs
 
 import (
@@ -191,7 +191,11 @@ func (s *Scheduler) retention(_ context.Context, now time.Time) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%d sessions, %d guard rows removed; file versions: not in phase 1", ns, ng), nil
+	nv, err := s.Store.PruneFileVersions(now.AddDate(-s.cfg.Retention.VersionsYears, 0, 0))
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%d sessions, %d guard rows, %d old file versions removed", ns, ng, nv), nil
 }
 
 // ---- end of life -------------------------------------------

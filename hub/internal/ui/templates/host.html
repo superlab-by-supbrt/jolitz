@@ -7,6 +7,8 @@
 </div>
 <p class="sub">Handover sheet: what runs here, what changed and why, what is open. Built from memory/, not from the live server.</p>
 
+<section class="handover">
+<h2>handover</h2>
 <div class="claimbox">
 {{if .Claim}}<span class="pill warn">claimed</span> by <b>{{.Claim.User}}</b> since {{when .Claim.Since}}{{if .Claim.Note}}: {{.Claim.Note}}{{end}}
 {{if $.CanEdit}}{{if or $.Mine (eq $.User.Role "admin")}}<form method="post" action="/hosts/{{.Name}}/release" class="inline"><button type="submit">release</button></form>{{end}}{{end}}
@@ -14,6 +16,14 @@
 {{if $.CanEdit}}<form method="post" action="/hosts/{{.Name}}/claim" class="inline"><input name="note" placeholder="note (migration until 20:00)" maxlength="200"> <button type="submit">claim</button></form>{{end}}
 {{end}}
 </div>
+{{with $.Handover}}<table class="facts">
+<tr><th>on it now</th><td>{{range .Sessions}}<span class="who-on"><span class="dot{{if .Stale}} stale{{end}}"></span>{{.User}}{{if .Workstation}}<span class="muted">@{{.Workstation}}</span>{{end}} <span class="muted">{{since .LastBeat}}{{if .Stale}}, stale{{end}}</span></span> {{else}}<span class="muted">nobody</span>{{end}}</td></tr>
+<tr><th>open</th><td>{{range .Todos}}<div>- [ ] {{.}}</div>{{else}}<span class="muted">nothing open</span>{{end}}</td></tr>
+{{if .Jobs}}<tr><th>running jobs</th><td>{{range .Jobs}}<div>- [ ] {{.}}</div>{{end}}</td></tr>{{end}}
+<tr><th>last changes</th><td>{{range .Changes}}<div><b>{{.Date}} {{.Time}}</b> {{if .Who}}<span class="muted">[{{.Who}}]</span> {{end}}{{.Headline}}<br><span class="sub">{{if .Rollback}}Rollback: {{.Rollback}}{{else}}no way back recorded{{end}}</span></div>{{else}}<span class="muted">no changelog yet</span>{{end}}</td></tr>
+</table>{{end}}
+<p class="sub">Terminal: <code>jolitz-sync handover {{.Name}}</code>; claim with <code>jolitz-sync claim {{.Name}} "note"</code>.</p>
+</section>
 
 <h2>facts</h2>
 <table class="facts">
@@ -27,14 +37,16 @@
 {{if .Services}}<tr><th>services</th><td>{{range $i, $s := .Services}}{{if $i}}, {{end}}{{$s.Name}}{{if $s.Version}} {{$s.Version}}{{end}}{{end}}</td></tr>{{end}}
 {{if .Guest}}<tr><th>guest</th><td>{{join .Guest ", "}}</td></tr>{{end}}
 {{if .Aliases}}<tr><th>also known as</th><td>{{join .Aliases " "}}</td></tr>{{end}}
-<tr><th>pushed</th><td>{{when .UpdatedAt}}</td></tr>
+<tr><th>pushed</th><td>{{when .UpdatedAt}}{{if $.MemoryVersion}} <span class="sub">memory.md version {{$.MemoryVersion}} (<code>jolitz-sync history</code>)</span>{{end}}</td></tr>
 </table>
+{{if $.CanEdit}}<form method="post" action="/hosts/{{.Name}}/facts" class="editrow"><label>owner <input name="owner" value="{{.Owner}}" maxlength="200"></label> <label>tags <input name="tags" value="{{$.TagsText}}" maxlength="200" placeholder="prod, web"></label> <button type="submit">save</button> <span class="sub">rewrites the Owner and Tags lines of memory.md as a new version</span></form>{{end}}
 
-<h2>open to-dos</h2>
+<h2>to-dos</h2>
 <ul class="list">
-{{range .TodoItems}}{{if .Open}}<li>- [ ] {{.Text}}</li>{{end}}{{end}}
-{{if not .Todos}}<li class="muted">Nothing open.</li>{{end}}
+{{range .TodoItems}}<li>{{if $.CanEdit}}<form method="post" action="/hosts/{{$.H.Name}}/todos" class="inline"><input type="hidden" name="action" value="toggle"><input type="hidden" name="text" value="{{.Text}}"><input type="hidden" name="done" value="{{if .Open}}1{{else}}0{{end}}"><button type="submit" class="link">{{if .Open}}[ ]{{else}}[x]{{end}}</button></form>{{else}}{{if .Open}}- [ ]{{else}}- [x]{{end}}{{end}} {{if .Open}}{{.Text}}{{else}}<span class="muted">{{.Text}}</span>{{end}}</li>
+{{else}}<li class="muted">No to-do list.</li>{{end}}
 </ul>
+{{if $.CanEdit}}<form method="post" action="/hosts/{{.Name}}/todos" class="editrow"><input type="hidden" name="action" value="add"><input name="text" placeholder="new to-do" maxlength="500" required> <button type="submit">add</button></form>{{end}}
 
 {{if $.Flags}}<h2>standing constraints</h2>
 <ul class="list">{{range $.Flags}}<li>{{.Flags}} <span class="sub">(since {{.Date}})</span></li>{{end}}</ul>{{end}}
