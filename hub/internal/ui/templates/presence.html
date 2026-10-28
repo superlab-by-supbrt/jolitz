@@ -1,0 +1,21 @@
+{{define "content"}}
+<div class="bar"><h1>presence</h1><span class="sub">open sessions and claims; refreshes every 30 s. A session is stale after 10 minutes without a heartbeat and closed after 60.</span></div>
+<h2>sessions</h2>
+<table class="dense">
+<thead><tr><th>user</th><th>workstation</th><th>host</th><th>started</th><th>last beat</th><th>state</th></tr></thead>
+<tbody>
+{{range .Sessions}}<tr>
+<td>{{.User}}</td><td>{{.Workstation}}</td><td>{{if .Host}}<a href="/hosts/{{.Host}}">{{.Host}}</a>{{else}}<span class="muted">—</span>{{end}}</td>
+<td>{{when .StartedAt}} <span class="muted">({{since .StartedAt}})</span></td><td>{{since .LastBeat}} ago</td>
+<td>{{if .Stale}}<span class="pill warn">stale</span>{{else}}<span class="pill ok">live</span>{{end}}</td>
+</tr>
+{{else}}<tr><td colspan="6" class="muted">Nobody is on a host right now.</td></tr>{{end}}
+</tbody></table>
+<h2>claims</h2>
+<table class="dense">
+<thead><tr><th>host</th><th>user</th><th>since</th><th>note</th></tr></thead>
+<tbody>
+{{range .Claims}}<tr><td><a href="/hosts/{{.Host}}">{{.Host}}</a></td><td>{{.User}}</td><td>{{when .Since}} <span class="muted">({{since .Since}})</span></td><td>{{.Note}}</td></tr>
+{{else}}<tr><td colspan="4" class="muted">No claims.</td></tr>{{end}}
+</tbody></table>
+{{end}}

@@ -1,0 +1,39 @@
+{{define "content"}}
+<div class="bar"><h1>settings</h1><span class="sub">the effective configuration{{if .ConfigPath}} from <code>{{.ConfigPath}}</code>{{else}} (defaults; no hub.toml){{end}}, the scheduled jobs and a test send per channel. Secrets stay in their files; this page shows paths, never contents.</span></div>
+{{if .Flash}}<p class="pill {{if .FlashOK}}ok{{else}}bad{{end}}">{{.Flash}}</p>{{end}}
+
+<h2>configuration</h2>
+<table class="facts">
+<tbody>
+{{range .Config}}<tr><th>{{.Key}}</th><td>{{if .Value}}{{.Value}}{{else}}<span class="muted">—</span>{{end}}</td></tr>
+{{end}}
+</tbody></table>
+<p class="sub">Edit the file and restart the service; the hub reads it once at start. <code>/metrics</code> is {{if .MetricsPublic}}public (no token){{else}}token-protected (viewer role, <code>Authorization: Bearer</code>){{end}}; <code>/api/v1/overview.json</code> has the shape of <code>bin/jolitz-overview --json</code>.</p>
+
+<h2>jobs</h2>
+<table class="dense">
+<thead><tr><th>job</th><th>schedule</th><th>last run</th><th>state</th><th>result</th></tr></thead>
+<tbody>
+{{range .Jobs}}<tr>
+<td>{{.Name}}</td><td>{{.Schedule}}</td>
+<td>{{if .Last}}{{when .Last.At}} <span class="muted">({{since .Last.At}})</span>{{else}}<span class="muted">never</span>{{end}}</td>
+<td>{{if .Last}}{{if .Last.OK}}<span class="pill ok">ok</span>{{else}}<span class="pill bad">failed</span>{{end}}{{else}}<span class="muted">—</span>{{end}}</td>
+<td>{{if .Last}}{{.Last.Result}}{{end}}</td>
+</tr>
+{{else}}<tr><td colspan="5" class="muted">No scheduler is running (tests, or serve started without one).</td></tr>{{end}}
+</tbody></table>
+<p class="sub">Retention and the EOL fetch run daily, the summary weekly at the configured hour in the hub host's local time; a hub that was down at that hour sends the summary when it is back. File versions are not kept in phase 1, so <code>retention.versions_years</code> has no job yet.</p>
+
+<h2>notify channels</h2>
+<table class="dense">
+<thead><tr><th>channel</th><th>target</th><th>state</th><th></th></tr></thead>
+<tbody>
+{{range .Channels}}<tr>
+<td>{{.Name}}</td><td>{{if .Target}}{{.Target}}{{else}}<span class="muted">—</span>{{end}}</td>
+<td>{{if .Enabled}}<span class="pill ok">configured</span>{{else}}<span class="muted">not configured</span>{{end}}</td>
+<td>{{if .Enabled}}<form method="post" action="/settings/test" class="inline"><input type="hidden" name="channel" value="{{.Name}}"><button type="submit">send test message</button></form>{{end}}</td>
+</tr>
+{{end}}
+</tbody></table>
+<p class="sub">A test message is one attempt without retry; the weekly summary retries once. Configure channels under <code>[notify.ntfy]</code>, <code>[notify.matrix]</code> and <code>[notify.webhook]</code> in hub.toml, with the secrets in mode-600 files in the data directory (see <code>rules/notify.md</code>).</p>
+{{end}}

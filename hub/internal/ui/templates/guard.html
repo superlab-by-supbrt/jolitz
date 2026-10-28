@@ -1,0 +1,10 @@
+{{define "content"}}
+<div class="bar"><h1>guard</h1><span class="sub">denials of the taboo guard since {{.Since}}, by reason. The hub holds the reason and the time, never the command.</span></div>
+<p class="sub"><b>{{.Total}}</b> denials. Window: <a href="/guard">30 d</a> · <a href="/guard?since=2000-01-01">all</a></p>
+<table class="dense">
+<thead><tr><th class="num">count</th><th>last</th><th>reason</th></tr></thead>
+<tbody>
+{{range .Counts}}<tr><td class="num">{{.Count}}</td><td>{{when .Last}}</td><td>{{.Reason}}</td></tr>
+{{else}}<tr><td colspan="3" class="muted">No denials in this window.</td></tr>{{end}}
+</tbody></table>
+{{end}}

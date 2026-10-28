@@ -1,0 +1,14 @@
+{{define "content"}}
+<div class="bar"><h1>api</h1><span class="sub">JSON under <code>{{.Hub}}/api/v1/</code>, one bearer token per request</span>
+<input id="q" type="search" placeholder="filter  (/)" autocomplete="off"></div>
+<p class="sub">Set <code>HUB={{.Hub}}</code> and <code>T=~/.config/jolitz/hub-token</code>, a mode-600 file holding one line <code>Authorization: Bearer …</code>; <code>curl -H @"$T"</code> reads it, so the token never reaches argv. Roles: viewer reads, operator writes, admin also releases other people's claims and ends their sessions. Errors are <code>{"error": "…"}</code>; a lint hit on PUT is 422 <code>{"line", "reason"}</code>.</p>
+<table class="dense api">
+<thead><tr><th>method</th><th>path</th><th>role</th><th>what</th></tr></thead>
+<tbody>
+{{range .Endpoints}}<tr data-row>
+<td><code>{{.Method}}</code></td><td><code>/api/v1/{{.Path}}</code></td><td>{{if .Role}}{{.Role}}{{else}}<span class="muted">none</span>{{end}}</td>
+<td>{{.Desc}}<pre class="ex">{{.Example}}</pre></td>
+</tr>
+{{end}}
+</tbody></table>
+{{end}}

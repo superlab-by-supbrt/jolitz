@@ -1,0 +1,55 @@
+# jolitz-hub configuration. Optional: without this file the hub
+# runs with the values below. Place it as <data>/hub.toml or
+# name it with `jolitz-hub serve --config FILE`. The hub reads
+# it once at start; a flag on the command line wins over a key
+# here.
+#
+# The format is a subset of TOML: key = "string" (escapes \" \\
+# \t \n), key = 123, key = true|false, [section] headers and
+# comments. No arrays, no inline tables, no multi-line strings.
+# An unknown key or section is an error, so a typo cannot
+# silently switch a job off.
+#
+# No secret belongs in this file. The notify sections name the
+# files that hold the token or the webhook URL; a relative path
+# is taken under data_dir. Create them with mode 600, owned by
+# the service user.
+
+listen = "127.0.0.1:7331"       # TLS belongs to the reverse proxy
+base_url = ""                   # public URL, shown on the /api page
+data_dir = "/var/lib/jolitz-hub"
+metrics_public = false          # true: GET /metrics needs no token
+
+[retention]
+sessions_days = 90              # closed sessions older than this go
+guard_days = 30                 # guard denials older than this go
+versions_years = 2              # file versions: no job in phase 1
+
+[eol]
+enabled = true                  # daily fetch from endoflife.date;
+                                # product names only, never hosts
+
+[summary]
+weekday = "mon"                 # mon tue wed thu fri sat sun
+hour = 7                        # 0..23, local time of the hub host
+
+# ntfy: POST of the text to <server>/<topic>. Without a
+# header_file the topic is published unauthenticated.
+[notify.ntfy]
+server = "https://ntfy.sh"
+topic = ""                      # set a topic to enable the channel
+header_file = ""                # e.g. "ntfy-auth": one header per
+                                # line, "Authorization: Bearer …"
+
+# Matrix: PUT m.room.message into one room. All three keys are
+# needed to enable the channel.
+[notify.matrix]
+server = ""                     # e.g. "https://matrix.example.org"
+room = ""                       # e.g. "!abc123:example.org"
+header_file = ""                # e.g. "matrix-auth"
+
+# Slack-compatible webhook: POST {"text": …} to the url line of
+# a curlrc file; the URL is the secret.
+[notify.webhook]
+curlrc_file = ""                # e.g. "webhook.curlrc" holding
+                                # url = "https://hooks.slack.com/…"

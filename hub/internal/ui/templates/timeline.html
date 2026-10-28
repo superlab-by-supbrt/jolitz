@@ -1,0 +1,23 @@
+{{define "content"}}
+<div class="bar">
+<h1>timeline</h1>
+<span class="sub">last {{.Days}} days · {{len .Changes}} changes · a dot is an entry, a square one with Flags:</span>
+<span class="filters">{{range .Windows}}<a href="/timeline?days={{.}}"{{if eq . $.Days}} class="on"{{end}}>{{.}}d</a>{{end}}<a href="/timeline?days=36500"{{if eq $.Days 36500}} class="on"{{end}}>all</a></span>
+<input id="q" type="search" placeholder="filter  (/)" autocomplete="off">
+</div>
+<div class="box">
+<svg class="chart" viewBox="0 0 {{.W}} {{.H}}" role="img" aria-label="Changes per host over time">
+{{range .Ticks}}<line class="tick" x1="{{f1 .X}}" y1="{{add $.Top -6}}" x2="{{f1 .X}}" y2="{{add $.H -20}}"/>
+<text x="{{f1 .X}}" y="{{add $.Top -12}}" text-anchor="{{.Anchor}}">{{.Label}}</text>
+{{end}}{{range .Lanes}}<line class="lane" x1="{{$.Left}}" y1="{{f1 .Y}}" x2="{{add $.W -20}}" y2="{{f1 .Y}}"/>
+<a href="/hosts/{{.Name}}"><text class="host" x="{{add $.Left -10}}" y="{{f1 (add_f .Y 4)}}" text-anchor="end">{{.Name}}</text></a>
+{{end}}{{range .Dots}}{{if .Flag}}<rect class="flag" x="{{f1 (add_f .X -5)}}" y="{{f1 (add_f .Y -5)}}" width="10" height="10"><title>{{.Title}}</title></rect>
+{{else}}<circle class="dot" cx="{{f1 .X}}" cy="{{f1 .Y}}" r="4.5"><title>{{.Title}}</title></circle>
+{{end}}{{end}}{{if not .Lanes}}<text x="{{.Left}}" y="{{add .Top 13}}">No host yet.</text>{{end}}
+</svg>
+</div>
+<h2>changes</h2>
+<ul class="list">
+{{range .Changes}}{{template "change" (ci . $.TagsOf)}}{{else}}<li class="muted">No changes in this window.</li>{{end}}
+</ul>
+{{end}}

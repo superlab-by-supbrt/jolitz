@@ -1,0 +1,60 @@
+{{define "content"}}
+{{with .H}}
+<div class="bar">
+<h1>{{.Name}}</h1>
+{{range .Tags}}<span class="tag">{{.}}</span>{{end}}
+{{range .Sessions}}<span class="who-on"><span class="dot{{if .Stale}} stale{{end}}"></span>{{.User}}{{if .Workstation}}<span class="muted">@{{.Workstation}}</span>{{end}} <span class="muted">{{since .LastBeat}}</span></span>{{end}}
+</div>
+<p class="sub">Handover sheet: what runs here, what changed and why, what is open. Built from memory/, not from the live server.</p>
+
+<div class="claimbox">
+{{if .Claim}}<span class="pill warn">claimed</span> by <b>{{.Claim.User}}</b> since {{when .Claim.Since}}{{if .Claim.Note}}: {{.Claim.Note}}{{end}}
+{{if $.CanEdit}}{{if or $.Mine (eq $.User.Role "admin")}}<form method="post" action="/hosts/{{.Name}}/release" class="inline"><button type="submit">release</button></form>{{end}}{{end}}
+{{else}}<span class="muted">not claimed</span>
+{{if $.CanEdit}}<form method="post" action="/hosts/{{.Name}}/claim" class="inline"><input name="note" placeholder="note (migration until 20:00)" maxlength="200"> <button type="submit">claim</button></form>{{end}}
+{{end}}
+</div>
+
+<h2>facts</h2>
+<table class="facts">
+<tr><th>os</th><td>{{.OS}}</td></tr>
+<tr><th>ip</th><td>{{.IP}}</td></tr>
+{{if .DistroFamily}}<tr><th>distro family</th><td>{{.DistroFamily}}</td></tr>{{end}}
+{{if .SSHPort}}<tr><th>ssh port</th><td>{{.SSHPort}}</td></tr>{{end}}
+{{if .Mode}}<tr><th>mode</th><td>{{.Mode}}</td></tr>{{end}}
+<tr><th>last connected</th><td>{{with agecls .LastConnectedDays}}<span class="pill {{.}}">{{end}}{{agetext .Host}}{{if agecls .LastConnectedDays}}</span>{{end}}</td></tr>
+{{if .Owner}}<tr><th>owner</th><td>{{.Owner}}</td></tr>{{end}}
+{{if .Services}}<tr><th>services</th><td>{{range $i, $s := .Services}}{{if $i}}, {{end}}{{$s.Name}}{{if $s.Version}} {{$s.Version}}{{end}}{{end}}</td></tr>{{end}}
+{{if .Guest}}<tr><th>guest</th><td>{{join .Guest ", "}}</td></tr>{{end}}
+{{if .Aliases}}<tr><th>also known as</th><td>{{join .Aliases " "}}</td></tr>{{end}}
+<tr><th>pushed</th><td>{{when .UpdatedAt}}</td></tr>
+</table>
+
+<h2>open to-dos</h2>
+<ul class="list">
+{{range .TodoItems}}{{if .Open}}<li>- [ ] {{.Text}}</li>{{end}}{{end}}
+{{if not .Todos}}<li class="muted">Nothing open.</li>{{end}}
+</ul>
+
+{{if $.Flags}}<h2>standing constraints</h2>
+<ul class="list">{{range $.Flags}}<li>{{.Flags}} <span class="sub">(since {{.Date}})</span></li>{{end}}</ul>{{end}}
+
+{{if .RulesMD}}<h2>own rules (rules.md)</h2>
+<pre>{{.RulesMD}}</pre>{{end}}
+
+<h2>changes</h2>
+<ul class="list">
+{{range .Changes}}<li><details><summary><b>{{.Date}} {{.Time}}</b> {{if .Who}}<span class="muted">[{{.Who}}]</span> {{end}}{{.Headline}}{{if .Flags}} <span class="pill warn">flags</span>{{end}}</summary>{{if .Detail}}<pre>{{range $i, $l := .Detail}}{{if $i}}
+{{end}}{{$l}}{{end}}</pre>{{else}}<p class="sub">No detail recorded.</p>{{end}}</details></li>
+{{else}}<li class="muted">No changelog yet.</li>{{end}}
+</ul>
+
+{{if .AuditRows}}<h2>fleet audit {{.AuditDate}}</h2>
+<table class="facts">
+{{range .AuditRows}}<tr><th>{{.Key}}</th><td>{{.Value}}{{if index_bool $.AuditDrift .Key}} <span class="pill warn">differs in the fleet</span>{{end}}</td></tr>{{end}}
+</table>{{end}}
+
+<h2>memory.md</h2>
+{{if .MemoryMD}}<pre>{{.MemoryMD}}</pre>{{else}}<p class="muted">No memory.md pushed.</p>{{end}}
+{{end}}
+{{end}}
