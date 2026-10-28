@@ -66,7 +66,13 @@ cat > "$M/servers/web1.example.com/rules.md" <<'EOF'
 ## Replace: Firewall
 nftables only.
 EOF
-ln -s web1.example.com "$M/servers/www.example.com"
+# Git Bash copies instead of linking; there the alias is a file
+# naming the canonical directory (rules/dns-aliases.md).
+ln -s web1.example.com "$M/servers/www.example.com" 2>/dev/null || true
+if [ ! -L "$M/servers/www.example.com" ]; then
+  rm -rf "$M/servers/www.example.com"
+  printf 'web1.example.com\n' > "$M/servers/www.example.com"
+fi
 
 cat > "$M/servers/db1.example.com/memory.md" <<'EOF'
 # db1.example.com

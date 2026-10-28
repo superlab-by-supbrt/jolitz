@@ -38,15 +38,28 @@ sets the default.
 
 ## Start
 
-You need a terminal AI tool, a workstation with Linux, macOS,
-FreeBSD or Windows (WSL or Git Bash; not PowerShell or
-`cmd.exe`), `jq`, and an SSH key without a passphrase for
-the servers, as a normal user or root. The guard and the
-fleet overview parse JSON with `jq`; without it the guard
-falls back to scanning raw input and blocks more than it
-should. `curl` is needed for `--eol` only. For the guard to
-block when it times out, Claude Code must be 2.1.295 or
-newer (`claude --version`).
+You need a terminal AI tool, an SSH key without a passphrase
+for the servers (as a normal user or root), and on the
+workstation:
+
+- **Linux, macOS or FreeBSD** with `jq`. `command -v jq`
+  shows whether it is there; otherwise `brew install jq`,
+  `sudo apt install jq`, `sudo dnf install jq` or
+  `pkg install jq`.
+- **Windows:** WSL 2 is the smooth way; inside it, as on
+  Linux. Natively, install
+  [Git for Windows](https://gitforwindows.org/) and
+  `winget install jqlang.jq`, then start `claude` from any
+  terminal: it runs the shell and the guard in Git Bash.
+  Without Git Bash, Claude Code falls back to PowerShell,
+  where the guard cannot run and every tool call is blocked.
+  Scheduled runs need cron, so on Windows only under WSL.
+
+Without `jq` the guard still blocks the taboos but cannot
+read file paths reliably, and denies every file edit it
+cannot prove harmless. `curl` is needed for `--eol` only. For
+the guard to block when it times out, Claude Code must be
+2.1.295 or newer (`claude --version`).
 
 ```
 git clone https://github.com/superlab-by-supbrt/jolitz.git
@@ -196,7 +209,7 @@ On the demo data in the repository:
 
 ```bash
 bin/jolitz-overview -d assets/overview/demo -o /tmp/fleet-demo
-open /tmp/fleet-demo/index.html   # xdg-open on Linux
+open /tmp/fleet-demo/index.html   # Linux: xdg-open, Windows: start
 ```
 
 **Tags.** Tell jolitz what a server is for; it records the

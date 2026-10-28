@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 # The tests read the checkout and nothing else.
 permissions:
@@ -68,6 +69,57 @@ jobs:
         run: sh tests/memory-tools-test.sh
       - name: bin tools tests (busybox)
         run: sh tests/bin-tools-test.sh
+
+  windows-git-bash:
+    # Native Windows runs the hooks in Git Bash, as this job does.
+    # A Windows path (C:\...) must hit the same blocks as on Unix,
+    # and CRLF must not reach a shell script (.gitattributes).
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Tools
+        run: |
+          command -v jq || choco install jq --no-progress -y
+          jq --version
+          bash --version | head -1
+
+      - name: Scripts checked out with LF
+        run: |
+          for f in bin/* .claude/hooks/*.sh tests/*.sh; do
+            if grep -q "$(printf '\r')" "$f"; then
+              echo "CRLF in $f"; exit 1
+            fi
+          done
+
+      # The guard as Claude Code starts it, with Windows hook
+      # input. The full matrix takes too long under Git Bash for
+      # every pull request; windows-full-matrix runs it on main.
+      - name: Guard smoke test
+        run: sh tests/windows-smoke.sh
+
+      - name: Memory lint and overview tests
+        run: sh tests/memory-tools-test.sh
+
+  windows-full-matrix:
+    if: github.event_name != 'pull_request'
+    runs-on: windows-latest
+    timeout-minutes: 300
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Tools
+        run: command -v jq || choco install jq --no-progress -y
+
+      - name: Guard test matrix
+        run: sh .claude/hooks/guard-taboos-test.sh
 
   macos-cleanup-scanner:
     # The skill runs the Command Line Tools Python.

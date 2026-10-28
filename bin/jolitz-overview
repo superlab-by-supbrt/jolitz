@@ -222,6 +222,17 @@ has_tag() {
 }
 
 for d in "$MEM"/servers/*; do
+  # An alias file: Git Bash copies instead of linking, so on
+  # Windows an alias is a file naming its canonical directory
+  # (rules/dns-aliases.md). git checks a symlink out the same way
+  # where it cannot create one.
+  if [ -f "$d" ] && [ ! -L "$d" ]; then
+    target=$(head -n 1 "$d" | tr -d '\r[:space:]')
+    case $target in ''|*/*|.*) continue ;; esac
+    [ -d "$MEM/servers/$target" ] || continue
+    printf '%s\t%s\n' "${d##*/}" "$target" >> "$WORK/aliases.tsv"
+    continue
+  fi
   [ -d "$d" ] || continue
   h=${d##*/}
   # The name becomes an awk -v value, a file name under
