@@ -7,13 +7,23 @@
 #
 #   - halt / poweroff / shutdown without -r / init 0 /
 #     telinit 0 / sysrq-trigger
-#   - mkfs / mke2fs / newfs* / wipefs (write forms)
+#   - sleep: systemctl suspend/hibernate/hybrid-sleep/
+#     suspend-then-hibernate/sleep and their targets,
+#     acpiconf -s 3/4/5, zzz, pmset sleepnow, rtcwake (but
+#     -m show), a write onto /sys/power/state
+#   - mkfs / mke2fs / newfs* / wipefs (write forms), and
+#     formatting under another name: cryptsetup luksFormat/
+#     luksErase/erase/reencrypt, zpool labelclear, mdadm
+#     --zero-superblock
 #   - partition-table writers (fdisk/cfdisk/sfdisk/gdisk/
-#     sgdisk/parted/gpart/gpt/diskutil write forms)
+#     sgdisk/parted/gpart/gpt/diskutil write forms, the
+#     attribute bits with them: sgdisk -A, gpart set/unset)
 #   - raw-device wipers that leave the partition table
 #     alone (blkdiscard, nvme format/sanitize, hdparm
 #     secure-erase, badblocks -w, shred, dd, a redirect,
 #     tee, cp or a download onto a disk device)
+#   - firmware written to a drive: hdparm --fwdownload*,
+#     nvme fw-download/fw-commit/fw-activate
 #   - destroying SSH keys (host keys, authorized_keys, id_*,
 #     or the directory holding them: ~/.ssh, an appliance
 #     key store such as /conf/sshd) by any means: rm/shred/
@@ -23,17 +33,29 @@
 #     and other output flags)
 #   - writes to sshd_config(.d/) under any .../etc/ssh, or
 #     to a file an appliance merges into it (/etc/sshd_extra)
+#   - the SSH service stopped, disabled or masked (systemctl,
+#     service, rc-service, an init script, launchctl)
 #   - boot loaders and firmware variables: efibootmgr write
 #     forms, grub-install, update-grub, grub-mkconfig -o,
 #     bootctl install/update/remove/set-*, bless write forms,
-#     efivar -w, a write or delete under
+#     grub-set-default, grub-reboot, grub-editenv set/unset/
+#     create, systemsetup -setstartupdisk, efivar -w, nvram
+#     in a write form, a write or delete under
 #     /sys/firmware/efi/efivars/
-#   - accounts and sudo: deleting an account or a group, visudo, vipw/vigr, any
-#     write to sudoers(.d/) or to the account files
-#     (/etc/passwd, shadow, group, master.passwd)
+#   - accounts and sudo: deleting an account or a group,
+#     visudo, vipw/vigr, any write to sudoers(.d/) or to the
+#     account files (/etc/passwd, shadow, group,
+#     master.passwd)
+#   - any write after a cd into /etc/ssh, sshd_config.d,
+#     /etc/sudoers.d, ~/.ssh or /conf/sshd, where the files
+#     are named bare, and find -delete with one of them as
+#     the root
 #   - writing, moving or deleting the server lock
 #     /etc/jolitz.conf, which only the machine's owner sets
 #     (rules/access-control.md)
+#   - a second agent session: claude or opencode with -p,
+#     --print, --settings, --permission-mode or
+#     --dangerously-skip-permissions
 #   - any of those paths reached through a language
 #     runtime (python/perl/ruby/node/awk ...), whose file
 #     I/O looks nothing like a shell write; awk is exempt
@@ -45,6 +67,12 @@
 #   - a file-edit tool pointed at sshd_config, a key file,
 #     sudoers, an account file, an efivar, the server lock or
 #     a raw disk device (see the file-mode section)
+#
+# A write is recognised in every spelling the shell has for it:
+# the three redirect operators > >> >| (ONTO), sed and perl in
+# place as -i, -Ei/-ri/-ni/-pi, -i.bak or --in-place (INPLACE),
+# the editors vi/vim/nvim/nano/emacs/ed/ex, and an output flag
+# alone or closing a cluster (curl -o, curl -fsSLo, wget -qO).
 #
 # What it deliberately does NOT scan: the body of a heredoc that
 # is written to an ordinary file by cat or tee (issue #8). That
@@ -124,6 +152,11 @@
 #   - rsync with -e "ssh -i ~/.ssh/id_..." AFTER its operands
 #     reads as a copy onto that key, because writes_to takes the
 #     last word as the destination. Put -e before the operands.
+#   - A short-flag cluster that ends in o or O (ls -lo) in front of
+#     a protected path reads as an output flag, and rm or cp of an
+#     unrelated file after a cd into a protected directory reads
+#     as a write there. Run those from another cwd, without the
+#     cluster.
 #
 # Being blocked is EXPECTED behavior. Explain it to the user.
 # Never rephrase, re-quote, or otherwise obfuscate a command to
@@ -359,7 +392,7 @@ KEYPRIV="$KEYFILE"'([^.[:alnum:]]|$)'
 # so a plain hit on SSHD also finds the bare file. Then the
 # editors that rewrite a file in place.
 SSHD='/etc/(ssh/sshd_config(\.d(/[[:alnum:]_.-]*)?)?|sshd_extra)'
-EDITOR='(vi|vim|nvim|nano|emacs|ed)'
+EDITOR='(vi|vim|nvim|nano|emacs|ed|ex)'
 
 # Backed here where a write locks people out or cannot be
 # undone; deliberate work on them runs with the operator's
@@ -700,12 +733,17 @@ fi
 #
 # END includes < and >: a redirect glued to the path
 # (tee /etc/ssh/sshd_config<<EOF) still ends it.
+#
+# The output flag may close a short-flag cluster (curl -fsSLo,
+# wget -qO): the letters before it are skipped. Accepted false
+# positive: a cluster that merely ends in o or O (ls -lo) next to
+# a protected path.
 END="([\"'[:space:];|&)\`<>]|\$)"
 ENDARG="[\"']?([[:space:]]+(-[^[:space:]]*|[0-9]*[<>]+&?([[:space:]]*[^[:space:]]+)?))*[[:space:])\`]*(#.*)?\$"
 writes_to() {
   hit "(^|[^[:alnum:]_.-])(tee|sponge)[[:space:]]([^;|&<>]*[[:space:]])?[^[:space:];|&]*$1$END" \
     || hit "(^|[[:space:]])of=[^[:space:]]*$1$END" \
-    || hit "(^|[[:space:]])(-[oO]|-out|--output(-document)?)([[:space:]]+|=)?[^[:space:]=]*$1$END" \
+    || hit "(^|[[:space:]])(-[[:alpha:]]*[oO]|-out|--output(-document)?)([[:space:]]+|=)?[^[:space:]=]*$1$END" \
     || hit "(^|[^[:alnum:]_.-])(cp|rsync|scp)[[:space:]]([^;&|]*[[:space:]])?[^[:space:]]*$1$ENDARG" \
     || hit "(^|[^[:alnum:]_.-])cp[[:space:]]([^;&|]*[[:space:]])?(-[[:alpha:]]*t[[:space:]]*|--target-directory[=[:space:]])[^[:space:]]*$1$END"
 }
@@ -716,6 +754,19 @@ writes_to() {
 # all use it.
 CLOBBER='rm|shred|unlink|truncate|mv|chmod|chown|install|ln|setfacl|patch'
 
+# ONTO: a redirect onto the path that follows it, in all three
+# POSIX spellings: > and >> and the clobber form >|. segments()
+# splits on |, so >| is only whole in the full string, which the
+# list always keeps.
+ONTO='>[>|]?[[:space:]]*["'\'']?[^[:space:];|&]*'
+
+# INPLACE: sed or perl rewriting a file in place. The flag stands
+# alone (-i), closes a cluster (-Ei, -ri, -ni, perl -pi), carries a
+# suffix (-i.bak) or is spelled out; GNU getopt takes any unique
+# prefix of --in-place, and --i is one. The rules pair it with the
+# tool, as before.
+INPLACE='(^|[[:space:]])(-[[:alpha:]]*i|--i[-a-z]*)'
+
 # --- The server lock (always on) ------------------------------
 # Same write set as sudoers below (a redirect, sed -i, an editor,
 # a delete, move or re-permission, a copy or tee onto it), plus
@@ -723,9 +774,9 @@ CLOBBER='rm|shred|unlink|truncate|mv|chmod|chown|install|ln|setfacl|patch'
 # path. Moving or deleting it lifts the lock as surely as writing
 # true. Checked before the override, which never lifts it.
 if hit "$LOCKFILE"; then
-  if hit '>>?[[:space:]]*["'\'']?[^[:space:];|&]*'"$LOCKFILE" \
+  if hit "$ONTO$LOCKFILE" \
     || { hit '(^|[^[:alnum:]_-])(sed|perl)([^[:alnum:]_-]|$)' \
-         && hit '(^|[[:space:]])-i'; } \
+         && hit "$INPLACE"; } \
     || hit "(^|[^[:alnum:]_-])$EDITOR([^[:alnum:]_-]|\$)" \
     || hit "(^|[^[:alnum:]_-])($CLOBBER|cp)([^[:alnum:]_-]|\$)" \
     || hit '(^|[[:space:]])-delete([[:space:]]|$)' \
@@ -913,6 +964,40 @@ grep, ls, head, find without -exec or -delete, git log/show/diff) \
   fi
 fi
 
+# --- A second agent session ------------------------------------
+# claude -p (or --print) and opencode -p start another session,
+# and one started from another cwd runs without this hook;
+# --settings, --permission-mode and --dangerously-skip-permissions
+# give that session its permissions outright. jolitz never starts
+# one of its own: the operator schedules claude -p from cron
+# (rules/scheduled-housekeeping.md). --version and --help pass.
+# Accepted false positive: the same flags as data (grep claude -p).
+if hit '(^|[^[:alnum:]_.-])(claude|opencode)[[:space:]]+([^;&|]*[[:space:]])?(-p|--print|--settings|--permission-mode|--dangerously-skip-permissions)([[:space:]=]|$)'
+then
+  deny "starting a second agent session, or one with its own \
+permissions, runs outside this guard; the operator starts \
+sessions"
+fi
+
+# --- The SSH service ------------------------------------------
+# Stopping, disabling or masking sshd closes the door the next
+# session comes in through, like removing its port (CLAUDE.md).
+# systemctl stop/disable/mask on ssh or sshd (.service, .socket),
+# service and rc-service stop (FreeBSD onestop too), an init.d
+# or rc.d script, launchctl unload/disable/bootout of
+# com.openssh.sshd or ssh.plist (macOS). status, restart and
+# reload stay ordinary work: a restart asks first
+# (rules/service-reload.md). Open, on purpose: pkill sshd and a
+# firewall rule, which the model layer weighs.
+SSHSVC='(ssh|sshd)(\.service|\.socket)?'
+if hit "(^|[^[:alnum:]_.-])systemctl([[:space:]]+-[^[:space:]]+)*[[:space:]]+(stop|disable|mask)([[:space:]]+[^[:space:];&|]+)*[[:space:]]+$SSHSVC([^[:alnum:]_.-]|\$)" \
+  || hit '((^|[^[:alnum:]_.-])(service|rc-service|invoke-rc\.d)[[:space:]]+|/etc/(init\.d|rc\.d)/)(ssh|sshd)[[:space:]]+(one)?stop([^[:alnum:]_-]|$)' \
+  || hit '(^|[^[:alnum:]_.-])launchctl[[:space:]]+(unload|disable|bootout|remove)[[:space:]]+[^;&|]*(com\.openssh\.sshd|/ssh\.plist)'
+then
+  deny "stopping, disabling or masking sshd cuts off the next \
+login (restart and reload are ordinary work that asks first)"
+fi
+
 # --- Power off ------------------------------------------------
 if hit '(^|[^[:alnum:]_-])(halt|poweroff)([^[:alnum:]_-]|$)'; then
   deny "halt/poweroff never runs without explicit user request"
@@ -933,6 +1018,29 @@ if hit_without '(^|[^[:alnum:]_-])shutdown([^[:alnum:]_-]|$)' \
 use shutdown -r; -c cancels)"
 fi
 
+# --- Sleep ----------------------------------------------------
+# A sleeping server is as unreachable as one that is off, and
+# nobody stands at it to wake it. systemd's sleep verbs and the
+# targets behind them (start or isolate; status reads them),
+# FreeBSD acpiconf -s 3/4/5 (S5 is soft-off) and zzz, macOS pmset
+# sleepnow, rtcwake in every mode but show, and a write onto
+# /sys/power/state, which is read for the list of states and
+# written for nothing else. macOS shutdown -s falls under the
+# shutdown rule above.
+SLEEP='(suspend|hibernate|hybrid-sleep|suspend-then-hibernate|sleep)'
+if hit "(^|[^[:alnum:]_.-])systemctl([[:space:]]+-[^[:space:]]+)*[[:space:]]+($SLEEP([^[:alnum:]_.-]|\$)|(start|isolate)[[:space:]]+$SLEEP\.target)" \
+  || hit '(^|[^[:alnum:]_.-])acpiconf[[:space:]]+([^;&|]*[[:space:]])?-s[[:space:]]*[345]([^[:alnum:]]|$)' \
+  || hit '(^|[^[:alnum:]_.-])zzz([^[:alnum:]_.-]|$)' \
+  || hit '(^|[^[:alnum:]_.-])pmset[[:space:]]+([^;&|]*[[:space:]])?sleepnow([^[:alnum:]_-]|$)' \
+  || hit_without '(^|[^[:alnum:]_.-])rtcwake([^[:alnum:]_.-]|$)' \
+       '(^|[[:space:]])(-m[[:space:]]*show|--mode[[:space:]=]show|--list-modes)([[:space:]]|$)' \
+  || hit "$ONTO"'/sys/power/state' \
+  || writes_to '/sys/power/state'
+then
+  deny "putting the server to sleep or hibernating it makes it \
+as unreachable as powering it off"
+fi
+
 # --- Filesystem creation --------------------------------------
 if hit '(^|[^[:alnum:]_.-])mkfs(\.[[:alnum:]]+)?([^[:alnum:]_.-]|$)'
 then
@@ -951,6 +1059,23 @@ fi
 if hit '(^|[^[:alnum:]_.-])wipefs([^[:alnum:]_.-]|$)' \
   && hit '(^|[[:space:]])(-a|--all|-o|--offset)'; then
   deny "wipefs in write mode erases filesystem signatures"
+fi
+
+# --- Formatting by a tool outside the mkfs family --------------
+# A LUKS header written, erased or re-encrypted, a cleared ZFS
+# label or a zeroed RAID superblock leaves the partition table
+# alone and the data behind it unreadable: mkfs by another name.
+# cryptsetup open/close/status/luksDump, zpool status/list and
+# mdadm --detail read; zpool create, pvcreate and mdadm --create
+# stay with the prompt (rules/partition-staging.md).
+if hit '(^|[^[:alnum:]_.-])cryptsetup([[:space:]]+([^;&|]*[[:space:]])?(luksFormat|luksErase|erase|reencrypt)([^[:alnum:]_-]|$)|-reencrypt([^[:alnum:]_.-]|$))' \
+  || hit '(^|[^[:alnum:]_.-])zpool[[:space:]]+([^;&|]*[[:space:]])?labelclear([^[:alnum:]_-]|$)' \
+  || { hit '(^|[^[:alnum:]_.-])mdadm([^[:alnum:]_.-]|$)' \
+       && hit '(^|[[:space:]])--zero-superblock([[:space:]]|$)'; }
+then
+  deny "this formats or erases the device by another name than \
+mkfs: the LUKS header, the ZFS label or the RAID superblock go, \
+and the data behind them with it"
 fi
 
 # --- Partition table writers ----------------------------------
@@ -979,11 +1104,12 @@ fi
 # flag rides along with the write one (sgdisk -b backup.gpt -Z
 # /dev/sda). Their write sets are closed and documented, so they
 # are enumerated in full instead. Short flags below are the
-# complete write set from sgdisk(8); the read-only ones (a D E f
-# F i L O p P V v) are absent on purpose, and so is -b, which
+# complete write set from sgdisk(8), -A/--attributes included
+# (the attribute bits sit in the table); the read-only ones (a D
+# E f F i L O p P V v) are absent on purpose, and so is -b, which
 # writes a backup FILE and not the disk.
 if hit '(^|[^[:alnum:]_.-])sgdisk([^[:alnum:]_.-]|$)' \
-  && hit '(^|[[:space:]])(-[BcCdegGhIjklmnNorRstTuUzZ]|--(byte-swap-name|change-name|recompute-chs|delete|move-second-header|mbrtogpt|randomize-guids|hybrid|align-end|move-main-table|move-backup-table|load-backup|gpttombr|new|largest-new|clear|transpose|replicate|sort|typecode|transform-bsd|partition-guid|disk-guid|zap|zap-all))'
+  && hit '(^|[[:space:]])(-[ABcCdegGhIjklmnNorRstTuUzZ]|--(attributes|byte-swap-name|change-name|recompute-chs|delete|move-second-header|mbrtogpt|randomize-guids|hybrid|align-end|move-main-table|move-backup-table|load-backup|gpttombr|new|largest-new|clear|transpose|replicate|sort|typecode|transform-bsd|partition-guid|disk-guid|zap|zap-all))'
 then
   deny "sgdisk write options modify the partition table"
 fi
@@ -1014,7 +1140,9 @@ then
   deny "diskutil erase and partition verbs destroy data or the \
 partition map"
 fi
-if hit 'gpart[[:space:]]+(create|add|delete|destroy|modify|resize|bootcode|recover|set|undo|commit)'
+# set and unset flip partition attributes (active, bootme), which
+# live in the table too.
+if hit 'gpart[[:space:]]+(create|add|delete|destroy|modify|resize|bootcode|recover|set|unset|undo|commit)'
 then
   deny "gpart write verbs modify the partition table"
 fi
@@ -1052,10 +1180,24 @@ if hit '(^|[^[:alnum:]_.-])shred([^[:alnum:]_.-]|$)' \
   deny "shred on a disk device overwrites the whole device"
 fi
 
+# --- Firmware written to a drive -------------------------------
+# hdparm --fwdownload (and its -mode variants) and nvme
+# fw-download/fw-commit/fw-activate put a new firmware image on
+# the drive; a bad one bricks it, data and all. nvme fw-log reads.
+# Firmware VARIABLES (efivar, efivars, nvram) sit with the boot
+# loaders below.
+if { hit '(^|[^[:alnum:]_.-])hdparm([^[:alnum:]_.-]|$)' \
+     && hit '(^|[[:space:]])--fwdownload'; } \
+  || hit '(^|[^[:alnum:]_.-])nvme[[:space:]]+([^;&|]*[[:space:]])?fw-(download|commit|activate)([^[:alnum:]_-]|$)'
+then
+  deny "writing firmware to a drive can brick it together with \
+its data; firmware updates are the operator's work"
+fi
+
 # A redirect, tee, cp or download onto a disk device does what
 # dd of= does. /dev/null, /dev/stderr and /dev/disk/by-id are
 # unaffected.
-if hit ">[[:space:]]*[\"']?$DEV" \
+if hit ">[>|]?[[:space:]]*[\"']?$DEV" \
   || { hit "$DEV" && writes_to "${DEV}[[:alnum:]]*"; }
 then
   deny "writing onto a raw disk device overwrites its content \
@@ -1082,7 +1224,7 @@ then
 allowed"
 fi
 # A truncating redirect needs no command at all: : > key.
-if hit ">[[:space:]]*[\"']?[^[:space:];|&]*$KEYPRIV"; then
+if hit "$ONTO$KEYPRIV"; then
   deny "redirecting onto an SSH key file truncates it"
 fi
 # ssh-keygen -f onto an existing private key overwrites it.
@@ -1094,9 +1236,9 @@ fingerprint of a .pub runs in a call of its own, with no private \
 key path in it"
 fi
 if hit "$SSHD"; then
-  if hit '>>?[[:space:]]*["'\'']?[^[:space:];|&]*'"$SSHD" \
+  if hit "$ONTO$SSHD" \
     || { hit '(^|[^[:alnum:]_-])(sed|perl)([^[:alnum:]_-]|$)' \
-         && hit '(^|[[:space:]])-i'; } \
+         && hit "$INPLACE"; } \
     || hit "(^|[^[:alnum:]_-])$EDITOR([^[:alnum:]_-]|\$)" \
     || hit "(^|[^[:alnum:]_-])($CLOBBER|cp)([^[:alnum:]_-]|\$)" \
     || writes_to "$SSHD"
@@ -1175,8 +1317,30 @@ if hit '(^|[^[:alnum:]_.-])efivar([^[:alnum:]_.-]|$)' \
   deny "efivar -w writes a firmware variable; boot work needs the \
 operator override JOLITZ_GUARD_DISABLE"
 fi
+# The boot default, or the next boot, without touching the
+# loader: grub-set-default and grub-reboot write grubenv,
+# grub-editenv set/unset/create does the same by hand (list
+# reads it), systemsetup -setstartupdisk picks the Mac's startup
+# volume. bootctl set-* and bless sit above.
+if hit '(^|[^[:alnum:]_.-])grub2?-(set-default|reboot)([^[:alnum:]_.-]|$)' \
+  || hit '(^|[^[:alnum:]_.-])grub2?-editenv[[:space:]]+([^;&|]*[[:space:]])?(set|unset|create)([[:space:]]|$)' \
+  || hit_i '(^|[^[:alnum:]_.-])systemsetup[[:space:]]+([^;&|]*[[:space:]])?-setstartupdisk([^[:alnum:]_-]|$)'
+then
+  deny "changing the default or next boot entry decides what the \
+host comes back as; boot work needs the \
+operator override JOLITZ_GUARD_DISABLE"
+fi
+# nvram (macOS): nvram name=value sets a firmware variable, -d
+# deletes one, -c clears them all, -f loads a file of them.
+# nvram -p and nvram name print.
+if hit '(^|[^[:alnum:]_.-])nvram[[:space:]]+([^;&|]*[[:space:]])?(-[[:alpha:]]*[dcf]([[:space:]]|$)|[^[:space:]=-][^[:space:]=]*=)'
+then
+  deny "nvram in a write form changes a firmware variable (nvram \
+-p reads them); boot work needs the \
+operator override JOLITZ_GUARD_DISABLE"
+fi
 if hit "$EFIVARS"; then
-  if hit ">>?[[:space:]]*[\"']?[^[:space:];|&]*$EFIVARS" \
+  if hit "$ONTO$EFIVARS" \
     || hit "(^|[^[:alnum:]_-])($CLOBBER|cp|dd|chattr)([^[:alnum:]_-]|\$)" \
     || hit '(^|[[:space:]])-delete([[:space:]]|$)' \
     || writes_to "$EFIVARS"
@@ -1218,9 +1382,9 @@ if hit '(^|[^[:alnum:]_.-])(vipw|vigr)([^[:alnum:]_.-]|$)'; then
 work needs the operator override JOLITZ_GUARD_DISABLE"
 fi
 if hit "$SUDOERS"; then
-  if hit '>>?[[:space:]]*["'\'']?[^[:space:];|&]*'"$SUDOERS" \
+  if hit "$ONTO$SUDOERS" \
     || { hit '(^|[^[:alnum:]_-])(sed|perl)([^[:alnum:]_-]|$)' \
-         && hit '(^|[[:space:]])-i'; } \
+         && hit "$INPLACE"; } \
     || hit "(^|[^[:alnum:]_-])$EDITOR([^[:alnum:]_-]|\$)" \
     || hit "(^|[^[:alnum:]_-])($CLOBBER|cp)([^[:alnum:]_-]|\$)" \
     || writes_to "$SUDOERS"
@@ -1231,9 +1395,9 @@ operator override JOLITZ_GUARD_DISABLE"
   fi
 fi
 if hit "$ACCOUNTS"; then
-  if hit '>>?[[:space:]]*["'\'']?[^[:space:];|&]*'"$ACCOUNTS" \
+  if hit "$ONTO$ACCOUNTS" \
     || { hit '(^|[^[:alnum:]_-])(sed|perl)([^[:alnum:]_-]|$)' \
-         && hit '(^|[[:space:]])-i'; } \
+         && hit "$INPLACE"; } \
     || hit "(^|[^[:alnum:]_-])$EDITOR([^[:alnum:]_-]|\$)" \
     || hit "(^|[^[:alnum:]_-])($CLOBBER|cp)([^[:alnum:]_-]|\$)" \
     || writes_to "$ACCOUNTS"
@@ -1243,6 +1407,47 @@ useradd and passwd make (getent, grep and awk read them); \
 account work needs the \
 operator override JOLITZ_GUARD_DISABLE"
   fi
+fi
+
+# --- A protected directory as the working directory -----------
+# Every path rule above knows its file by the path it is spelled
+# with. After cd /etc/ssh the same file is a bare sshd_config, the
+# host key a bare ssh_host_ed25519_key, and under sudoers.d or
+# sshd_config.d a drop-in has any name at all, so no rule saw
+# `cd /etc/sudoers.d && echo ... > deploy`. The directory decides
+# instead: a cd or pushd into one of them, anywhere in the
+# command, makes every write in that command a write there. A
+# write is a redirect onto a relative name (the absolute ones
+# stay allowed, so cd /etc/ssh && cat sshd_config > /tmp/copy
+# runs), sed or perl in place, an editor, the CLOBBER set with cp,
+# find -delete, or a tool that names its output (writes_to, any
+# path). Accepted false positive: rm or cp of an unrelated file
+# from inside the directory; run it from another cwd.
+#
+# find -delete with such a directory as its root deletes by a
+# name it never spells as a path, so it is denied on the
+# directory alone, like the lock above. /etc/ssh is in the set
+# only for these two forms; rm -rf /etc/ssh stays open on the
+# terms given at KEYDIR.
+PROTDIR='(/etc/ssh|/conf/sshd|/etc/sudoers\.d|sshd_config\.d|\.ssh)'
+if hit "(^|[^[:alnum:]_.-])(cd|pushd)[[:space:]]+[\"']?[^[:space:];|&]*$PROTDIR/?[\"']?([[:space:];&|]|\$)"; then
+  if hit '>[>|]?[[:space:]]*["'\'']?[^/[:space:];|&<>"'\''$]' \
+    || { hit '(^|[^[:alnum:]_-])(sed|perl)([^[:alnum:]_-]|$)' \
+         && hit "$INPLACE"; } \
+    || hit "(^|[^[:alnum:]_-])$EDITOR([^[:alnum:]_-]|\$)" \
+    || hit "(^|[^[:alnum:]_-])($CLOBBER|cp)([^[:alnum:]_-]|\$)" \
+    || hit '(^|[[:space:]])-delete([[:space:]]|$)' \
+    || writes_to '[^[:space:]"'\'']'
+  then
+    deny "after cd into a directory holding sshd_config, SSH keys \
+or sudoers drop-ins, every relative name is a protected file; \
+write elsewhere from another working directory"
+  fi
+fi
+if hit "$PROTDIR" && hit '(^|[[:space:]])-delete([[:space:]]|$)'; then
+  deny "find -delete under a directory holding sshd_config, SSH \
+keys or sudoers drop-ins deletes by a name it never spells as a \
+path; list the matches with find alone and judge each"
 fi
 
 # --- Effects reached through an interpreter -------------------
