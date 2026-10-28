@@ -389,13 +389,6 @@ LOCKFILE='[Hh][Ee][Ii][Nn][Zz][Ee][Ll]\.[Cc][Oo][Nn][Ff]'
 # whichever one the session started in.
 SELF='\.claude/(settings(\.local)?\.json|hooks/)'
 
-# The same files as a command reaches them: .claude on its own
-# (cd .claude && echo x > settings.json), .claude/hooks and
-# .claude/settings*, and settings.local.json, a name only Claude
-# Code uses. .claude/skills stays out: the macOS cleanup skill
-# runs its scanner from there and redirects the result.
-SELF_ANY='(^|[^[:alnum:]_.-])\.claude(/+(hooks|settings)|/*(["'\''[:space:];|&)]|$))|(^|[^[:alnum:]_.-])settings\.local\.json'
-
 # An assignment of the override, in shell (VAR=1), JSON
 # ("VAR": "1") or jq (.env.VAR="1") form. A bare mention, as in
 # this file's documentation, stays allowed. The backslash is for
@@ -728,42 +721,167 @@ fi
 
 # --- The guard's own files ------------------------------------
 # Rewriting the hook, or giving a settings file an env block,
-# disarms everything below. A command is judged when it names a
-# .claude path component or settings.local.json, or when the
-# session's cwd is inside a .claude directory: a relative target
-# there names no path at all. Then any write form counts, not
-# only one aimed at a spelled-out path: a redirect (except onto
-# /dev/null or a descriptor), sed or perl -i, an editor, a
-# delete, move, copy or re-permission, tee, find -delete, or an
-# interpreter. Accepted false positive: a read chained to an
-# unrelated write in the same command. Read the files in a call
-# of their own.
+# disarms everything below.
+#
+# A list of the ways to write cannot be closed: every review of
+# the earlier deny list found one more (ditto, curl -sSo, git
+# checkout-index, a glob, a cd out of skills/). So this section
+# is an ALLOW list. A command is in scope when it mentions .claude
+# in any case or spelling, names settings.local.json, or runs
+# with its cwd anywhere inside a .claude tree. In scope it may
+# only read: every invocation must be one of the read-only tools
+# below, with no redirect (except onto /dev/null or a
+# descriptor) and no command or process substitution. The one
+# exception is the macOS cleanup scanner, in exactly the two
+# forms its skill prescribes. Everything else that touches
+# .claude is denied; the operator runs it by hand.
 SELF_CWD=""
 if command -v jq >/dev/null 2>&1; then
   SELF_CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null) \
     || SELF_CWD=""
 fi
+LC_CWD=$(printf '%s' "$SELF_CWD" | LC_ALL=C tr '[:upper:]' '[:lower:]')
+LC_CMD=$(printf '%s' "$CMD" | LC_ALL=C tr '[:upper:]' '[:lower:]')
 IN_CLAUDE=0
-case "$SELF_CWD" in
-  */.claude|*/.claude/|*/.claude/hooks|*/.claude/hooks/*) IN_CLAUDE=1 ;;
+CWD_IN_CLAUDE=0
+case "$LC_CWD" in
+  */.claude|*/.claude/*) IN_CLAUDE=1; CWD_IN_CLAUDE=1 ;;
 esac
-if [ "$IN_CLAUDE" -eq 1 ] || hit "$SELF_ANY"; then
-  REDIR=$(printf '%s\n' "$CMD" \
-    | sed -E -e 's#[0-9]*>>?[[:space:]]*/dev/null##g' -e 's#[0-9]*>&[0-9-]##g')
-  if printf '%s\n' "$REDIR" | grep -q '>' \
-    || { hit '(^|[^[:alnum:]_-])(sed|perl)([^[:alnum:]_-]|$)' \
-         && hit '(^|[[:space:]])-i'; } \
-    || hit "(^|[^[:alnum:]_-])$EDITOR([^[:alnum:]_-]|\$)" \
-    || hit "(^|[^[:alnum:]_-])($CLOBBER|cp|tee|sponge|chflags)([^[:alnum:]_-]|\$)" \
-    || hit '(^|[[:space:]])-delete([[:space:]]|$)'
+case "$LC_CMD" in
+  *.claude*|*settings.local.json*) IN_CLAUDE=1 ;;
+esac
+# HFS+ skips zero-width characters and APFS folds a long s onto
+# s, so .clau<U+200B>de and ſettings.local.json reach the same
+# files. The shell drops quotes and backslashes (.cla""ude). With
+# all of those removed, either name in the rest puts the command
+# in scope. An umlaut elsewhere does not.
+UQ_CMD=$(printf '%s' "$LC_CMD" | LC_ALL=C tr -d '\200-\377"'\''\\')
+case $UQ_CMD in
+  *.claude*|*ettings.local.json*) IN_CLAUDE=1 ;;
+esac
+# A glob, brace or expansion in a path component can resolve to
+# .claude when the literal text before it still could: .c*,
+# .?laude, .{c,}laude, .$x, {.cl,}aude; .bash_profile.$(date)
+# cannot. Comments are skipped, as the shell skips them.
+# Only unquoted ones expand: inside quotes and after a backslash
+# they become _, so sed "s/ .*//" stays out of scope while
+# ".cl"* does not. A $ expands inside double quotes too, and an
+# unclosed quote counts as in scope. Accepted false positive:
+# such a command may only read. Not closable: a name built at run
+# time, in a variable (d=.cla; ${d}ude) or a command substitution
+# ($(printf .cla)ude). Every $( cannot count, or cp f
+# f.bak.$(date +%F) could not run. The guard is a backstop.
+GLOBBED=$(printf '%s\n' "$LC_CMD" | LC_ALL=C awk '
+  BEGIN { q = "" }
+  {
+    out = ""
+    for (i = 1; i <= length($0); i++) {
+      ch = substr($0, i, 1)
+      if (q == "" && ch == "#" \
+        && (i == 1 || index(" \t;&|(", substr($0, i - 1, 1)))) break
+      # An escaped character is literal: still part of the name,
+      # but no longer a glob.
+      if ((q == "" && ch == "\\") \
+        || (q == "\"" && ch == "\\" && index("\"\\$`", substr($0, i + 1, 1)))) {
+        i++; c = substr($0, i, 1)
+        out = out (index("*?[]{$", c) ? "_" : c); continue
+      }
+      if (q == "" && (ch == "\"" || ch == "\047")) { q = ch; continue }
+      if (q != "" && ch == q) { q = ""; continue }
+      if (q == "\047" && index("*?[]{$", ch)) ch = "_"
+      if (q == "\"" && index("*?[]{", ch)) ch = "_"
+      out = out ch
+    }
+    print out
+  }
+  END { if (q != "") print " .*" }')
+if printf '%s\n' "$GLOBBED" \
+  | LC_ALL=C grep -Eq \
+    '(^|[[:space:]/=<>:])(\.(c(l(a(u(de?)?)?)?)?)?[][*?{$]|\{[^[:space:]/]*\.)'; then
+  IN_CLAUDE=1
+fi
+# ANSI-C quoting with a hex, octal or Unicode escape spells any
+# name ($'\x2eclaude'). $'\t' and friends stay out of scope.
+if printf '%s\n' "$CMD" \
+  | LC_ALL=C grep -Eq "\\\$'[^']*\\\\([xuU]|[0-7])"; then
+  IN_CLAUDE=1
+fi
+if [ "$IN_CLAUDE" -eq 1 ]; then
+  # Backslash continuations folded, blanks squeezed. Any newline
+  # left separates a second command, so the scanner forms below
+  # only match a single line. With the cwd inside .claude, a bare
+  # redirect target is a guard file, so the redirect form is out.
+  NL=$(printf '\nx'); NL=${NL%x}
+  FLAT=$(printf '%s' "$CMD" \
+    | awk '{ if (sub(/\\$/, "")) printf "%s ", $0; else print }' \
+    | tr '\t' ' ' | tr -s ' ' | sed -e 's/^ //' -e 's/ $//')
+  SCAN='\.claude/skills/heinzel-macos-cleanup/scripts/scan\.py'
+  SARG='( ([A-Za-z0-9_.@:+-]+|"[A-Za-z0-9 _.@:+-]+"))*'
+  # Only the options CLAUDE.md prescribes, so no ProxyCommand,
+  # LocalCommand, -F or -S runs or reads anything else.
+  SSHOPT='( -o (BatchMode|ConnectTimeout|ControlMaster|ControlPath|ControlPersist|ServerAliveInterval|ServerAliveCountMax|Port)=[A-Za-z0-9_.%~/:@+-]+)* [A-Za-z0-9_][A-Za-z0-9_.@:-]*'
+  SOUT='( > [A-Za-z0-9_.-]+)?'
+  [ "$CWD_IN_CLAUDE" -eq 1 ] && SOUT=''
+  case "$FLAT" in
+    *"$NL"*|*"$(printf '\r')"*) FLAT='' ;;
+  esac
+  if [ -n "$FLAT" ] && { printf '%s\n' "$FLAT" | LC_ALL=C grep -Eq \
+       "^(/usr/bin/)?python3 $SCAN$SARG$SOUT\$" \
+    || printf '%s\n' "$FLAT" | LC_ALL=C grep -Eq \
+       "^ssh$SSHOPT /usr/bin/python3 -$SARG < $SCAN\$"; }
   then
-    deny "this command writes where the guard lives (.claude/hooks, \
-.claude/settings*.json); the operator edits those by hand - \
-read them with cat or grep in a call of their own"
-  fi
-  if hit "$INTERP"; then
-    deny "an interpreter next to the guard's own files can rewrite \
-them - read them with cat or grep"
+    :
+  else
+    case "$CMD" in
+      *'$('*|*'`'*|*'<('*|*'>('*)
+        deny "a command or process substitution next to the \
+guard's own files hides what it writes - read .claude with cat, \
+grep or ls in a call of their own" ;;
+    esac
+    REDIR=$(printf '%s\n' "$CMD" | sed -E \
+      -e 's#[0-9]*>>?[[:space:]]*/dev/null##g' -e 's#[0-9]*>&[0-9-]##g')
+    if printf '%s\n' "$REDIR" | grep -q '>'; then
+      deny "a redirect in a command that touches .claude can \
+overwrite the guard's own files - read them with cat, grep or \
+ls in a call of their own"
+    fi
+    READONLY='^(cd|pushd|popd|ls|cat|head|tail|wc|stat|file|grep|egrep|fgrep|diff|cmp|readlink|realpath|sha256sum|shasum|md5|md5sum|echo|printf|true|test|\[|jq|less|more)( |$)'
+    READGIT='^git( -C [^ ]+)? (log|show|diff|status|blame|ls-files|grep|rev-parse|cat-file)( |$)'
+    BAD=$(printf '%s\n' "$REDIR" | tr ';&|' '\n\n\n' \
+      | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+      | while IFS= read -r seg; do
+          [ -n "$seg" ] || continue
+          # The flags as the shell sees them, quotes removed
+          # (-"delete", --"output"). A brace or $ in a find or git
+          # segment can build a flag (-{delete,true}), so it does
+          # not pass.
+          uq=$(printf "%s" "$seg" | tr -d "\"'\\\\")
+          # git log/diff/show --output writes a file, grep -O and
+          # --ext-diff/--textconv run a program. git takes any
+          # unique prefix of a long option, so the prefixes count
+          # (--exit-code and --text with them). Not closable: a
+          # program set in git config (diff.external, a textconv
+          # driver) runs without a flag; the guard is a backstop.
+          if printf '%s\n' "$seg" | grep -Eq "$READONLY" \
+            || { printf '%s\n' "$seg" | grep -Eq "$READGIT" \
+              && ! printf '%s\n' "$uq" | grep -Eq \
+                '[{$]|(^| )-[A-Za-z]*O|(^| )--(op|ou|ex|te)[-a-z]*(=| |$)'; }
+          then
+            continue
+          fi
+          if printf '%s\n' "$seg" | grep -Eq '^find( |$)' \
+            && ! printf '%s\n' "$uq" \
+              | grep -Eq '[{$]|(^| )-(delete|exec|execdir|ok|okdir|fprint0?|fprintf|fls)( |$)'
+          then
+            continue
+          fi
+          printf '%s\n' "$seg"
+        done)
+    if [ -n "$BAD" ]; then
+      deny "a command that touches .claude may only read it (cat, \
+grep, ls, head, find without -exec or -delete, git log/show/diff) \
+- the guard's own files are edited by the operator by hand"
+    fi
   fi
 fi
 

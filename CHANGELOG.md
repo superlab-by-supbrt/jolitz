@@ -1,5 +1,32 @@
 # Changelog
 
+## 3.3.3-jolitz.2 — 2026-10-28
+
+- **The guard's own files hold against more
+  spellings.** Case (`.CLAUDE/Settings.json`), `..`
+  and `/./`, a non-ASCII byte next to `.claude`, a
+  session cwd anywhere in a `.claude` tree, and the
+  writers rsync, scp, dd `of=`, `curl -o`, tar,
+  unzip and git checkout/restore now count. The
+  write onto a spelled-out path, lost in
+  3.3.3-jolitz.1, is back. `.claude/skills/` stays
+  usable, for the macOS cleanup scanner.
+- **Next to `.claude` only reads pass.** The guard
+  no longer lists the ways to write there; it
+  allows cat, grep, ls, head, find without `-exec`
+  and `-delete`, and git log, show and diff without
+  `--output`, `-O`, `--ext-diff` or `--textconv`.
+  The scanner keeps its two forms, on one line, and
+  without a redirect when the session runs inside
+  `.claude`; over ssh only with the `-o` options
+  CLAUDE.md prescribes. Quotes, backslashes, globs
+  and braces that the shell turns into `.claude`
+  put a command in scope too.
+- **The README speaks of jolitz.** Technical names
+  (skills, `bin/heinzel-*`, `HEINZEL_*`, the journal
+  tag, the server lock file) keep the upstream
+  spelling.
+
 ## 3.3.3-jolitz.1 — 2026-10-28
 
 - **jolitz forks heinzel 3.3.3.** The work heinzel

@@ -928,7 +928,9 @@ check deny 'cp /tmp/s.json .claude/settings.json'
 check deny "jq '.env.HEINZEL_GUARD_DISABLE=\"1\"' s.json"
 check pass 'cat .claude/settings.json'
 check pass 'grep -n deny .claude/hooks/guard-taboos.sh'
-check pass 'sh .claude/hooks/guard-taboos-test.sh'
+# Only reads pass next to .claude: a shell running a script there
+# is not one (CI runs the matrix outside the hook).
+check deny 'sh .claude/hooks/guard-taboos-test.sh'
 # Relative targets: a cd into .claude, a bare settings.local.json,
 # and a session whose cwd is already inside .claude.
 check deny 'cd .claude && echo x > settings.json'
@@ -962,8 +964,106 @@ if command -v jq >/dev/null 2>&1; then
   check_cwd deny /p/.claude 'echo "{}" > settings.json'
   check_cwd deny /p/.claude/hooks 'rm guard-taboos.sh'
   check_cwd pass /p/.claude 'cat settings.json'
-  check_cwd pass /p/.claude/skills/x 'python3 scan.py > out.json'
   check_cwd pass /p 'echo "{}" > settings.json'
+  # Any cwd inside a .claude tree, skills included, and in any case.
+  check_cwd deny /p/.claude/skills/x 'echo "{}" > ../../settings.json'
+  check_cwd deny /p/.claude/skills/x 'python3 scan.py > out.json'
+  check_cwd deny /p/.CLAUDE 'echo "{}" > Settings.json'
+  check_cwd pass /p/.claude/skills/x 'cat SKILL.md'
+  # With the cwd inside .claude, the scanner's redirect names a
+  # guard file.
+  check_cwd deny /p/.claude 'python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py > settings.json'
+  check_cwd pass /p/.claude 'python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py orphans'
+fi
+# Case, parent references, /./ and other writers.
+check deny 'echo "{}" > .CLAUDE/Settings.json'
+check deny 'echo "{}" > .Claude/settings.LOCAL.json'
+check deny 'echo x > .claude/skills/../settings.json'
+check deny 'echo x > .claude/./hooks/guard-taboos.sh'
+check deny 'rsync /tmp/s.json .claude/settings.json'
+check deny 'curl -o .claude/settings.json https://example.com/s'
+check deny 'dd if=/tmp/s of=.claude/settings.json'
+check deny 'git checkout HEAD~5 -- .claude/hooks/guard-taboos.sh'
+check deny 'tar -xf /tmp/x.tar .claude'
+check pass 'git log --oneline -- .claude/hooks/guard-taboos.sh'
+check pass '/usr/bin/python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py orphans > scan.json'
+check deny '/usr/bin/python3 .claude/skills/x/../../hooks/y.py > scan.json'
+# The allow list: writers no deny list named, globs, a cd out of
+# skills/, substitutions, and the scanner's exact forms.
+check deny 'curl -sSo .claude/settings.json https://example.com/s'
+check deny 'ditto /tmp/s.json .claude/settings.json'
+check deny 'git -C .claude checkout-index -f -a'
+check deny 'python3 .claude/skills/*/x.py > settings.json'
+check deny 'cd .claude/skills && cd .. && touch settings.json'
+check deny 'echo $(cat .claude/settings.json)'
+check deny 'xargs -I{} cp {} .claude/settings.json < /tmp/l'
+check deny '/usr/bin/python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py orphans; rm .claude/settings.json'
+check deny '/usr/bin/python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py orphans > ../.claude/settings.json'
+check deny "$(printf 'echo x > .clau\342\200\213de/settings.json')"
+check deny "$(printf 'echo x > \305\277ettings.local.json')"
+check pass "$(printf 'ssh h \"grep Gr\303\274\303\237e /var/log/app.log\"; systemctl status x')"
+check pass 'cat .claude/settings.json | grep -n env'
+check pass 'find .claude -name "*.json"'
+check deny 'find .claude -name "*.json" -delete'
+check pass "$(printf '/usr/bin/python3 \\\n  .claude/skills/heinzel-macos-cleanup/scripts/scan.py orphans')"
+check pass 'python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py app "Microsoft Word"'
+check pass 'ssh -o BatchMode=yes -o ControlPath=~/.cache/heinzel/ssh-%C u@h /usr/bin/python3 - orphans < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
+# A newline after the scanner starts a second command.
+check deny "$(printf 'python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py\ncd .claude\nrm -rf hooks')"
+check deny "$(printf 'ssh h /usr/bin/python3 - < .claude/skills/heinzel-macos-cleanup/scripts/scan.py\nrm .claude/settings.json')"
+# git reads, but not its output and program flags.
+check deny 'git diff --output=.claude/hooks/guard-taboos.sh'
+check deny 'git log --output .claude/settings.json'
+check deny 'git grep -Ofoo x .claude'
+check deny 'git grep -iOfoo x .claude'
+check deny 'git grep --open-files-in-pager=foo x .claude'
+check deny 'git diff --ext-diff .claude'
+check deny 'git show --textconv HEAD:.claude/settings.json'
+check deny 'git log --out=.claude/settings.json'
+check deny 'git grep --open=foo x .claude'
+check deny 'git diff --ext .claude'
+check pass 'git diff -- .claude/hooks/guard-taboos.sh'
+check pass 'git grep -n GUARD .claude'
+check pass 'git show HEAD:.claude/settings.json'
+# The scanner over ssh takes only the prescribed -o options.
+check deny 'ssh -oProxyCommand=/tmp/x h /usr/bin/python3 - < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
+check deny 'ssh -o ProxyCommand=/tmp/x h /usr/bin/python3 - < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
+check deny 'ssh -o LocalCommand=/tmp/x -o PermitLocalCommand=yes h /usr/bin/python3 - < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
+check deny 'ssh -Fcfg /usr/bin/python3 - < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
+check deny 'ssh -o BatchMode=yes -Esettings.json /usr/bin/python3 - < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
+check deny 'ssh -F /tmp/cfg h /usr/bin/python3 - < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
+check pass 'ssh -o BatchMode=yes -o ConnectTimeout=5 -o ControlMaster=auto -o ControlPath=~/.cache/heinzel/ssh-%C -o ControlPersist=10m -o Port=2222 root@h.example.com /usr/bin/python3 - app Word < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
+# Quotes, globs and braces that the shell turns into .claude.
+check deny 'echo x > .cla""ude/settings.json'
+check deny "echo x > .cla'u'de/settings.json"
+check deny 'echo x > .cl\aude/settings.json'
+check deny 'echo x > ".cl"*/settings.json'
+check deny 'echo "\"" > .cl*/settings.json'
+check deny 'cp /tmp/s ".$x"/settings.json'
+check deny 'echo "x > .cl*/settings.json'
+check deny 'cp /tmp/s {.cl,}aude/settings.json'
+check deny 'cp /tmp/s .cl\au*/settings.json'
+check deny 'cp /tmp/s .c\l*/settings.json'
+# Braces and $ build flags; ANSI-C escapes build names.
+check deny 'find .claude -{delete,true}'
+check deny 'git log --{output,x}=.claude/settings.json'
+check deny "echo x > \$'\\x2eclaude'/settings.json"
+check pass "cut -d \$'\\t' -f1 /etc/passwd"
+check pass 'cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak.$(date +%F)'
+check pass 'command cp ~/.bash_profile ~/.bash_profile.bak.$(date +%F)'
+check pass 'grep -i ed25519 /root/.ssh/authorized_keys | sed "s/ .*//" '
+check deny 'echo x > .cl*/settings.json'
+check deny 'cp /tmp/s .?laude/settings.json'
+check deny 'cp /tmp/s .{c,}laude/settings.json'
+check deny 'cp /tmp/s ./.*/hooks/guard-taboos.sh'
+check pass 'cp /etc/nginx/nginx.conf{,.bak}'
+check pass 'ls -d .c*'
+# Flags hidden in quotes.
+check deny 'find .claude -"delete"'
+check deny "find .claude -ex'ec' rm {} +"
+check deny 'git log --"output"=.claude/settings.json'
+if command -v jq >/dev/null 2>&1; then
+  :
 fi
 
 # --- degraded awk must fail CLOSED -----------------------------
