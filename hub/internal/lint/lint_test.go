@@ -48,6 +48,17 @@ func TestLineNumber(t *testing.T) {
 	}
 }
 
+// A line longer than any scanner buffer is still checked to its
+// end: the check must not fail open on size.
+func TestLongLine(t *testing.T) {
+	ghp := "gh" + "p_" + "abcdefghijklmnopqrstuvwxyz0123456789"
+	body := "# web1\n" + strings.Repeat("a", 17<<20) + " " + ghp + "\n"
+	h := Check([]byte(body))
+	if h == nil || h.Line != 2 {
+		t.Fatalf("hit = %+v, want line 2", h)
+	}
+}
+
 func TestPasses(t *testing.T) {
 	cases := map[string]string{
 		"location":        "- Database password: in /etc/app/db.env (0600 root)\n",

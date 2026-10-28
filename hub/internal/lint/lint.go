@@ -9,7 +9,6 @@
 package lint
 
 import (
-	"bufio"
 	"bytes"
 	"regexp"
 )
@@ -48,16 +47,15 @@ var tokens = regexp.MustCompile(
 var assign = regexp.MustCompile(`(?i)(^|[^A-Za-z0-9])(password|passwd|passphrase|secret|token|api[_-]?key)[[:space:]]*=[[:space:]]*[^[:space:]$<{"']`)
 
 // Check returns the first line of body that looks like a secret,
-// or nil.
+// or nil. Lines are split with bytes.Split, not a scanner: a
+// scanner gives up on a line over its buffer and would let the
+// rest of the file through unchecked. Memory files are small; a
+// body that is not is still matched to its last byte.
 func Check(body []byte) *Hit {
-	sc := bufio.NewScanner(bytes.NewReader(body))
-	sc.Buffer(make([]byte, 0, 64*1024), 16<<20)
-	n := 0
-	for sc.Scan() {
-		n++
-		line := sc.Bytes()
+	for i, line := range bytes.Split(body, []byte("\n")) {
+		line = bytes.TrimSuffix(line, []byte("\r"))
 		if tokens.Match(line) || assign.Match(line) {
-			return &Hit{Line: n, Reason: Reason}
+			return &Hit{Line: i + 1, Reason: Reason}
 		}
 	}
 	return nil
