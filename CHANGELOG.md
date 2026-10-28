@@ -18,7 +18,10 @@
   `--output`, `-O`, `--ext-diff` or `--textconv`.
   The scanner keeps its two forms, on one line, and
   without a redirect when the session runs inside
-  `.claude`.
+  `.claude`; over ssh only with the `-o` options
+  CLAUDE.md prescribes. Quotes, backslashes, globs
+  and braces that the shell turns into `.claude`
+  put a command in scope too.
 - **The README speaks of jolitz.** Technical names
   (skills, `bin/heinzel-*`, `HEINZEL_*`, the journal
   tag, the server lock file) keep the upstream
