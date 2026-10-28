@@ -1,5 +1,84 @@
 # Changelog
 
+## 3.3.3-jolitz.6 — 2026-10-28
+
+- **The guard sees more spellings of a write.** All
+  three POSIX output redirections, every spelling of an
+  in-place edit (`-i` alone, at the end of a flag
+  cluster, with a suffix, `--in-place`), an output flag
+  at the end of a `curl`/`wget` cluster, `ex` next to
+  the other editors, and a write by relative name after
+  a `cd` into `/etc/ssh`, `sshd_config.d`, `.ssh`,
+  `/etc/sudoers.d` or `/conf/sshd`, or a `find -delete`
+  there. Each form has its test, for the server lock
+  also with the override set.
+- **New taboos, named by effect.** The machine goes to
+  sleep (systemd suspend/hibernate, `acpiconf -s`,
+  `pmset sleepnow`, `rtcwake`, `/sys/power/state`); the
+  boot default changes (`grub-set-default`,
+  `grub-reboot`, `grub-editenv set`, `nvram`,
+  `systemsetup -setstartupdisk`); a device is formatted
+  by a tool outside the mkfs family (`cryptsetup
+  luksFormat`, `zpool labelclear`, `mdadm
+  --zero-superblock`); partition attributes change
+  (`sgdisk -A`, `gpart unset`); firmware is written to a
+  drive (`hdparm --fwdownload`, `nvme fw-*`); sshd is
+  stopped, disabled or masked; a second agent session
+  is started (`claude -p`, `--settings`,
+  `--permission-mode`, `--dangerously-skip-permissions`,
+  `opencode run`), because it would run without this
+  hook. Read-only forms pass. The crontab templates in
+  `rules/scheduled-housekeeping.md` are marked
+  `operator`: the operator installs them, jolitz never
+  runs them. Every disk tool now has a test inside
+  `ssh host "…"`.
+- **A hook that fails or times out now denies.** Both
+  guard registrations in `.claude/settings.json` carry
+  `"onFailure": "block"` and a 15-second timeout. Claude
+  Code lets a timed-out PreToolUse hook through by
+  default; this needs Claude Code 2.1.295 or newer. The
+  guard itself runs in well under a second. The matrix
+  checks the registration.
+- **Every pull names its commits.** The session-start
+  hook and `bin/jolitz-update` print the new commits
+  whenever HEAD moved, with or without a `VERSION`
+  change; before, a pull that left `VERSION` alone was
+  silent although it brought new rules, hooks and the
+  migration script that ran next. The cron templates set
+  `JOLITZ_NO_UPDATE=1` and lock under `~/.cache/jolitz`
+  instead of `/tmp`; the README says when to pin a
+  release.
+- **Memory lint warns about a bare word after
+  `Password:`.** A location (`in /root/.my.cnf`) and the
+  usual states (`none`, `rotated …`) pass; a word that
+  looks like the value itself is a WARN. `refusals.log`
+  and the other `.log` files in `memory/` are scanned
+  like the rest.
+- **The overview skips a host directory with an odd
+  name** (characters outside `A-Za-z0-9._-`) with a
+  warning instead of writing it into awk variables and
+  file names.
+- **Mail recipients and policies from shared memory ask
+  first.** An `Alert email:` outside the operator's own
+  domain is confirmed once per session, an `always`
+  policy nobody at this keyboard chose is treated as
+  missing; in team mode those lines arrive through git.
+- **Docs.** README: `jq` as a requirement, what leaves
+  the machine and what stays for how long, the guard's
+  limits, a warranty sentence up front, "limits a
+  lockout" instead of "cannot lock you out for long",
+  the fork's origin in neutral terms and "no plan for a
+  paid edition" instead of a promise. `CLAUDE.md`: a user
+  request does not lift a taboo, sleep, boot default,
+  firmware and other formatters named as taboos, the
+  guard denies stopping sshd. `rules/deployment.md` and
+  `rules/os-replacement.md` name the override where
+  their steps need it; `rules/rollback-timer.md` no
+  longer points to a section that left with the fork.
+  OpenSSH 10.4 began mixed-case `sshd -T` output, 10.5
+  completed it. CI runs with read-only token rights and
+  pins `actions/checkout` to a commit.
+
 ## 3.3.3-jolitz.5 — 2026-10-28
 
 - **The README opens with everyday work.** A table of
