@@ -152,6 +152,16 @@
 
 INPUT=$(cat)
 
+# The raw input for the fallbacks below, without the one field
+# Claude Code always fills with a path under ~/.claude
+# (transcript_path). Left in, it puts every command next to the
+# guard's own files, and without jq nothing would pass, not even
+# ls. Inside the tool input a quote is escaped (\"), so this
+# pattern only meets the top-level field, never text the model
+# wrote.
+RAW=$(printf '%s' "$INPUT" | sed -E \
+  's/"transcript_path"[[:space:]]*:[[:space:]]*"[^"]*"//g')
+
 # Operator-level override: inherited environment only.
 GUARD_OFF=0
 [ "${JOLITZ_GUARD_DISABLE:-}" = "1" ] && GUARD_OFF=1
@@ -164,7 +174,7 @@ if command -v jq >/dev/null 2>&1; then
   CMD=$(printf '%s' "$INPUT" \
     | jq -r '.tool_input.command // empty' 2>/dev/null) || CMD=""
 fi
-[ -n "$CMD" ] || CMD="$INPUT"
+[ -n "$CMD" ] || CMD="$RAW"
 GUARD_MODE=bash
 LOG_SUBJECT=$CMD
 
@@ -292,6 +302,10 @@ fi
 segments() {
   printf '%s\n' "$CMD"
   printf '%s' "$CMD" | tr ';&|"'"'"'\n' '\n'
+  # Git Bash on Windows takes a quoted C:\Users\x\.ssh\id_rsa as a
+  # path. With the backslashes as slashes the patterns below see
+  # it; on Unix this can only add a match, never remove one.
+  printf '%s\n' "$CMD" | tr '\\' '/'
 }
 
 hit() {
@@ -534,14 +548,20 @@ if [ "${1:-}" = "file" ]; then
       ((.cwd // $pwd) | tostring) as $c
       | .tool_input | (.file_path, .notebook_path)
       | select(. != null) | tostring
-      | if startswith("/") then . else $c + "/" + . end' \
+      | if startswith("/") then . else ., $c + "/" + . end' \
       2>/dev/null) || TARGET=""
+    # Windows hands over C:\Users\x\.claude\settings.json. As
+    # C:/Users/x/.claude/settings.json the patterns below see it.
+    # A path without a leading slash is checked both as given (a
+    # Windows drive path) and below the cwd (on Unix c:/../x is
+    # relative); a match in either line denies.
+    TARGET=$(printf '%s' "$TARGET" | tr '\\' '/')
   fi
   # The log names the path, never the text being written.
   GUARD_MODE=file
   LOG_SUBJECT=${TARGET:-"(target unreadable)"}
   if [ -z "$TARGET" ]; then
-    TARGET="$INPUT"
+    TARGET="$RAW"
     if printf '%s\n' "$TARGET" | LC_ALL=C grep -Eq \
       '\\(/|u[0-9a-fA-F]{4})|"(file|notebook)_path"[[:space:]]*:[[:space:]]*"[^/]'
     then
@@ -768,7 +788,8 @@ if command -v jq >/dev/null 2>&1; then
   SELF_CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null) \
     || SELF_CWD=""
 fi
-LC_CWD=$(printf '%s' "$SELF_CWD" | LC_ALL=C tr '[:upper:]' '[:lower:]')
+LC_CWD=$(printf '%s' "$SELF_CWD" \
+  | LC_ALL=C tr '[:upper:]\\' '[:lower:]/')
 LC_CMD=$(printf '%s' "$CMD" | LC_ALL=C tr '[:upper:]' '[:lower:]')
 IN_CLAUDE=0
 CWD_IN_CLAUDE=0

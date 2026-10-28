@@ -1409,7 +1409,77 @@ if command -v jq >/dev/null 2>&1; then
     'Last connected: 2026-02-25')"
   degraded_file pass \
     "$(file_json Write file_path /home/alice/dev/sdk/n.md x)"
+
+  # Real hook input always carries transcript_path under
+  # ~/.claude. Without jq that must not put every command next
+  # to the guard's own files.
+  degraded_bash() {
+    EXPECT=$1
+    OUT=$(jq -nc --arg x "$2" '{session_id:"s",
+        transcript_path:"/home/alice/.claude/projects/p/s.jsonl",
+        cwd:"/home/alice/jolitz",tool_name:"Bash",
+        tool_input:{command:$x}}' \
+      | env -u JOLITZ_GUARD_DISABLE PATH="$SHIM3:$PATH" sh "$HOOK")
+    if printf '%s' "$OUT" \
+      | grep -q '"permissionDecision":"deny"'; then
+      GOT=deny
+    else
+      GOT=pass
+    fi
+    if [ "$GOT" = "$EXPECT" ]; then
+      PASS=$((PASS + 1))
+    else
+      FAIL=$((FAIL + 1))
+      echo "FAIL [$EXPECT, got $GOT] without jq: $2"
+    fi
+  }
+  degraded_bash pass 'ls -la'
+  degraded_bash pass 'ssh -o BatchMode=yes root@web1.example.com uptime'
+  degraded_bash deny 'mkfs.ext4 /dev/sdb1'
+  degraded_bash deny 'echo x > .claude/settings.json'
+  # A model that spells the field inside its command keeps it:
+  # there the quotes are escaped.
+  degraded_bash deny 'echo "transcript_path":"x" > .claude/settings.json'
   rm -rf "$SHIM3"
+
+  # Windows: Claude Code hands over C:\ paths with backslashes.
+  win_file() {
+    EXPECT=$1
+    OUT=$(jq -nc --arg p "$2" --arg c "$3" '{
+        transcript_path:"C:\\Users\\max\\.claude\\projects\\p\\s.jsonl",
+        tool_name:"Edit",cwd:$c,
+        tool_input:{file_path:$p,old_string:"a",new_string:"b"}}' \
+      | env -u JOLITZ_GUARD_DISABLE sh "$HOOK" file)
+    if printf '%s' "$OUT" \
+      | grep -q '"permissionDecision":"deny"'; then
+      GOT=deny
+    else
+      GOT=pass
+    fi
+    if [ "$GOT" = "$EXPECT" ]; then
+      PASS=$((PASS + 1))
+    else
+      FAIL=$((FAIL + 1))
+      echo "FAIL [$EXPECT, got $GOT] windows: $2 (cwd $3)"
+    fi
+  }
+  W='C:\Users\max'
+  win_file deny "$W\\jolitz\\.claude\\settings.json" "$W\\jolitz"
+  win_file deny "$W\\jolitz\\.CLAUDE\\hooks\\guard-taboos.sh" "$W\\jolitz"
+  win_file deny "$W\\.ssh\\id_ed25519" "$W\\jolitz"
+  win_file deny 'settings.json' "$W\\jolitz\\.claude"
+  win_file deny 'C:/Users/max/jolitz/.claude/settings.local.json' \
+    'C:/Users/max/jolitz'
+  win_file pass "$W\\jolitz\\memory\\servers\\web1\\memory.md" \
+    "$W\\jolitz"
+  # On Unix a drive-like prefix is a relative path below the cwd.
+  win_file deny 'c:/../../settings.json' /p/.claude/skills
+  win_file deny '\\x/../../settings.json' /p/.claude/skills
+  win_file pass 'memory\notes.md' "$W\\jolitz"
+  check_cwd deny "$W\\jolitz\\.claude" 'echo x > settings.json'
+  check_cwd pass "$W\\jolitz" 'ls -la'
+  check "deny" "chmod 000 'C:\\Users\\max\\.ssh\\id_ed25519'"
+  check "pass" "cat 'C:\\Users\\max\\.ssh\\id_ed25519.pub'"
 else
   echo "SKIP: file-edit tool checks need jq to build fixtures"
 fi
