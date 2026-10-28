@@ -183,10 +183,8 @@ Rules for macOS (Apple Silicon and Intel).
   macOS alternatives listed in the Notes section.
 - **`/etc/os-release` does not exist** — use
   `sw_vers` for version detection.
-- **Disk Utility vs. command-line** — `diskutil`
-  can modify the partition map, and `bless` what
-  the Mac boots. Both are Heinzel Pro's work
-  (`CLAUDE.md` → What Heinzel does not do); the
-  guard denies them. `diskutil list`,
-  `diskutil info` and `bless --info` are always
-  allowed.
+- **Disk Utility vs. command-line** — `diskutil` can
+  modify the partition table. Same safety rules
+  apply — never run partition-modifying subcommands
+  without explicit user request. Read-only commands
+  like `diskutil list` are always allowed.

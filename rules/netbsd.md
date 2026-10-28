@@ -149,8 +149,10 @@ without it.
 
 ## Common Pitfalls
 
-- **No `sudo`, no `doas`** in base. The sudoers line
-  is Heinzel Pro's work.
+- **No `sudo`, no `doas`** in base. Installing one
+  (`pkgin install sudo`) and its sudoers line is
+  ordinary work that asks first; the sudoers write
+  needs the operator's `HEINZEL_GUARD_DISABLE`.
 - **No `daemon(8)`**: the rollback timer uses the
   `nohup` variant. Disarm with `pkill -F`, never
   `pkill -f '<pattern>'`: the pattern also matches
@@ -172,9 +174,9 @@ without it.
 
 `/boot` is the EFI system partition (msdos), with
 `/boot/EFI/BOOT/bootaa64.efi` and an optional
-`/boot/boot.cfg`. Boot loader, `boot.cfg` and EFI
-entries are Heinzel Pro's (`CLAUDE.md` → What
-Heinzel does not do). Read them, report them.
+`/boot/boot.cfg`. A change to the boot loader,
+`boot.cfg` or the EFI entries asks first and
+follows `rules/efi-boot.md`.
 
 One known case to report: NetBSD 11.0 under Apple's
 Hypervisor.framework (UTM, QEMU with HVF) panics at

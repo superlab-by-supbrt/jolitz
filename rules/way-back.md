@@ -109,6 +109,6 @@ provider the user takes.
   back and reboot once without the one-shot before
   relying on it.
 
-Boot loaders, partition tables and EFI entries are
-Heinzel Pro's work (`CLAUDE.md` → What Heinzel does
-not do); the same questions apply there.
+Boot loaders, partition tables and EFI entries
+(`rules/efi-boot.md`, `rules/partition-staging.md`):
+the same questions apply there.

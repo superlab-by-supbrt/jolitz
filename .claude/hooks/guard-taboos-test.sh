@@ -519,14 +519,28 @@ if [ "$NBLOCKS" -eq 0 ]; then
   echo "FAIL: no code blocks found under skills/ or rules/"
 fi
 
-# Since 3.0 no shipped rule may need the guard disarmed: a
-# guard-off fence is a leftover of the OS-replacement rules that
-# moved to Heinzel Pro.
-if grep -rlE --include='*.md' \
+# os-replacement.md has guard-off blocks by design, so finding
+# none means the search broke, not that all is well. Every file
+# with one must tell the operator how the guard is lifted.
+NGUARDOFF=0
+while read -r md; do
+  [ -n "$md" ] || continue
+  NGUARDOFF=$((NGUARDOFF + 1))
+  if grep -q 'HEINZEL_GUARD_DISABLE' "$md"; then
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1))
+    echo "FAIL: $md has guard-off blocks but never names" \
+      "HEINZEL_GUARD_DISABLE"
+  fi
+done <<EOF
+$(grep -rlE --include='*.md' \
   '^[[:space:]]*```.*[[:space:]]guard-off[[:space:]]*$' \
-  "$CLAUDE_DIR/skills" "$CLAUDE_DIR/../rules" >/dev/null; then
+  "$CLAUDE_DIR/skills" "$CLAUDE_DIR/../rules")
+EOF
+if [ "$NGUARDOFF" -eq 0 ]; then
   FAIL=$((FAIL + 1))
-  echo "FAIL: a rule or skill still ships a guard-off block"
+  echo "FAIL: no guard-off blocks found; os-replacement.md has them"
 else
   PASS=$((PASS + 1))
 fi
@@ -872,20 +886,49 @@ else
   echo "FAIL: raw-input fallback did not deny mkfs"
 fi
 
-# --- no operator override (3.0) --------------------------------
-# HEINZEL_GUARD_DISABLE=1 in the environment used to disarm the
-# guard for an OS replacement. That work is Heinzel Pro's now,
-# and the guard has no off switch: the variable changes nothing.
-OUT=$(json_for 'mkfs.ext4 /dev/sda1' \
-  | HEINZEL_GUARD_DISABLE=1 sh "$HOOK")
-if printf '%s' "$OUT" \
-  | grep -q '"permissionDecision":"deny"'; then
-  PASS=$((PASS + 1))
-else
-  FAIL=$((FAIL + 1))
-  echo "FAIL: HEINZEL_GUARD_DISABLE=1 in the environment disabled" \
-    "the guard; it has no off switch since 3.0"
-fi
+# --- the operator override -------------------------------------
+# HEINZEL_GUARD_DISABLE=1, exported by the operator, lifts the
+# taboos for a session. Attack tools, the server lock and a
+# second assignment of the variable stay blocked.
+check_off() {
+  EXPECT=$1
+  OUT=$(json_for "$2" | HEINZEL_GUARD_DISABLE=1 sh "$HOOK")
+  if printf '%s' "$OUT" \
+    | grep -q '"permissionDecision":"deny"'; then
+    GOT=deny
+  else
+    GOT=pass
+  fi
+  if [ "$GOT" = "$EXPECT" ]; then
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1))
+    echo "FAIL [override, $EXPECT, got $GOT]: $2"
+  fi
+}
+check_off pass 'mkfs.ext4 /dev/sda1'
+check_off pass 'sgdisk --zap-all /dev/sda'
+check_off pass 'efibootmgr -n 0001'
+check_off pass 'visudo -f /etc/sudoers.d/deploy'
+check_off pass 'sed -i s/a/b/ .claude/hooks/guard-taboos.sh'
+check_off deny 'hashcat -m 0 hashes.txt words.txt'
+check_off deny 'apt-get install -y hydra'
+check_off deny 'echo allow_changes = true > /etc/heinzel.conf'
+check_off deny 'rm /etc/heinzel.conf'
+check_off deny 'python3 -c "open(\"/etc/heinzel.conf\",\"w\")"'
+check_off deny 'HEINZEL_GUARD_DISABLE=1 fdisk /dev/sda'
+
+# --- the guard's own files -------------------------------------
+# A rewritten hook or an env block in a settings file disarms the
+# guard; reading them stays allowed.
+check deny 'echo x >> .claude/settings.local.json'
+check deny 'sed -i s/deny/pass/ .claude/hooks/guard-taboos.sh'
+check deny 'rm ~/proj/.claude/hooks/guard-taboos.sh'
+check deny 'cp /tmp/s.json .claude/settings.json'
+check deny "jq '.env.HEINZEL_GUARD_DISABLE=\"1\"' s.json"
+check pass 'cat .claude/settings.json'
+check pass 'grep -n deny .claude/hooks/guard-taboos.sh'
+check pass 'sh .claude/hooks/guard-taboos-test.sh'
 
 # --- degraded awk must fail CLOSED -----------------------------
 # hit_without() decides the read-only exemptions via awk. If awk
@@ -980,6 +1023,46 @@ check_file() {
     echo "FAIL [$EXPECT, got $GOT]: $2 $4"
   fi
 }
+
+check_file_off() {
+  EXPECT=$1
+  OUT=$(file_json "$2" "$3" "$4" "$5" \
+    | HEINZEL_GUARD_DISABLE=1 sh "$HOOK" file)
+  if printf '%s' "$OUT" \
+    | grep -q '"permissionDecision":"deny"'; then
+    GOT=deny
+  else
+    GOT=pass
+  fi
+  if [ "$GOT" = "$EXPECT" ]; then
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1))
+    echo "FAIL [override, $EXPECT, got $GOT]: $2 $4 $5"
+  fi
+}
+
+if command -v jq >/dev/null 2>&1; then
+  # The guard's own files, and content that sets the override.
+  check_file deny Write file_path /p/.claude/settings.json '{}'
+  check_file deny Edit file_path /p/.claude/settings.local.json x
+  check_file deny Write file_path /p/.claude/hooks/guard-taboos.sh x
+  check_file deny Write file_path /home/u/.zshrc \
+    'export HEINZEL_GUARD_DISABLE=1'
+  check_file deny Edit file_path /home/u/s.json \
+    '"env": {"HEINZEL_GUARD_DISABLE": "1"}'
+  check_file pass Write file_path /home/u/notes.md \
+    'HEINZEL_GUARD_DISABLE set to 1 before the launch'
+  check_file pass Write file_path /home/u/x.sh \
+    '[ "${HEINZEL_GUARD_DISABLE:-}" = "1" ]'
+  # With the override: the taboos lift, the lock and a second
+  # assignment do not.
+  check_file_off pass Write file_path /etc/sudoers.d/deploy x
+  check_file_off pass Write file_path /p/.claude/hooks/x.sh x
+  check_file_off deny Write file_path /etc/heinzel.conf x
+  check_file_off deny Write file_path /home/u/.zshrc \
+    'export HEINZEL_GUARD_DISABLE=1'
+fi
 
 if command -v jq >/dev/null 2>&1; then
   check_file deny Write file_path /etc/ssh/sshd_config 'Port 22'

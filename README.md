@@ -80,6 +80,9 @@ user can use an open connection without the key.
   failed services. Problems come first.
 - `Run a security audit on app.example.com`: SSH, firewall,
   accounts, open ports and kernel settings, by severity.
+- `Run a fleet audit`: compares update, sshd, firewall, mail
+  and time-sync policies across all known servers and shows
+  where they disagree. Changes nothing.
 - `Email me the output of "df -h" from app.example.com`:
   sends text or files by mail, from your workstation or from
   the server.
@@ -120,38 +123,17 @@ More that happens without asking:
 The macOS cleanup scanner needs the Command Line Tools
 (`xcode-select --install`).
 
-## Heinzel or Heinzel Pro
+## Origin
 
-Heinzel is one admin at one terminal, working on one host at
-a time. [Heinzel Pro](https://heinzel-pro.de) is the
-commercial product built on the same rules: a team, a web
-interface, a fleet, and a runtime that enforces what Heinzel
-can only ask for. Everything that needs a second person, an
-identity, a fleet, a schedule or an evidence chain lives
-there. Heinzel reads and reports those things and answers a
-request to change them with one line pointing to Pro.
-
-| | Heinzel (this repo, MIT) | Heinzel Pro |
-| --- | --- | --- |
-| Who | One admin, their terminal, their servers | A team, one web interface, a fleet |
-| Connect, detect the OS, remember the host | Yes | Yes |
-| Housekeeping, security audit, reports | On request | On a schedule, as a list of open findings, started by alerts |
-| Packages, configs, services, firewall | Asks first | Rights per person and server, a second person where the tenant wants one |
-| Accounts, SSH keys, sudo, deploy users | Inspects and reports | Creates and changes them, approved and logged |
-| Secrets and certificates | Finds leaks, reports expiry | A rotation plan that names every consumer first, then the change as an approved session; certificates watched across the fleet and renewed |
-| Partitions, boot loaders, OS replacement | Reads | Changes them, with a second person before every write where the tenant requires it |
-| Many servers at once | One after another | Rollouts: one task on many servers, a canary first, then waves; OS upgrades the same way; a version matrix across a group |
-| At night, with nobody there | No | Schedules that read alone and collect changes for the morning, alerts that start a diagnosis; maintenance windows per group, outside which every change waits for a person |
-| Protected paths | `memory/protected-paths.md`: read-only, hidden, confirm | The same modes for the whole tenant, plus paths a tool manages, told to the agent on every server |
-| What the agent may do | One guard, no off switch | Capabilities per tenant, off again per server: partitioning and OS replacement off from the start, identity and secrets on |
-| Evidence | Journal and changelog on the host | Audit chain, access review, policy as a file |
-| Own rules | Files in the checkout | Own rules per tenant and server, imported from a Heinzel checkout with its server memory, on top of the open rule set as a versioned bundle |
-
-Resetting the password of an existing account, adding a key
-the operator pastes in, and every package, config, service
-and firewall change stay in Heinzel. Heinzel Pro runs as a
-container, hosted or on your own servers; the details are on
-[heinzel-pro.de](https://heinzel-pro.de).
+This is a fork of
+[heinzel](https://github.com/wintermeyer/heinzel) by Stefan
+Wintermeyer, under the MIT license. It keeps the work that
+upstream moved out in 3.0: partitions, boot loaders and OS
+replacement (`rules/os-replacement.md`, `rules/efi-boot.md`),
+accounts, SSH keys, sudo and deploy users
+(`rules/deployment.md`), secret rotation (`rules/secrets.md`),
+the fleet audit skill and scheduled housekeeping. It is not
+affiliated with or endorsed by the upstream author.
 
 ## Safety & guardrails
 
@@ -172,9 +154,14 @@ The safety rules are part of every session.
   them inside `ssh host "…"`, behind `python3 -c` and when
   the file-edit tools target one of those files. Read-only forms
   (`fdisk -l`, `efibootmgr -v`, `visudo -c`) stay allowed.
-  The hook has no off switch: what it blocks is Heinzel Pro's
-  work. OpenCode does not run this hook; there the written
-  rules are the safety layer.
+  For a legitimate exception such as an OS replacement,
+  start the session with `HEINZEL_GUARD_DISABLE=1`. Attack
+  tools and the server lock stay blocked even then. With the
+  guard on, the hook and `.claude/settings*.json` are
+  protected, and an assignment of the variable in a command
+  or in a written file is always denied, so the agent cannot
+  lift the guard itself. OpenCode does not run this hook;
+  there the written rules are the safety layer.
 - **Verifies before it reports.** "It is gone since the
   reboot" gets checked against the live system first
   (`rules/verify-before-reporting.md`).
@@ -289,10 +276,19 @@ that is `opencode run "…"`.
   the [permission modes docs](https://code.claude.com/docs/en/permission-modes)
   for details.
 
-A run with nobody at the keyboard, nightly by cron or a
-timer, is a Heinzel Pro feature: there a schedule reads
-alone and collects what it would change for a person to
-approve in the morning.
+A nightly health check by cron:
+
+```
+17 6 * * * cd /path/to/heinzel && flock -n \
+  /tmp/heinzel-cron-server1.lock timeout 30m \
+  /abs/path/to/claude --permission-mode auto \
+  -p "Run housekeeping on server1.example.com and \
+email me the report" >> ~/heinzel-cron.log 2>&1
+```
+
+Run the exact prompt interactively once first, so one-time
+questions are answered and stored. Details and a systemd
+timer variant: `rules/scheduled-housekeeping.md`.
 
 ## Your data: `memory/`
 
@@ -322,9 +318,20 @@ bin/heinzel-backup --restore <file.tar.gz>
 Restore refuses to overwrite existing content without
 `--force` and validates the archive before writing.
 
-`memory/` is gitignored and personal: one checkout, one
-person. Several people working on the same servers, with
-rights, approvals and an audit trail, is Heinzel Pro.
+### Team setup
+
+`memory/` is gitignored by default. To share server state:
+
+1. Everyone copies `memory/user.md.example` to
+   `memory/user.md`. This file always stays personal.
+2. Edit `.gitignore` to track server memory. The comments in
+   the file say which lines to change.
+3. Keep each member's own machine out of git, e.g.
+   `memory/servers/stefans-mbp/`.
+4. Commit server memory after sessions.
+
+`user.md`, `blacklist.md`, `readonly.md` and `opencode.json`
+are never shared and still need the backup.
 
 ## Rule customization
 
@@ -349,10 +356,7 @@ Skip this base section.
 A section without a prefix is an addition.
 `memory/custom-rules/all.md` applies to every server. Skills
 follow the same chain, e.g.
-`memory/custom-rules/heinzel-housekeeping.md`. A few rules
-take additions only: the ethics rule, the guard's taboos,
-the connection pipeline, anomaly detection, secrets hygiene
-and the Heinzel Pro refusals cannot be replaced or removed.
+`memory/custom-rules/heinzel-housekeeping.md`.
 
 ## Updates
 
@@ -392,8 +396,8 @@ Claude Code is the tool Heinzel is developed with. OpenCode
 reads the same `CLAUDE.md` and `.claude/skills/`, as long as
 `OPENCODE_DISABLE_CLAUDE_CODE` is unset. Any other tool that
 reads project files gets the rule layer. The skills
-(housekeeping, security audit, email, macOS cleanup) need a
-tool that supports Skills.
+(housekeeping, security audit, email, fleet audit, macOS
+cleanup) need a tool that supports Skills.
 
 ### OpenCode with a local model
 
@@ -437,7 +441,8 @@ log show \
 ```
 CLAUDE.md        main instructions for the AI tool
 rules/           rule files per platform and topic
-.claude/skills/  housekeeping, security, email, macOS cleanup
+.claude/skills/  housekeeping, security, email, fleet audit,
+                 macOS cleanup
 .claude/hooks/   update check and the taboo guard
 bin/             heinzel-update, heinzel-backup,
                  heinzel-migrate
@@ -462,8 +467,6 @@ Wintermeyer: **sw@wintermeyer-consulting.de**
 ## Contributing
 
 Bug reports, feature requests and pull requests are welcome.
-See [CONTRIBUTING.md](CONTRIBUTING.md): a contribution may
-also end up in Heinzel Pro.
 
 ## License
 

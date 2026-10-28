@@ -185,36 +185,34 @@ own earlier commands, or an operator who ran, say,
   every journal, syslog, and shell-history copy is
   not feasible, so the fix is to replace the
   secret, not to try to erase it.
-- **heinzel does not rotate.** Rotating a credential
-  that has consumers is Heinzel Pro's work
-  (`CLAUDE.md` → What Heinzel does not do): answer
-  with the Pro line, then do the part that stays
-  with heinzel, the blast radius and the plan below.
+- **Never rotate on your own.** A rotation is a
+  change the user must approve first. Explain the
+  leak, recommend rotating, and get an explicit OK
+  before touching the credential.
   **One exception: a credential heinzel itself
   created earlier in the same session, which nothing
-  consumes yet.** Rotation is restricted because it
-  breaks every consumer of the old value — when
-  heinzel minted the secret minutes ago and the only
-  copies are the files heinzel just wrote, that
+  consumes yet.** The approval rule exists because
+  rotation breaks every consumer of the old value —
+  when heinzel minted the secret minutes ago and the
+  only copies are the files heinzel just wrote, that
   blast radius is zero and the cost of waiting is a
   live exposed credential. Rotate it immediately,
   then tell the user it happened and why. Do not
   stretch this to any credential heinzel did not
   create in this session, and do not stretch it to
   one that already has consumers.
-- **Map the blast radius anyway.** Every consumer
-  still using the old value breaks the moment it
-  changes: app configs and `.env` files, connection
-  strings, other services, cron jobs, backup and
-  monitoring scripts, and clients on other hosts.
-  Find them (`grep -rIl` over `/etc`, `/opt`,
-  `/srv`, the unit files, the crontabs) and write
-  the plan: the secret, every consumer, which
-  services need a reload or restart, the risk in
-  plain language. That plan is the report; the
-  operator or Heinzel Pro runs it.
-- **Verify afterwards**, when the operator reports
-  the rotation done: confirm the services and
+- **Rotation has side effects; keep them minimal.**
+  Every consumer still using the old value breaks
+  the moment it changes: app configs and `.env`
+  files, connection strings, other services, cron
+  jobs, backup and monitoring scripts, and clients
+  on other hosts. Before rotating, map that blast
+  radius so the impact is known. Present a plan
+  that updates the secret and every consumer
+  together, note which services need a reload or
+  restart, and spell out the risk in plain
+  language. Proceed only once the user agrees.
+- **Verify afterwards.** Confirm the services and
   clients that use the credential still
   authenticate, and record the change with the
   redaction rules above (its location and mode,
@@ -321,14 +319,14 @@ lines.
 ## Never Into the Repo Tree
 
 Never copy key material or credential files
-anywhere under the heinzel repo. `memory/` goes
-into every backup (`bin/heinzel-backup`) and can
-end up in git by one wrong `.gitignore` line — a
-committed key is a published key. Store such
-material outside the repo (e.g.
-`~/heinzel-keys/<hostname>/` with mode `0700` on
-the directory and `0600` on files) and record only
-the *path* in memory or inventories.
+anywhere under the heinzel repo. `memory/` (and
+`memory/servers/` in team mode) can be shared via
+git — a committed key is a published key. This
+generalizes the rule in `rules/os-replacement.md`
+→ Certificates: store such material outside the
+repo (e.g. `~/heinzel-keys/<hostname>/` with mode
+`0700` on the directory and `0600` on files) and
+record only the *path* in memory or inventories.
 
 ## Secrets the User Pastes Into Chat
 
