@@ -23,7 +23,10 @@ const ExportFormat = 1
 //	manifest.json   {format, schema, backend, hub_version,
 //	                 exported_at, files: [{path, version,
 //	                 sha256}], counts}
-//	users.json      [{name, role, token_sha256, created_at}]
+//	users.json      [{name, role, token_sha256, created_at,
+//	                 oidc_issuer, oidc_subject}]: the two oidc
+//	                 fields only for a user bound to an OIDC
+//	                 identity; an entry without them is unbound
 //	claims.json     [{host, user, note, since}]
 //	history.json    [{path, version, sha256, size, updated_at,
 //	                 updated_by}]: every version of every path,
@@ -62,6 +65,8 @@ type exportUser struct {
 	Role        string `json:"role"`
 	TokenSHA256 string `json:"token_sha256"`
 	CreatedAt   string `json:"created_at"`
+	OIDCIssuer  string `json:"oidc_issuer,omitempty"`
+	OIDCSubject string `json:"oidc_subject,omitempty"`
 }
 
 type exportClaim struct {
@@ -127,10 +132,14 @@ func (s *Store) Export(w io.Writer, hubVersion string) error {
 		return rows.Err()
 	}
 	users := []exportUser{}
-	if err := scan(`SELECT name, role, token_sha256, created_at FROM users ORDER BY name`, func(sc scanner) error {
+	if err := scan(`SELECT name, role, token_sha256, created_at, oidc_issuer, oidc_subject FROM users ORDER BY name`, func(sc scanner) error {
 		var u exportUser
-		if err := sc.Scan(&u.Name, &u.Role, &u.TokenSHA256, &u.CreatedAt); err != nil {
+		var iss, sub sql.NullString
+		if err := sc.Scan(&u.Name, &u.Role, &u.TokenSHA256, &u.CreatedAt, &iss, &sub); err != nil {
 			return err
+		}
+		if iss.Valid && sub.Valid {
+			u.OIDCIssuer, u.OIDCSubject = iss.String, sub.String
 		}
 		users = append(users, u)
 		return nil
@@ -314,12 +323,23 @@ func (s *Store) Import(r io.Reader) (*ImportCounts, error) {
 		}
 		return nil
 	}
+	bound := map[string]string{}
 	for _, u := range users {
 		if !userName.MatchString(u.Name) || rank(u.Role) == 0 || len(u.TokenSHA256) != 64 {
 			return nil, fmt.Errorf("%w: user %q (role %q)", ErrInvalid, u.Name, u.Role)
 		}
 		if err := checkTime("user "+u.Name, u.CreatedAt); err != nil {
 			return nil, err
+		}
+		if (u.OIDCIssuer == "") != (u.OIDCSubject == "") {
+			return nil, fmt.Errorf("%w: user %q: oidc_issuer and oidc_subject go together", ErrInvalid, u.Name)
+		}
+		if u.OIDCIssuer != "" {
+			key := u.OIDCIssuer + "\x00" + u.OIDCSubject
+			if other, dup := bound[key]; dup {
+				return nil, fmt.Errorf("%w: users %q and %q are bound to one oidc identity", ErrInvalid, other, u.Name)
+			}
+			bound[key] = u.Name
 		}
 	}
 	for _, c := range claims {
@@ -382,8 +402,12 @@ func (s *Store) Import(r io.Reader) (*ImportCounts, error) {
 		return nil, ErrNotEmpty
 	}
 	for _, u := range users {
-		if _, err := t.Exec(`INSERT INTO users(name, token_sha256, role, created_at) VALUES(?,?,?,?)`,
-			u.Name, u.TokenSHA256, u.Role, u.CreatedAt); err != nil {
+		var iss, sub any // NULL for an unbound user
+		if u.OIDCIssuer != "" {
+			iss, sub = u.OIDCIssuer, u.OIDCSubject
+		}
+		if _, err := t.Exec(`INSERT INTO users(name, token_sha256, role, created_at, oidc_issuer, oidc_subject) VALUES(?,?,?,?,?,?)`,
+			u.Name, u.TokenSHA256, u.Role, u.CreatedAt, iss, sub); err != nil {
 			return nil, fmt.Errorf("user %s: %w", u.Name, err)
 		}
 	}

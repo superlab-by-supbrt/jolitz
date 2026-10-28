@@ -47,9 +47,9 @@ func TestLoginFlow(t *testing.T) {
 				t.Error("the verifier leaks into the authorization URL")
 			}
 			code, _ := iss.Authorize(t, au, map[string]any{"preferred_username": "alice"})
-			name, err := p.Login(context.Background(), code, l.Verifier, l.Nonce)
-			if err != nil || name != "alice" {
-				t.Fatalf("login = %q, %v", name, err)
+			id, err := p.Login(context.Background(), code, l.Verifier, l.Nonce)
+			if err != nil || id.Name != "alice" || id.Subject != "user-1" || id.Issuer != iss.URL {
+				t.Fatalf("login = %+v, %v", id, err)
 			}
 		})
 	}
@@ -214,5 +214,69 @@ func TestDiscoveryIssuerMismatch(t *testing.T) {
 	l, _ := NewLogin()
 	if _, err := p.AuthURL(context.Background(), l); err == nil {
 		t.Error("discovery from a wrong issuer path accepted")
+	}
+}
+
+// The identity is issuer, subject and name; the subject is what
+// stays when a user renames themselves at the provider.
+func TestIdentity(t *testing.T) {
+	iss := authtest.New(t)
+	now := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	verify := func(claim string, edit func(map[string]any)) (Identity, error) {
+		t.Helper()
+		p := New(iss.URL, iss.ClientID, iss.ClientSecret, "https://hub.example.com/oidc/callback", claim)
+		p.Now = func() time.Time { return now }
+		c := goodClaims(iss, now)
+		c["email"] = "alice@example.com"
+		if edit != nil {
+			edit(c)
+		}
+		claims, err := p.Verify(context.Background(), iss.Sign("RS256", "rsa-1", c), "n-1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return p.Identify(claims)
+	}
+	id, err := verify("preferred_username", nil)
+	if err != nil || id != (Identity{Issuer: iss.URL, Subject: "u1", Name: "alice"}) {
+		t.Errorf("identity %+v %v", id, err)
+	}
+	for name, c := range map[string]struct {
+		claim string
+		edit  func(map[string]any)
+		want  string
+	}{
+		"no sub":               {"preferred_username", func(c map[string]any) { delete(c, "sub") }, "sub"},
+		"empty sub":            {"preferred_username", func(c map[string]any) { c["sub"] = "" }, "sub"},
+		"sub not a string":     {"preferred_username", func(c map[string]any) { c["sub"] = 7 }, "sub"},
+		"email unverified":     {"email", nil, "email_verified"},
+		"email_verified false": {"email", func(c map[string]any) { c["email_verified"] = false }, "email_verified"},
+		"email_verified text":  {"email", func(c map[string]any) { c["email_verified"] = "true" }, "email_verified"},
+	} {
+		_, err := verify(c.claim, c.edit)
+		if !errors.Is(err, ErrToken) || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: %v, want ErrToken naming %s", name, err, c.want)
+		}
+	}
+	id, err = verify("email", func(c map[string]any) { c["email_verified"] = true })
+	if err != nil || id.Name != "alice@example.com" || id.Subject != "u1" {
+		t.Errorf("verified email: %+v %v", id, err)
+	}
+	// Another claim needs no email_verified.
+	if _, err := verify("preferred_username", func(c map[string]any) { c["email_verified"] = false }); err != nil {
+		t.Errorf("preferred_username with an unverified email: %v", err)
+	}
+}
+
+// Login itself refuses a token without sub.
+func TestLoginNeedsSub(t *testing.T) {
+	iss := authtest.New(t)
+	iss.Mutate = func(c map[string]any) { delete(c, "sub") }
+	p := newProvider(iss)
+	l, _ := NewLogin()
+	au, _ := p.AuthURL(context.Background(), l)
+	code, _ := iss.Authorize(t, au, map[string]any{"preferred_username": "alice"})
+	if _, err := p.Login(context.Background(), code, l.Verifier, l.Nonce); !errors.Is(err, ErrToken) {
+		t.Errorf("login without sub: %v", err)
 	}
 }

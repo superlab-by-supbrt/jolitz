@@ -280,3 +280,96 @@ func TestConcurrentUpdatesBothBackends(t *testing.T) {
 		}
 	})
 }
+
+// A user is bound to one identity at the OIDC provider: the first
+// bind wins, a second pair or a pair of another user conflicts,
+// unbind clears it and ends the user's browser sessions.
+func TestOIDCBindingBothBackends(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b backend) {
+		st := b.new(t, time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC))
+		for _, n := range []string{"alice", "bob"} {
+			if _, err := st.AddUser(n, RoleOperator); err != nil {
+				t.Fatal(err)
+			}
+		}
+		const iss = "https://id.example.com"
+		if _, _, ok, err := st.OIDCBinding("alice"); ok || err != nil {
+			t.Errorf("fresh user bound: %v %v", ok, err)
+		}
+		if _, _, _, err := st.OIDCBinding("nobody"); !errors.Is(err, ErrNotFound) {
+			t.Errorf("binding of an unknown user: %v", err)
+		}
+		if n, err := st.UserByOIDC(iss, "s1"); n != "" || err != nil {
+			t.Errorf("unbound pair: %q %v", n, err)
+		}
+		if err := st.BindOIDC("alice", iss, "s1"); err != nil {
+			t.Fatal(err)
+		}
+		if i, s, ok, err := st.OIDCBinding("alice"); !ok || err != nil || i != iss || s != "s1" {
+			t.Errorf("binding %q %q %v %v", i, s, ok, err)
+		}
+		if n, _ := st.UserByOIDC(iss, "s1"); n != "alice" {
+			t.Errorf("user by pair %q", n)
+		}
+		// The same pair again is no change.
+		if err := st.BindOIDC("alice", iss, "s1"); err != nil {
+			t.Errorf("rebind with the same pair: %v", err)
+		}
+		if err := st.BindOIDC("alice", iss, "s2"); !errors.Is(err, ErrConflict) {
+			t.Errorf("rebind with another subject: %v", err)
+		}
+		if err := st.BindOIDC("alice", "https://other.example.com", "s1"); !errors.Is(err, ErrConflict) {
+			t.Errorf("rebind with another issuer: %v", err)
+		}
+		if err := st.BindOIDC("bob", iss, "s1"); !errors.Is(err, ErrConflict) {
+			t.Errorf("pair of alice bound to bob: %v", err)
+		}
+		if _, _, ok, _ := st.OIDCBinding("bob"); ok {
+			t.Error("bob bound after a conflict")
+		}
+		// The subject alone is not the identity: another issuer
+		// may use the same sub.
+		if err := st.BindOIDC("bob", "https://other.example.com", "s1"); err != nil {
+			t.Errorf("same sub, other issuer: %v", err)
+		}
+		if err := st.BindOIDC("nobody", iss, "s9"); !errors.Is(err, ErrNotFound) {
+			t.Errorf("bind of an unknown user: %v", err)
+		}
+		if err := st.BindOIDC("alice", "", "s1"); !errors.Is(err, ErrInvalid) {
+			t.Errorf("empty issuer: %v", err)
+		}
+		sec, err := st.StartWebSession("alice", time.Hour)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.UnbindOIDC("alice"); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, ok, _ := st.OIDCBinding("alice"); ok {
+			t.Error("still bound after unbind")
+		}
+		if u, _ := st.UserByWebSession(sec); u != nil {
+			t.Error("browser session survives unbind")
+		}
+		if err := st.UnbindOIDC("nobody"); !errors.Is(err, ErrNotFound) {
+			t.Errorf("unbind of an unknown user: %v", err)
+		}
+		// Unbound, alice takes a new subject.
+		if err := st.BindOIDC("alice", iss, "s2"); err != nil {
+			t.Errorf("bind after unbind: %v", err)
+		}
+		if n, _ := st.UserByOIDC(iss, "s1"); n != "" {
+			t.Errorf("old pair still names %q", n)
+		}
+		// Removing a user frees its pair.
+		if err := st.RemoveUser("alice"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := st.AddUser("carol", RoleViewer); err != nil {
+			t.Fatal(err)
+		}
+		if err := st.BindOIDC("carol", iss, "s2"); err != nil {
+			t.Errorf("pair of a removed user: %v", err)
+		}
+	})
+}

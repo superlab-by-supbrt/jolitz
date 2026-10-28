@@ -5,9 +5,10 @@
 // ES256. Only the standard library: JWKS parsing, key selection
 // by kid, signature and claim checks are here.
 //
-// The provider answers one question, "which name did the issuer
-// vouch for?"; mapping that name to a hub user and the session
-// cookie belong to internal/ui. Bearer tokens for jolitz-sync do
+// The provider answers one question, "whom did the issuer vouch
+// for?": issuer, subject and the name claim. Mapping that to a
+// hub user, the binding of the user to issuer and subject, and
+// the session cookie belong to internal/ui. Bearer tokens for jolitz-sync do
 // not pass through here.
 package auth
 
@@ -242,18 +243,48 @@ func safeWord(s string) string {
 	return b.String()
 }
 
+// Identity is what a verified ID token says about the user. Issuer
+// and Subject (iss, sub) identify the account at the provider
+// for good; Name is the configured username claim, which many
+// providers let the user change.
+type Identity struct {
+	Issuer, Subject, Name string
+}
+
 // Login finishes an attempt: code exchange, verification, the
-// username claim.
-func (p *Provider) Login(ctx context.Context, code, verifier, nonce string) (string, error) {
+// identity.
+func (p *Provider) Login(ctx context.Context, code, verifier, nonce string) (Identity, error) {
 	raw, err := p.Exchange(ctx, code, verifier)
 	if err != nil {
-		return "", err
+		return Identity{}, err
 	}
 	claims, err := p.Verify(ctx, raw, nonce)
 	if err != nil {
-		return "", err
+		return Identity{}, err
 	}
-	return p.Username(claims)
+	return p.Identify(claims)
+}
+
+// Identify reads the identity from verified claims: sub must be a
+// non-empty string, the username claim too. With the claim
+// "email" the provider must also say email_verified: true, or
+// anyone could claim an address they do not own.
+func (p *Provider) Identify(claims map[string]any) (Identity, error) {
+	sub, ok := claims["sub"].(string)
+	if !ok || sub == "" {
+		return Identity{}, tokenErr("claim sub missing or not a string")
+	}
+	iss, _ := claims["iss"].(string)
+	name, err := p.Username(claims)
+	if err != nil {
+		return Identity{}, err
+	}
+	if p.UsernameClaim == "email" {
+		if v, _ := claims["email_verified"].(bool); !v {
+			return Identity{}, tokenErr("username_claim is email, but email_verified is not true")
+		}
+	}
+	return Identity{Issuer: iss, Subject: sub, Name: name}, nil
 }
 
 // Username reads the configured claim; it must be a non-empty

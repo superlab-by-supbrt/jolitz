@@ -13,6 +13,7 @@
 //	jolitz-hub user list
 //	jolitz-hub user rm NAME
 //	jolitz-hub user rotate NAME
+//	jolitz-hub user unbind NAME
 //	jolitz-hub migrate
 //	jolitz-hub export --out FILE.tar
 //	jolitz-hub import FILE.tar
@@ -54,6 +55,7 @@ Usage:
   jolitz-hub user list
   jolitz-hub user rm NAME
   jolitz-hub user rotate NAME
+  jolitz-hub user unbind NAME
   jolitz-hub migrate
   jolitz-hub export --out FILE.tar
   jolitz-hub import FILE.tar
@@ -72,11 +74,16 @@ serve      Run the API, the web UI, /metrics and the jobs
            over the file.
 user add   Create a user and print its token once. The hub
            stores only the token's SHA-256.
-user list  Names, roles and creation dates.
+user list  Names, roles, creation dates and "oidc: bound" for a
+           user bound to an identity at the OIDC provider.
 user rm    Delete a user; its sessions and browser logins end,
            its claims stay.
 user rotate
            Replace a user's token and print the new one once.
+user unbind
+           Clear a user's binding to the OIDC provider's issuer
+           and subject and end its browser sessions; the next
+           OIDC login binds it again.
 migrate    Apply the schema migrations the database lacks and
            exit. serve does the same at start.
 export     Write every file with every version, the users with
@@ -385,7 +392,15 @@ func user(args []string) error {
 			return err
 		}
 		for _, u := range users {
-			fmt.Printf("%-24s %-9s %s\n", u.Name, u.Role, u.CreatedAt.UTC().Format("2006-01-02 15:04"))
+			_, _, bound, err := st.OIDCBinding(u.Name)
+			if err != nil {
+				return err
+			}
+			line := fmt.Sprintf("%-24s %-9s %s", u.Name, u.Role, u.CreatedAt.UTC().Format("2006-01-02 15:04"))
+			if bound {
+				line += "  oidc: bound"
+			}
+			fmt.Println(line)
 		}
 	case "rm":
 		if len(names) != 1 {
@@ -405,6 +420,14 @@ func user(args []string) error {
 		}
 		fmt.Fprintf(os.Stderr, "token of %s replaced. The new one, shown once:\n", names[0])
 		fmt.Println(token)
+	case "unbind":
+		if len(names) != 1 {
+			return errUsage
+		}
+		if err := st.UnbindOIDC(names[0]); err != nil {
+			return fmt.Errorf("user %s: %w", names[0], err)
+		}
+		fmt.Fprintf(os.Stderr, "user %s: oidc binding cleared, browser sessions ended; the next OIDC login binds it again\n", names[0])
 	default:
 		return errUsage
 	}

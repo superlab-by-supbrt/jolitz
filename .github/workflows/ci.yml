@@ -58,6 +58,20 @@ jobs:
   # downloads (the release workflow uploads the same four).
   hub:
     runs-on: ubuntu-latest
+    # The store tests run on SQLite always and on this
+    # throwaway PostgreSQL too (JOLITZ_HUB_TEST_PG below).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: hubtest
+          POSTGRES_PASSWORD: hubtest
+          POSTGRES_DB: hubtest
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hubtest"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
@@ -68,11 +82,13 @@ jobs:
         run: |
           cd hub
           test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
-      - name: go vet and test
+      - name: go vet and test (SQLite and PostgreSQL)
         run: |
           cd hub
+          umask 077
+          printf '%s\n' 'postgres://hubtest:hubtest@127.0.0.1:5432/hubtest?sslmode=disable' > "$RUNNER_TEMP/pg.dsn"
           go vet ./...
-          go test ./...
+          JOLITZ_HUB_TEST_PG="$RUNNER_TEMP/pg.dsn" go test ./...
       - name: Cross-build
         run: |
           cd hub

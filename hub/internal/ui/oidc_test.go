@@ -213,3 +213,72 @@ func TestOIDCStateChecks(t *testing.T) {
 		t.Errorf("issuer error: %d %s", res.StatusCode, body)
 	}
 }
+
+// login runs one whole OIDC login with the given claims.
+func (e *oidcEnv) login(claims map[string]any) (*http.Response, string) {
+	e.t.Helper()
+	code, state, flow := e.start(claims)
+	return e.callback(code, state, flow)
+}
+
+// The first OIDC login binds the hub user to the provider's
+// issuer and subject; later logins must bring the same pair,
+// whatever name they claim.
+func TestOIDCBinding(t *testing.T) {
+	e := newOIDCEnv(t)
+	if _, err := e.st.AddUser("admin", store.RoleAdmin); err != nil {
+		t.Fatal(err)
+	}
+	res, _ := e.login(map[string]any{"preferred_username": "alice", "sub": "sub-alice"})
+	if res.StatusCode != http.StatusSeeOther || cookie(res, api.CookieName) == nil {
+		t.Fatalf("first login: %d", res.StatusCode)
+	}
+	iss, sub, ok, err := e.st.OIDCBinding("alice")
+	if err != nil || !ok || iss != e.iss.URL || sub != "sub-alice" {
+		t.Fatalf("binding after the first login: %q %q %v %v", iss, sub, ok, err)
+	}
+	res, _ = e.login(map[string]any{"preferred_username": "alice", "sub": "sub-alice"})
+	if res.StatusCode != http.StatusSeeOther || cookie(res, api.CookieName) == nil {
+		t.Errorf("second login with the same subject: %d", res.StatusCode)
+	}
+
+	// Someone else renamed themselves to alice at the provider.
+	res, body := e.login(map[string]any{"preferred_username": "alice", "sub": "sub-mallory"})
+	if res.StatusCode != http.StatusForbidden || cookie(res, api.CookieName) != nil {
+		t.Errorf("same name, other subject: %d, cookie %v", res.StatusCode, cookie(res, api.CookieName))
+	}
+	if !strings.Contains(body, "bound to another identity") || !strings.Contains(body, "jolitz-hub user unbind alice") {
+		t.Errorf("403 page: %s", body)
+	}
+	if strings.Contains(body, "sub-alice") || strings.Contains(body, "sub-mallory") {
+		t.Error("the 403 page shows a subject")
+	}
+
+	// alice renames herself to admin at the provider: the hub's
+	// admin is unbound, but her subject belongs to alice.
+	res, body = e.login(map[string]any{"preferred_username": "admin", "sub": "sub-alice"})
+	if res.StatusCode != http.StatusForbidden || cookie(res, api.CookieName) != nil {
+		t.Errorf("bound subject as a second user: %d", res.StatusCode)
+	}
+	if !strings.Contains(body, "already bound to another hub user") || !strings.Contains(body, "jolitz-hub user unbind") {
+		t.Errorf("403 page: %s", body)
+	}
+	if _, _, ok, _ := e.st.OIDCBinding("admin"); ok {
+		t.Error("admin got bound")
+	}
+
+	// An admin resets alice; a new subject binds.
+	if err := e.st.UnbindOIDC("alice"); err != nil {
+		t.Fatal(err)
+	}
+	res, _ = e.login(map[string]any{"preferred_username": "alice", "sub": "sub-alice-new"})
+	if res.StatusCode != http.StatusSeeOther || cookie(res, api.CookieName) == nil {
+		t.Errorf("login after unbind: %d", res.StatusCode)
+	}
+	if _, sub, ok, _ := e.st.OIDCBinding("alice"); !ok || sub != "sub-alice-new" {
+		t.Errorf("binding after unbind: %q %v", sub, ok)
+	}
+	if res, _ := e.login(map[string]any{"preferred_username": "alice", "sub": "sub-alice"}); res.StatusCode != http.StatusForbidden {
+		t.Errorf("the old subject after rebinding: %d", res.StatusCode)
+	}
+}

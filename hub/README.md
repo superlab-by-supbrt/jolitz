@@ -179,7 +179,7 @@ The archive, format 1:
 | Entry | What |
 |---|---|
 | `manifest.json` | `format`, `schema`, `backend`, `hub_version`, `exported_at`, `files` (path, version, sha256 of every current file), `counts` |
-| `users.json` | name, role, token_sha256, created_at |
+| `users.json` | name, role, token_sha256, created_at; oidc_issuer and oidc_subject for a user bound through OIDC |
 | `claims.json` | host, user, note, since |
 | `history.json` | every version: path, version, sha256, size, updated_at, updated_by |
 | `bodies/<sha256>` | each distinct body once |
@@ -220,7 +220,18 @@ audiences), `exp`, `iat`, `nbf` with one minute of clock skew,
 and the nonce of this login. The `username_claim` must name an
 existing hub user exactly; OIDC creates nobody, an unknown name
 gets a 403 page that says how an admin adds it. The role comes
-from the users table. A good login sets the same `jolitz_hub`
+from the users table.
+
+The name claim only finds the user: many providers let a user
+change `preferred_username`. The first OIDC login of a hub user
+binds it to the provider's issuer and subject (`iss`, `sub`);
+every later login must bring the same pair, and a pair bound to
+one hub user cannot log in as another. Both get a 403 page. A
+token without `sub` is refused. `user unbind NAME` clears the
+binding and ends the user's browser sessions; the next OIDC login
+binds it again. `user list` marks bound users `oidc: bound`. With
+`username_claim = "email"` the token must also carry
+`email_verified: true`. A good login sets the same `jolitz_hub`
 cookie as the token login, holding a random browser session the
 hub stores as SHA-256 for twelve hours; logout and `user rm` end
 it. The session works for the UI and for the API calls the
@@ -318,7 +329,8 @@ The user puts it into a mode-600 file as one line
 `Authorization: Bearer <token>` (`~/.config/jolitz/hub-token`),
 which `curl -H @file` and `jolitz-sync` read, so it never reaches
 argv. Further users: `user add NAME --role viewer|operator|admin`,
-`user list`, `user rm NAME`, `user rotate NAME`.
+`user list`, `user rm NAME`, `user rotate NAME`,
+`user unbind NAME` (clears the OIDC binding, see OIDC).
 
 Roles: `viewer` reads, `operator` also writes files, sessions,
 claims and guard denials, `admin` also releases other people's

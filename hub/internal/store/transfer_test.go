@@ -27,6 +27,9 @@ func fillHub(t *testing.T) (*Store, map[string]string) {
 		}
 		tokens[u.name] = tok
 	}
+	if err := st.BindOIDC("alice", "https://id.example.com", "alice-sub"); err != nil {
+		t.Fatal(err)
+	}
 	must := func(_ *FileInfo, err error) {
 		t.Helper()
 		if err != nil {
@@ -162,6 +165,16 @@ func TestExportImport(t *testing.T) {
 	if !strings.Contains(string(ents["users.json"]), `"token_sha256"`) {
 		t.Error("users.json without token hashes")
 	}
+	var users []map[string]any
+	if err := json.Unmarshal(ents["users.json"], &users); err != nil || len(users) != 3 ||
+		users[0]["oidc_issuer"] != "https://id.example.com" || users[0]["oidc_subject"] != "alice-sub" {
+		t.Errorf("users.json binding of alice: %+v %v", users, err)
+	}
+	// Unbound users carry no binding fields, as format 1 always
+	// had them; bob's entry is such an old one.
+	if _, has := users[1]["oidc_issuer"]; has {
+		t.Errorf("unbound bob has oidc fields: %+v", users[1])
+	}
 	want := snapshot(t, src, hubPaths)
 
 	eachBackend(t, func(t *testing.T, b backend) {
@@ -188,6 +201,12 @@ func TestExportImport(t *testing.T) {
 		}
 		if !reflect.DeepEqual(got.Hosts, want.Hosts) || got.Changes != want.Changes || got.Links != want.Links || got.Audits != want.Audits {
 			t.Errorf("derived\n got %+v\nwant %+v", got, want)
+		}
+		if i, sub, ok, err := dst.OIDCBinding("alice"); !ok || err != nil || i != "https://id.example.com" || sub != "alice-sub" {
+			t.Errorf("binding of alice after import: %q %q %v %v", i, sub, ok, err)
+		}
+		if _, _, ok, _ := dst.OIDCBinding("bob"); ok {
+			t.Error("bob bound after import")
 		}
 		for name, tok := range tokens {
 			if u, _ := dst.UserByToken(tok); u == nil || u.Name != name {
@@ -258,6 +277,13 @@ func TestImportRejects(t *testing.T) {
 			e["users.json"] = []byte(strings.Replace(string(e["users.json"]), `"viewer"`, `"root"`, 1))
 		},
 		"unknown entry": func(e map[string][]byte) { e["evil.sh"] = []byte("x") },
+		"half a binding": func(e map[string][]byte) {
+			e["users.json"] = []byte(strings.Replace(string(e["users.json"]), `"oidc_subject": "alice-sub"`, `"oidc_subject": ""`, 1))
+		},
+		"one pair twice": func(e map[string][]byte) {
+			e["users.json"] = []byte(strings.Replace(string(e["users.json"]), `"name": "bob",`,
+				`"name": "bob", "oidc_issuer": "https://id.example.com", "oidc_subject": "alice-sub",`, 1))
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			dst := newStore(t, time.Now())
