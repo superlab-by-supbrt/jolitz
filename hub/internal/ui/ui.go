@@ -108,34 +108,16 @@ func New(cfg Config) http.Handler {
 // bearer token, which no other page can read.
 func (s *server) sameOrigin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet, http.MethodHead, http.MethodOptions:
+		if api.SafeMethod(r.Method) {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if !sameOriginRequest(r) {
+		if !api.SameOrigin(r) {
 			s.errorPage(w, r, http.StatusForbidden, "This form was sent from another site. Open the hub directly and try again.")
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
-}
-
-func sameOriginRequest(r *http.Request) bool {
-	switch r.Header.Get("Sec-Fetch-Site") {
-	case "", "same-origin", "none":
-	default:
-		return false
-	}
-	o := r.Header.Get("Origin")
-	if o == "" {
-		return true
-	}
-	u, err := url.Parse(o)
-	if err != nil || u.Host == "" {
-		return false
-	}
-	return strings.EqualFold(u.Host, r.Host)
 }
 
 // ---- page plumbing -----------------------------------------

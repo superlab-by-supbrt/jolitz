@@ -13,6 +13,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -132,9 +133,44 @@ func TokenFromRequest(r *http.Request) string {
 		return ""
 	}
 	if c, err := r.Cookie(CookieName); err == nil {
+		// The cookie is the browser login. A state-changing
+		// request a browser sent from another origin must not
+		// ride on it, whichever handler serves the path (the UI
+		// forms and every API write alike).
+		if !SafeMethod(r.Method) && !SameOrigin(r) {
+			return ""
+		}
 		return c.Value
 	}
 	return ""
+}
+
+// SafeMethod reports a method that changes nothing.
+func SafeMethod(m string) bool {
+	return m == http.MethodGet || m == http.MethodHead || m == http.MethodOptions
+}
+
+// SameOrigin reports whether a browser sent r from this host.
+// Browsers send Sec-Fetch-Site and Origin with every POST; a
+// request that carries one of them must name this host. A
+// request with neither is not a browser form (curl,
+// jolitz-sync) and authenticates with its own bearer token,
+// which no other page can read.
+func SameOrigin(r *http.Request) bool {
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "", "same-origin", "none":
+	default:
+		return false
+	}
+	o := r.Header.Get("Origin")
+	if o == "" {
+		return true
+	}
+	u, err := url.Parse(o)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	return strings.EqualFold(u.Host, r.Host)
 }
 
 // Authenticate resolves the request's user; nil without a valid
