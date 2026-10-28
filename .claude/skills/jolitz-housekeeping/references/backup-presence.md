@@ -132,13 +132,28 @@ Report each destination on its own line — "one OK, one
 still on its first run" is a materially different
 finding from either extreme and both must be visible.
 
-## FreeBSD
+## FreeBSD and NetBSD Probes
 
-No FreeBSD baseline exists yet (see SKILL.md →
-Scope and limits). Run the closest equivalents —
-`zfs list -t snapshot`, `grep -i backup
-/etc/periodic.conf /etc/crontab /etc/cron.d/*`,
-`crontab -l` — and state the gap in the report.
+```
+for t in restic borg borgmatic rsnapshot duplicity rclone; do
+  command -v "$t" >/dev/null && echo "$t"
+done
+zpool list 2>/dev/null && zfs list -t snapshot \
+  -o name,creation -s creation 2>/dev/null | tail -n 3
+crontab -l 2>/dev/null \
+  | grep -iE 'backup|restic|borg|dump|rsync|zfs send'
+grep -iE 'backup|restic|borg|dump|rsync|zfs send' \
+  /etc/crontab /etc/cron.d/* /etc/periodic.conf 2>/dev/null
+ls -lt /var/backups 2>/dev/null | head -n 5
+```
+
+NetBSD: the PATH export first (`rules/netbsd.md`),
+and `pkgsrc` tools live under `/usr/pkg/bin/`. When
+`/var/backups/` holds only `*.current` and `*.backup`
+copies of files from `/etc/`, that is the OS keeping
+its own config history, not a data backup: say so.
+A ZFS snapshot on the same pool is still not an
+off-host backup (Linux caveat above).
 
 ## Severity
 
@@ -156,6 +171,14 @@ Scope and limits). Run the closest equivalents —
 - **OK / INFO** — mechanism plus fresh evidence.
   One line in Services, e.g.
   `Backups  OK — restic systemd timer, last run 6h ago`.
+  After a restore test (below):
+  `Backups  OK — verified /etc/fstab from 2026-10-27`.
+- **CRITICAL** — a restore test that fails: the tool
+  errors, the file is missing from the newest snapshot,
+  or the checksum differs while the live file is older
+  than the snapshot. "Backup exists but does not
+  restore" outranks a missing backup: nobody is
+  looking for the problem.
 - **Multiple destinations, mixed state** — rate the
   overall line by the *best* destination with fresh
   evidence (still OK, not WARN/CRITICAL), but name
@@ -176,3 +199,106 @@ it on change, never duplicate:
 - Backup: none — user accepts risk, confirmed 2026-06-10
 - Backup: restic to <repo host>, verified 2026-06-10
 ```
+
+## Verifying a Restore (asks first)
+
+A backup nobody has restored is a hope. When a
+mechanism with fresh evidence is found, offer one
+restore test and run it only after the user says
+yes. It costs one small file and a few minutes, and
+turns "last run 6h ago" into "verified".
+
+The question names the sample file, the scratch
+path and the way back:
+`Way back: rm -r /root/jolitz-scratch/restore`.
+Pick a small file that rarely changes (`/etc/fstab`,
+a vhost, `postgresql.conf`), never a secret
+(`rules/secrets.md`), so the restored copy can be
+compared with the live one.
+
+Every restore lands in `/root/jolitz-scratch/restore/`
+(under `/root`, not `/tmp`: `rules/secrets.md`,
+`fs.protected_regular`) and never over the original.
+Credentials reach the tool the way the backup job
+hands them over: its environment file or a
+`*_PASSWORD_FILE` variable, sourced by the remote
+shell, never typed and never printed. Read the job's
+unit or script for the variable *names*, not the
+values. Check the flags with `--help` on the host
+before the first run.
+
+**restic** (`restic restore --help`):
+
+```
+mkdir -p /root/jolitz-scratch/restore
+set -a; . /root/.restic-env; set +a
+restic snapshots --latest 1
+restic restore latest --target /root/jolitz-scratch/restore \
+  --include /etc/fstab
+```
+
+**borg** (`borg extract --help`; it extracts into the
+current directory, paths without the leading slash):
+
+```
+mkdir -p /root/jolitz-scratch/restore
+cd /root/jolitz-scratch/restore
+set -a; . /root/.borg-env; set +a
+borg list --last 1 "$BORG_REPO"
+borg extract "$BORG_REPO::ARCHIVE" etc/fstab
+```
+
+**pg_dump** (autopostgresqlbackup or a cron dump): the
+sample is the newest dump file itself.
+
+```
+f=$(ls -t /var/lib/autopostgresqlbackup/daily/*/*.sql.gz \
+  2>/dev/null | head -n 1)
+gzip -t "$f" && echo "gzip ok: $f"
+gunzip -c "$f" | head -n 5
+```
+
+The header must read `-- PostgreSQL database dump`
+with the server version. A real restore into a
+scratch database (`createdb jolitz_restore_<date>`,
+`psql -f`, then `dropdb` of that database) proves
+more and is a separate question: it creates a
+database on the production cluster. Way back: the
+`dropdb` of the scratch database. Do not offer it
+when the dump is larger than the free space on the
+cluster's filesystem.
+
+**Time Machine** (macOS): `tmutil restore <src> <dst>`
+copies an item out of a backup, `cp`-style (`man
+tmutil` on the host). Destination `~/jolitz-scratch/
+restore/`; the same compare.
+
+**Compare.** The checksum of the restored file against
+the live one (`sha256sum` on Linux, `sha256` on
+FreeBSD, `shasum -a 256` on macOS):
+
+```
+sha256sum /root/jolitz-scratch/restore/etc/fstab /etc/fstab
+```
+
+Equal: verified. Different: `diff -u` the two (both
+are config files) and look at the mtime of the live
+file. Newer than the snapshot: the file changed since,
+say so, still verified. Older: the backup does not
+hold what it claims — CRITICAL.
+
+**Clean up and record.**
+
+```
+rm -r /root/jolitz-scratch/restore
+```
+
+Then the Services line
+`Backups  OK — verified /etc/fstab from 2026-10-27 (restic)`,
+the `Backup:` line in `memory.md` with
+`verified <date>` (below), and one journal headline:
+`[<operator> as root] restored /etc/fstab from the
+2026-10-27 restic snapshot into a scratch directory
+and compared it: identical — because a backup is only
+real once restored`. A `verified` date older than
+~180 days: INFO "re-verify".

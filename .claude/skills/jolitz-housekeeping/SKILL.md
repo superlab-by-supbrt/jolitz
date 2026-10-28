@@ -9,7 +9,7 @@ description: Run a jolitz housekeeping (health) inspection on a
   <host>", or "do routine inspection". Do NOT auto-invoke for
   ambiguous requests like "check server <host>" — that's
   reserved for quick queries. Covers Linux (Debian, Ubuntu, RHEL,
-  CentOS, Fedora, SUSE) and macOS.
+  CentOS, Fedora, SUSE), FreeBSD, NetBSD and macOS.
 ---
 
 # jolitz-housekeeping
@@ -40,6 +40,9 @@ applies before any of this runs.
    server's `memory.md` (e.g. PostgreSQL, nginx, Docker). The
    backup-presence check from `references/backup-presence.md`
    runs on every host, independent of `memory.md` entries.
+   Its restore test (one small file into
+   `/root/jolitz-scratch/`, checksum, remove) runs only after
+   the user says yes.
 3. **Run the version check** procedure from
    `rules/version-check.md` for all Tier 1 software and include the
    "Versions" section in the report.
@@ -67,9 +70,16 @@ Read on demand, only when the relevant section applies:
   updates, firewall, NTP, logs, SSL certs, kernel.
 - `references/baseline-macos.md` — disk, memory, load, updates,
   Homebrew, Application Firewall, SMART, time sync.
+- `references/baseline-freebsd.md` — disk and ZFS, memory,
+  load, `pkg` and `freebsd-update`, pf, rc services, time,
+  logs, certs, kernel vs userland, boot environments.
+- `references/baseline-netbsd.md` — the same shape for
+  NetBSD: `pkgin`, `pkg_admin audit`, npf, rc services,
+  `/etc/security`, syslog with `grep -a`.
 - `references/backup-presence.md` — generic "any backup at
-  all?" probe, the provider-snapshot question, and the
-  `Backup:` acknowledgment line in `memory.md`.
+  all?" probe, the provider-snapshot question, the restore
+  test (`Backups  OK — verified <file> from <date>`), and
+  the `Backup:` acknowledgment line in `memory.md`.
 - `references/service-checks.md` — PostgreSQL, backups, nginx,
   Docker, Ollama, node_exporter, NVIDIA GPU, MariaDB/MySQL,
   WireGuard. Only run the ones the server's `memory.md` mentions.
@@ -78,15 +88,14 @@ Read on demand, only when the relevant section applies:
 
 ## Scope and limits
 
-- Linux (Debian, Ubuntu, RHEL, CentOS, Fedora, SUSE) and
-  macOS are fully covered by the baseline references above.
-- FreeBSD baselines are not yet covered. On a FreeBSD host,
-  do not silently skip: run the closest equivalent checks
-  manually (`pkg audit -F`, `pkg upgrade -n`,
-  `freebsd-update fetch` dry run, `pfctl -s info` for the
-  firewall, `df -h` / `swapinfo` / `uptime` for the basics,
-  `service -e` for enabled services) and state in the report
-  that FreeBSD has no baseline reference yet.
+- Linux (Debian, Ubuntu, RHEL, CentOS, Fedora, SUSE),
+  FreeBSD, NetBSD and macOS are covered by the baseline
+  references above. On NetBSD every remote command starts
+  with the PATH export from `rules/netbsd.md`. Unraid hosts:
+  `rules/unraid.md` first.
+- The BSD baselines have no `needrestart` equivalent: a
+  daemon upgraded by `pkg` or `pkgin` keeps its old binary
+  until restarted, and the report says which ones.
 
 ## Custom checks
 

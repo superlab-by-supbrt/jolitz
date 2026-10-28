@@ -3,14 +3,17 @@ name: jolitz-fleet-audit
 argument-hint: "[hostname1 hostname2 ... | tag:<name>]"
 description: Compare key policies across all servers in
   memory/servers/ to surface silent drift. Makes no configuration
-  changes; writes one audit-trail line to each host's journal
-  and one local snapshot to memory/audits/ for comparison.
+  changes; writes one audit-trail line to each host's journal,
+  one local snapshot to memory/audits/ for comparison, and each
+  drift entry as an "audit:" to-do in the host's todo.md.
   Probes unattended-upgrades, sshd effective config, firewall
-  posture, MTA, time sync, and auto-reboot behaviour. Use when
-  the user asks to "fleet audit", "vergleiche alle server",
-  "policy drift check", "are my servers configured the same?",
-  or after a fix on one host to find which others carry the
-  same bug.
+  posture, MTA, time sync, auto-reboot behaviour and TLS
+  certificate expiry on Linux; pkg audit, pf, rc services and
+  time sync on FreeBSD; softwareupdate, Application Firewall and
+  network time on macOS. Use when the user asks to "fleet
+  audit", "vergleiche alle server", "policy drift check", "are
+  my servers configured the same?", or after a fix on one host
+  to find which others carry the same bug.
 ---
 
 # jolitz-fleet-audit
@@ -63,6 +66,10 @@ servers" — that maps to single-host housekeeping.
    SSH command, with the standard options from `CLAUDE.md` →
    SSH Options and the port from `- SSH port:` in the host's
    `memory.md`.
+   The probe set follows the OS family from the pipeline:
+   Linux runs sections 1 to 7 of `references/probes.md`,
+   FreeBSD sections 2, 7 and 8, macOS sections 2, 7 and 9.
+   NetBSD hosts are skipped with "NetBSD not yet covered".
    Hosts that time out or refuse the connection go on a
    "skipped: unreachable" list.
 
@@ -74,7 +81,11 @@ servers" — that maps to single-host housekeeping.
 5. **Surface drift.** After the tables, emit a short "Drift
    detected" section that lists each disagreement and the
    recommended fix (link to the relevant rule or skill). Do
-   not change anything.
+   not change anything on the host. Then write every entry,
+   and every certificate under 30 days, as an open to-do in
+   the named host's `memory/servers/<hostname>/todo.md`
+   (`references/output-format.md` → To-do lines): one line
+   per key, never a second one for the same key.
 
 6. **Log to the system journal** on each audited host:
 
@@ -104,9 +115,10 @@ servers" — that maps to single-host housekeeping.
 Read on demand:
 
 - `references/probes.md` — the exact commands to run per
-  category (UA, sshd, firewall, MTA, time, auto-reboot).
-- `references/output-format.md` — table layout and the
-  "Drift detected" section format.
+  category (UA, sshd, firewall, MTA, time, auto-reboot,
+  certificates, FreeBSD, macOS).
+- `references/output-format.md` — table layout, the
+  "Drift detected" section and the to-do lines.
 - `references/snapshot.md` — the JSON file written to
   `memory/audits/`.
 
@@ -114,9 +126,14 @@ Read on demand:
 
 - Linux (Debian family) is fully covered. RHEL/SUSE
   probes share the same shape but use `dnf`/`firewalld`/
-  `zypper` equivalents. macOS hosts are skipped with a
-  "macOS not yet supported" note — covering them is a
-  separate effort.
+  `zypper` equivalents. FreeBSD and macOS have their own
+  sections in `references/probes.md`; the sshd, firewall,
+  time, reboot and certificate rows are shared with Linux,
+  so those tables hold every host. NetBSD hosts are skipped
+  with "NetBSD not yet covered".
+- Certificates do not drift between hosts. Their rows show
+  the days left; the threshold, not a disagreement, makes
+  the entry.
 - The audit does not check that running services are
   healthy (that is housekeeping's job). It only compares
   declared policy.

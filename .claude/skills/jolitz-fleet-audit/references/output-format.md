@@ -113,3 +113,75 @@ they are not forgotten:
 Skipped: host4.example.com (no SSH user known),
          host5.example.com (unreachable)
 ```
+
+## Per-OS tables
+
+Unattended-upgrades and MTA list the Linux hosts. The
+FreeBSD and macOS tables (`references/probes.md` → 8, 9)
+list the hosts of that OS. The sshd, firewall, time and
+reboot tables carry every host with the values its OS
+section produced (`pf` next to `ufw`, `applicationfirewall`
+next to `nftables`). A row an OS cannot answer reads `n/a`
+and stays out of drift, like `needs root`.
+
+```
+### FreeBSD
+
+| Setting          | bsd1            | bsd2            |
+|------------------|-----------------|-----------------|
+| base.userland    | 14.3-RELEASE-p2 | 14.3-RELEASE-p2 |
+| ! base.kernel    | 14.3-RELEASE-p2 | 14.3-RELEASE-p1 |
+| ! pkg.branch     | quarterly       | latest          |
+| pkg.vulnerable   | 0               | 0               |
+| pkg.pending      | 4               | 11              |
+```
+
+## Certificates
+
+One row per certificate, every host as a column; a cell is
+the number of days, `expired`, `none` or `n/a`. The rows
+differ by nature, so the `!` prefix is not used here; the
+threshold makes the entry:
+
+```
+### Certificates
+
+| Certificate        | web1 | web2 | bsd1 |
+|--------------------|------|------|------|
+| example.com        | 61   | 61   | n/a  |
+| mail.example.com   | 12   | n/a  | n/a  |
+```
+
+Under 30 days the certificate gets its own numbered entry
+in "Drift detected" (WARN; under 7 days or `expired`
+CRITICAL) naming the renewal suspect, and a to-do line.
+
+## To-do lines
+
+Every entry of "Drift detected", and every certificate
+under 30 days, is also written to
+`memory/servers/<hostname>/todo.md` of each host it names,
+with the agent's file-edit tool, after the report is out:
+
+```
+- [ ] audit: sshd.passwordauthentication is yes, fleet has no (2026-10-28)
+- [ ] audit: certs.mail.example.com.days is 12, renewal timer inactive (2026-10-28)
+```
+
+Shape: `- [ ] audit: <key> is <value>, <fleet value or
+suspect> (<audit date>)`. The key is the snapshot key from
+`references/snapshot.md`, so the line can be found again.
+
+- One line per key and host. Before writing, search the
+  file for `audit: <key>`. An open `- [ ]` line exists:
+  leave it, date included. A closed `- [x]` line exists and
+  the drift is back: replace that line with the new open
+  one. Nothing: append. Never a second line for one key.
+- A later audit that finds the key consistent, or the
+  certificate renewed, marks the line `- [x]`.
+- No `todo.md` yet: create it with the heading `# To-do`
+  and the line. `bin/jolitz-overview` counts the open lines
+  and shows them per host.
+- `needs root` and `n/a` cells never produce a line.
+- No secret in a line: a value that is a credential is
+  written as `set` (`rules/secrets.md`).

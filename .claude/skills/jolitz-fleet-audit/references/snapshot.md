@@ -22,14 +22,42 @@ it is shared like server memory.
       "firewall.state": "active",
       "mta.package": "postfix",
       "time.service": "chrony",
-      "reboot.required": "no"
+      "reboot.required": "no",
+      "certs.example.com.days": "61",
+      "certs.mail.example.com.days": "12"
     },
     "db1.example.com": {
       "sshd.permitrootlogin": "unknown(needs-root)"
+    },
+    "bsd1.example.com": {
+      "base.userland": "14.3-RELEASE-p2",
+      "base.kernel": "14.3-RELEASE-p2",
+      "pkg.vulnerable": "0",
+      "pkg.pending": "4",
+      "pkg.branch": "quarterly",
+      "firewall.tool": "pf",
+      "firewall.state": "enabled",
+      "time.service": "ntpd",
+      "time.synced": "yes",
+      "services.enabled": "9",
+      "reboot.required": "no"
+    },
+    "mac.local": {
+      "macos.version": "26.1",
+      "macos.updates": "0",
+      "macos.auto_check": "1",
+      "macos.critical_updates": "1",
+      "firewall.tool": "applicationfirewall",
+      "firewall.state": "on",
+      "firewall.stealth": "off",
+      "time.service": "networktime",
+      "time.synced": "yes",
+      "sshd.remotelogin": "On",
+      "reboot.required": "(unset)"
     }
   },
   "skipped": {
-    "mac.local": "macOS not yet supported",
+    "nb1.example.com": "NetBSD not yet covered",
     "old.example.com": "unreachable"
   }
 }
@@ -37,15 +65,22 @@ it is shared like server memory.
 
 - Keys are `<category>.<setting>`. Categories:
   `ua`, `sshd`, `firewall`, `mta`, `time`, `reboot`,
-  matching the sections of `references/probes.md`.
+  `certs` (`certs.<name>.days`, section 7), `base`, `pkg`
+  and `services` (FreeBSD, section 8), `macos` (section 9),
+  matching the sections of `references/probes.md`. The
+  shared categories `sshd`, `firewall`, `time` and `reboot`
+  hold whatever the host's OS section produced.
   Settings are the row labels of the report table;
   sshd keys in lower case, as `sshd -T` printed them
   before OpenSSH 10.4 (10.5 for every key), so snapshots
-  stay comparable.
+  stay comparable. The to-do lines in `todo.md` quote
+  these keys (`references/output-format.md`).
 - Values are strings, exactly as rendered in the
   table. `(unset)` for a setting that is not set,
   `unknown(needs-root)` for a probe that lacked
-  privileges. Both stay out of drift.
+  privileges, `n/a` for a row the host's OS cannot
+  answer. All three stay out of drift. A certificate
+  row holds the days as a number, `expired` or `none`.
 - Use the same key for the same setting in every run.
   A renamed key reads as a removed and a new setting.
 - No secrets. A probe output that holds a credential
