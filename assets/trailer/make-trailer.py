@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the heinzel trailer (the GIF at the top of README.md).
+"""Render the jolitz trailer (the GIF at the top of README.md).
 
 The whole trailer is scripted below: nothing is recorded. Edit SCENES,
 run this file, commit the new GIF. See README.md next to this script.
@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 W, H, FPS = 1280, 720, 20
 HERE = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_GIF = os.path.join(HERE, "..", "heinzel-trailer.gif")
+DEFAULT_GIF = os.path.join(HERE, "..", "jolitz-trailer.gif")
 MENLO = "/System/Library/Fonts/Menlo.ttc"  # index 0 regular, 1 bold
 
 
@@ -130,7 +130,7 @@ def window(caption, title):
 
 
 AI_PROMPT = [("❯ ", "m", True)]
-SH_PROMPT = [("~/heinzel $ ", "d", False)]
+SH_PROMPT = [("~/jolitz $ ", "d", False)]
 FF = "▶▶ fast-forward"
 
 
@@ -148,7 +148,7 @@ class Terminal:
       ("clear",)                 the screen is cleared
     """
 
-    def __init__(self, caption, dur, steps, title="heinzel"):
+    def __init__(self, caption, dur, steps, title="jolitz"):
         self.caption, self.dur, self.title = caption, dur, title
         self.events, t = [], 0.4
         for kind, *arg in steps:
@@ -186,7 +186,7 @@ class Terminal:
                        if e[0] == "clear" and e[1] <= t], default=-1)
         live = [e for e in self.events if e[0] != "clear" and e[1] >= cleared]
 
-        # The badge is up while heinzel works, off while the user acts.
+        # The badge is up while jolitz works, off while the user acts.
         work = [e[1] for e in live if e[0] in ("out", "ask")]
         user = any(e[0] in ("ask", "type") and e[1] <= t < e[2] for e in live)
         if work and work[0] <= t < self.end and not user:
@@ -258,7 +258,7 @@ class MemorySlide:
         "<d>└─</> <B>web1.example.com/",
     ]
     notes = [
-        (3.8, "<F>Before it connects, Heinzel reads these files. <g>No guessing."),
+        (3.8, "<F>Before it connects, jolitz reads these files. <g>No guessing."),
         (5.0, "<F>After every change, it updates them."),
         (6.2, "<F>Plain text: read it, edit it, share it with your team in git."),
     ]
@@ -295,14 +295,14 @@ class MemorySlide:
 class EndCard:
     dur = 4.5
     steps = [
-        ("$ ", "git clone https://github.com/wintermeyer/heinzel.git"),
-        ("$ ", "cd heinzel && claude"),
+        ("$ ", "git clone https://github.com/superlab-by-supbrt/jolitz.git"),
+        ("$ ", "cd jolitz && claude"),
         ("❯ ", "Describe your problem"),
     ]
 
     def frame(self, t):
         img, d = blank()
-        d.text((W / 2, 150), "heinzel", font=font(104, True), fill=COL["f"],
+        d.text((W / 2, 150), "jolitz", font=font(104, True), fill=COL["f"],
                anchor="mm")
         d.text((W / 2, 250), "Free and open source", font=font(32, True),
                fill=COL["g"], anchor="mm")
@@ -422,7 +422,7 @@ SCENES = [
                  "errors. He found a forum post saying mkfs.ext4 /dev/sda1\n"
                  "repairs that. Run it for him.", 4.0),
         ("out", ""),
-        ("out", "<R>✗ BLOCKED</>  <r>heinzel guard: mkfs destroys the filesystem on its target", 0.9),
+        ("out", "<R>✗ BLOCKED</>  <r>jolitz guard: mkfs destroys the filesystem on its target", 0.9),
         ("out", ""),
         ("out", "<b>●</> mkfs does not repair a disk. It formats it: all data would be gone."),
         ("out", "  I won't run it. Let me check the disk's health first, read-only."),
@@ -438,7 +438,7 @@ SCENES = [
         ("out", "  <F>VPN Client</>         0.9 GB   <d>background service", 0.6),
         ("out", ""),
         ("out", "<b>●</> Move all 9.4 GB to the Trash, or pick app by app?"),
-    ], title="heinzel · local mode"),
+    ], title="jolitz · local mode"),
     EndCard(),
 ]
 

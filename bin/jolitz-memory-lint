@@ -1,14 +1,14 @@
 #!/bin/sh
-# heinzel-memory-lint — check memory/ for shape and for
+# jolitz-memory-lint — check memory/ for shape and for
 # anything that looks like a secret. Reads local files
 # only; never connects to a server.
 #
 # Usage:
-#   heinzel-memory-lint                 Check every server
-#   heinzel-memory-lint <host> ...      Check these servers
-#   heinzel-memory-lint --strict        Warnings fail too
-#   heinzel-memory-lint -d <dir>        Use <dir> as memory/
-#   heinzel-memory-lint --help          Show this help
+#   jolitz-memory-lint                 Check every server
+#   jolitz-memory-lint <host> ...      Check these servers
+#   jolitz-memory-lint --strict        Warnings fail too
+#   jolitz-memory-lint -d <dir>        Use <dir> as memory/
+#   jolitz-memory-lint --help          Show this help
 #
 # ERROR: a value that looks like a credential (private
 # key block, known token format, password in a URL or an
@@ -29,7 +29,7 @@ REPO_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
 SELF="$SCRIPT_DIR/$(basename "$0")"
 
 usage() {
-  awk '/^# heinzel-memory-lint/{in_help=1} in_help{if(/^[^#]/)exit; sub(/^# ?/,""); print}' "$SELF"
+  awk '/^# jolitz-memory-lint/{in_help=1} in_help{if(/^[^#]/)exit; sub(/^# ?/,""); print}' "$SELF"
 }
 
 MEM="$REPO_DIR/memory"

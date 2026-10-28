@@ -91,7 +91,7 @@ alarming guess. Many "I need root" escalations
 dissolve once step 1 is done, because the data was
 never missing — only the assumed path was wrong.
 
-This matters most for a least-privilege heinzel that
+This matters most for a least-privilege jolitz that
 runs as a normal user and escalates by asking rather
 than acting: a verified, narrow request costs the
 operator one grant; an unverified scare costs a

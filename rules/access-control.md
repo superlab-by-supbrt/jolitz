@@ -22,7 +22,7 @@ pre-create them.
 203.0.113.50
 ```
 
-The user can add or remove entries by asking heinzel
+The user can add or remove entries by asking jolitz
 to edit the file, or by editing it directly.
 
 ## Shared Lookup Logic
@@ -85,7 +85,7 @@ read-only does not block access.
 - Local memory and changelog updates, including
   creating `todo.md` (a purely local file — only
   the remote host is read-only)
-- `logger -t heinzel` entries on the server
+- `logger -t jolitz` entries on the server
 
 **Blocked in read-only mode:**
 - Package install, update, or remove
@@ -102,17 +102,17 @@ unprivileged mode sysadmin report.
 
 **No override:** read-only mode is a hard constraint.
 The user must remove the entry from
-`memory/readonly.md` before heinzel will modify the
+`memory/readonly.md` before jolitz will modify the
 server.
 
-## Server Lock: `/etc/heinzel.conf`
+## Server Lock: `/etc/jolitz.conf`
 
 The machine's owner can lock it against changes from
-the machine itself, for every heinzel that connects,
+the machine itself, for every jolitz that connects,
 whoever runs it:
 
 ```
-# /etc/heinzel.conf
+# /etc/jolitz.conf
 allow_changes = false
 reason = Database migration until 20 Oct, hands off
 ```
@@ -130,40 +130,40 @@ fresh every time, never from server memory. Run the
 probe in a call of its own:
 
 ```bash
-if [ -e /etc/heinzel.conf ]; then
-  cat /etc/heinzel.conf || echo HEINZEL_CONF_UNREADABLE
+if [ -e /etc/jolitz.conf ]; then
+  cat /etc/jolitz.conf || echo JOLITZ_CONF_UNREADABLE
 else
-  echo HEINZEL_CONF_ABSENT
+  echo JOLITZ_CONF_ABSENT
 fi
-echo HEINZEL_CONF_DONE
+echo JOLITZ_CONF_DONE
 ```
 
 **How to read it (fails closed):**
 
-- `HEINZEL_CONF_ABSENT`: no lock, work normally.
+- `JOLITZ_CONF_ABSENT`: no lock, work normally.
 - `allow_changes = true`: no lock. Case and the
   spaces around `=` do not matter.
 - Anything else is a lock: `false`, a missing key,
   any other value, an empty file,
-  `HEINZEL_CONF_UNREADABLE`.
-- No `HEINZEL_CONF_DONE` means the check did not
+  `JOLITZ_CONF_UNREADABLE`.
+- No `JOLITZ_CONF_DONE` means the check did not
   run. Change nothing until it has.
 
 **On a lock:** switch to read-only mode exactly as
 for `memory/readonly.md` above (same allowed and
 blocked lists, same deferred modification report).
 Tell the user: "This server is locked in
-`/etc/heinzel.conf`. I will inspect, but I will not
+`/etc/jolitz.conf`. I will inspect, but I will not
 change anything." Quote `reason` when it is set.
 
 Either source is enough: a host listed in
 `memory/readonly.md` stays read-only whatever the
 file says.
 
-**Never lift it.** heinzel never creates, edits,
-moves, deletes or re-permissions `/etc/heinzel.conf`,
+**Never lift it.** jolitz never creates, edits,
+moves, deletes or re-permissions `/etc/jolitz.conf`,
 not even on request. The owner changes it by hand.
-When the user asks heinzel to lock or unlock a
+When the user asks jolitz to lock or unlock a
 server, give them the command to run themselves. The
 guard hook blocks every write to the file.
 

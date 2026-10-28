@@ -1,5 +1,5 @@
 #!/bin/sh
-# heinzel-overview — build a fleet overview from
+# jolitz-overview — build a fleet overview from
 # memory/: one HTML page for all servers and one
 # handover page per server, or a plain-text summary.
 # Reads local files only and never connects to a
@@ -7,26 +7,26 @@
 # and sends product names, never host names.
 #
 # Usage:
-#   heinzel-overview                Write memory/overview/
-#   heinzel-overview --text         Summary on stdout
-#   heinzel-overview --days <n>     Window for "recent
+#   jolitz-overview                Write memory/overview/
+#   jolitz-overview --text         Summary on stdout
+#   jolitz-overview --days <n>     Window for "recent
 #                                   changes" (default: 30,
 #                                   with --text 7)
-#   heinzel-overview --tag <tag>    Only servers with this
+#   jolitz-overview --tag <tag>    Only servers with this
 #                                   tag (- Tags: in memory.md)
-#   heinzel-overview --eol          Fetch end-of-life dates
+#   jolitz-overview --eol          Fetch end-of-life dates
 #                                   first; cached in
 #                                   memory/eol/
-#   heinzel-overview -d <dir>       Use <dir> as memory/
-#   heinzel-overview -o <dir>       Write the pages to <dir>
-#   heinzel-overview --help         Show this help
+#   jolitz-overview -d <dir>       Use <dir> as memory/
+#   jolitz-overview -o <dir>       Write the pages to <dir>
+#   jolitz-overview --help         Show this help
 #
 # Sources: memory/servers/*/{memory.md,todo.md,
 # changelog.log,rules.md}, the newest two fleet audit
 # snapshots in memory/audits/, cached EOL data in
 # memory/eol/, and the guard log
-# ~/.cache/heinzel/guard.log if HEINZEL_GUARD_LOG=1
-# wrote one. bin/heinzel-memory-lint runs first; a
+# ~/.cache/jolitz/guard.log if JOLITZ_GUARD_LOG=1
+# wrote one. bin/jolitz-memory-lint runs first; a
 # value that looks like a secret stops the build.
 set -e
 
@@ -36,7 +36,7 @@ SELF="$SCRIPT_DIR/$(basename "$0")"
 ORIG_PWD=$(pwd)
 
 usage() {
-  awk '/^# heinzel-overview/{in_help=1} in_help{if(/^[^#]/)exit; sub(/^# ?/,""); print}' "$SELF"
+  awk '/^# jolitz-overview/{in_help=1} in_help{if(/^[^#]/)exit; sub(/^# ?/,""); print}' "$SELF"
 }
 
 resolve_path() {
@@ -84,14 +84,14 @@ fi
 # A secret in memory must not be copied into a page
 # that is easy to forward. Lint errors stop here.
 LINT_RC=0
-LINT=$("$SCRIPT_DIR/heinzel-memory-lint" -d "$MEM" 2>&1) || LINT_RC=$?
+LINT=$("$SCRIPT_DIR/jolitz-memory-lint" -d "$MEM" 2>&1) || LINT_RC=$?
 if [ "$LINT_RC" -ne 0 ]; then
   printf '%s\n' "$LINT" | grep -v '^WARN' >&2
   echo "error: overview not built; fix the lines above first" >&2
   exit 1
 fi
 
-WORK=$(mktemp -d "${TMPDIR:-/tmp}/heinzel-overview.XXXXXX")
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/jolitz-overview.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
 TAB=$(printf '\t')
 printf '%s\n' "$LINT" | grep '^WARN' > "$WORK/lint.txt" || true
@@ -307,7 +307,7 @@ if [ "$HAVE_JQ" -eq 1 ] && [ -n "$AUDIT_CUR" ]; then
 fi
 
 # --- guard log ---------------------------------------------
-GUARD_LOG="$HOME/.cache/heinzel/guard.log"
+GUARD_LOG="$HOME/.cache/jolitz/guard.log"
 [ -r "$GUARD_LOG" ] && cp "$GUARD_LOG" "$WORK/guard.tsv"
 
 TODAY=$(date +%Y-%m-%d)

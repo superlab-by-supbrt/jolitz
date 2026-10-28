@@ -1,14 +1,14 @@
 #!/bin/sh
 # memory-tools-test.sh — fixture tests for
-# bin/heinzel-memory-lint and bin/heinzel-overview.
+# bin/jolitz-memory-lint and bin/jolitz-overview.
 # Builds a throwaway memory/ tree, runs both tools on
 # it, and checks their output. No network: the EOL
 # cache is written by hand.
 #   sh tests/memory-tools-test.sh
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-LINT="$REPO_DIR/bin/heinzel-memory-lint"
-OVERVIEW="$REPO_DIR/bin/heinzel-overview"
+LINT="$REPO_DIR/bin/jolitz-memory-lint"
+OVERVIEW="$REPO_DIR/bin/jolitz-overview"
 PASS=0
 FAIL=0
 
@@ -53,7 +53,7 @@ app.example.com now deploys blue/green <script>alert(1)</script>
   Detail: templated app@.service (blue :4003,
   green :4005).
   Rollback: re-enable app.service, restore vhost
-  backup from /var/backups/heinzel/.
+  backup from /var/backups/jolitz/.
   Verify: 135 probes, all 200.
   Flags: migrations must now stay
   backward-compatible.
@@ -209,9 +209,9 @@ has "$T/tag.out" 'Fleet audit 2026-10-28 09:00: 0 settings differ' \
   "tag filter narrows the audit"
 
 # --- guard log -----------------------------------------------
-mkdir -p "$HOME/.cache/heinzel"
+mkdir -p "$HOME/.cache/jolitz"
 printf '%s\tbash\tpowering off a machine\thalt\n' "${TODAY}T10:00:00Z" \
-  > "$HOME/.cache/heinzel/guard.log"
+  > "$HOME/.cache/jolitz/guard.log"
 "$OVERVIEW" -d "$M" > /dev/null 2>&1
 has "$I" 'Guard denials, last 30 days' "guard log section appears"
 has "$I" '<td>1</td><td>'"$TODAY"'</td><td>powering off a machine</td>' \

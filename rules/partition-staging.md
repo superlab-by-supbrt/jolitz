@@ -64,7 +64,7 @@ table:
 4. **Guard override.** Steps 2 and 3 run `mkfs`,
    `newfs` and `gpart` writes, which the taboo
    guard blocks. The user relaunches with
-   `HEINZEL_GUARD_DISABLE=1` first, as
+   `JOLITZ_GUARD_DISABLE=1` first, as
    `rules/os-replacement.md` (Prerequisites, step
    4) describes.
 

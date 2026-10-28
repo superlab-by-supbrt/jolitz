@@ -50,10 +50,10 @@ jobs:
       - name: Scanner unit tests
         run: >-
           /usr/bin/python3 -m unittest discover -v
-          -s .claude/skills/heinzel-macos-cleanup/scripts
+          -s .claude/skills/jolitz-macos-cleanup/scripts
 
       - name: Scanner smoke run
         run: |
           /usr/bin/python3 --version
-          /usr/bin/python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py orphans > scan.json
+          /usr/bin/python3 .claude/skills/jolitz-macos-cleanup/scripts/scan.py orphans > scan.json
           /usr/bin/python3 -m json.tool scan.json > /dev/null

@@ -3,7 +3,7 @@
 One file per audit run, written locally after the
 report: `memory/audits/<YYYY-MM-DD-HHMM>.json`. It is
 the history the next audit compares against, and the
-source of the audit table in `bin/heinzel-overview`.
+source of the audit table in `bin/jolitz-overview`.
 It never leaves the operator's machine; in team mode
 it is shared like server memory.
 
@@ -71,7 +71,7 @@ both, list the ones whose value changed:
 
 Then look each one up in that host's
 `changelog.log`. A change with no entry was made
-outside heinzel: say so in the report.
+outside jolitz: say so in the report.
 
 Keep snapshots for two years, like the changelog.
 Delete older files when writing a new one.

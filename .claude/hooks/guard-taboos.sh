@@ -2,7 +2,7 @@
 # guard-taboos.sh — PreToolUse hook (matcher: Bash, and
 # Edit|Write|NotebookEdit with the argument "file").
 #
-# Mechanically enforces heinzel's absolute taboos from
+# Mechanically enforces jolitz's absolute taboos from
 # CLAUDE.md → Critical Safety Rules, below the model layer:
 #
 #   - halt / poweroff / shutdown without -r / init 0 /
@@ -32,7 +32,7 @@
 #     write to sudoers(.d/) or to the account files
 #     (/etc/passwd, shadow, group, master.passwd)
 #   - writing, moving or deleting the server lock
-#     /etc/heinzel.conf, which only the machine's owner sets
+#     /etc/jolitz.conf, which only the machine's owner sets
 #     (rules/access-control.md)
 #   - any of those paths reached through a language
 #     runtime (python/perl/ruby/node/awk ...), whose file
@@ -85,7 +85,7 @@
 # body written to a file by cat or tee is data, not code, and is
 # no longer scanned. See the heredoc section below for the exact
 # conditions and for why the consumer, never the body, decides.
-# Writing heinzel's own changelog no longer trips the guard.
+# Writing jolitz's own changelog no longer trips the guard.
 #
 # Known, accepted false positives that REMAIN (the patterns are
 # deliberately coarse — this guard protects production disks, not
@@ -118,8 +118,8 @@
 #     unverified, so there is no -l exemption either. Run the
 #     fingerprint in a call of its own (rules/secrets.md).
 #   - An ssh ControlPath under .ssh/ makes any rm, mv or chmod in
-#     the same command look like a key operation. heinzel keeps
-#     its sockets in ~/.cache/heinzel for that reason
+#     the same command look like a key operation. jolitz keeps
+#     its sockets in ~/.cache/jolitz for that reason
 #     (rules/ssh-connections.md).
 #   - rsync with -e "ssh -i ~/.ssh/id_..." AFTER its operands
 #     reads as a copy onto that key, because writes_to takes the
@@ -129,7 +129,7 @@
 # Never rephrase, re-quote, or otherwise obfuscate a command to
 # evade this guard.
 #
-# Heinzel-repo development note: a commit message piped straight
+# jolitz-repo development note: a commit message piped straight
 # into `git commit -m`/`-F -` still flows through the command
 # string, and git is not a data sink this hook recognizes, so
 # writing ABOUT taboo commands there can still trigger it. Write
@@ -138,14 +138,14 @@
 #
 # Override for legitimate flows (rules/os-replacement.md runs
 # mkfs/sgdisk by design, rules/efi-boot.md writes boot entries):
-# the OPERATOR exports HEINZEL_GUARD_DISABLE=1 BEFORE launching
+# the OPERATOR exports JOLITZ_GUARD_DISABLE=1 BEFORE launching
 # the session. It lifts the taboos, nothing else. Always on,
 # whatever the variable says:
 #   - an inline or written assignment of the variable, so the
 #     model cannot disarm the guard itself: in a command, or in
 #     a file-edit tool's content (settings.json env, a shell rc)
 #   - attack tools (rules/ethics.md)
-#   - the server lock /etc/heinzel.conf
+#   - the server lock /etc/jolitz.conf
 # With the guard on, its own files are protected too: the
 # hooks under .claude/hooks/ and .claude/settings*.json, which
 # register the hooks and can carry an env block.
@@ -154,7 +154,7 @@ INPUT=$(cat)
 
 # Operator-level override: inherited environment only.
 GUARD_OFF=0
-[ "${HEINZEL_GUARD_DISABLE:-}" = "1" ] && GUARD_OFF=1
+[ "${JOLITZ_GUARD_DISABLE:-}" = "1" ] && GUARD_OFF=1
 
 # Extract the Bash tool's command string. Without jq (or on
 # malformed input) fall back to scanning the raw stdin text —
@@ -173,7 +173,7 @@ LOG_SUBJECT=$CMD
 # words: a changelog entry describing a shutdown checkpoint, a
 # rule file about fdisk, a commit message. Scanned as a command
 # string, that prose is indistinguishable from an invocation, and
-# the guard blocked heinzel's own changelog write over the word
+# the guard blocked jolitz's own changelog write over the word
 # "shutdown" inside a heredoc.
 #
 # A heredoc body is only safe to skip when the command consuming
@@ -363,7 +363,7 @@ EDITOR='(vi|vim|nvim|nano|emacs|ed)'
 
 # Backed here where a write locks people out or cannot be
 # undone; deliberate work on them runs with the operator's
-# HEINZEL_GUARD_DISABLE. sudoers and its drop-ins, unanchored on
+# JOLITZ_GUARD_DISABLE. sudoers and its drop-ins, unanchored on
 # the left like
 # SSHD so /usr/local/etc/sudoers (FreeBSD) matches; the account
 # files, where a direct write bypasses every check useradd and
@@ -373,16 +373,16 @@ SUDOERS='/etc/sudoers(\.d(/[[:alnum:]_.-]*)?)?'
 ACCOUNTS='/etc/(passwd|shadow|gshadow|group|master\.passwd|s?pwd\.db)'
 EFIVARS='/sys/firmware/efi/efivars'
 
-# The server lock. The machine's owner writes it to keep heinzel
-# hands-off; a heinzel that could flip it to true or delete it
+# The server lock. The machine's owner writes it to keep jolitz
+# hands-off; a jolitz that could flip it to true or delete it
 # would make it worthless. Matched by its file name alone, in any
-# case: the full path misses /ETC/HEINZEL.CONF on macOS, /etc//
-# and /etc/./, and a relative heinzel.conf after cd /etc. A write
+# case: the full path misses /ETC/JOLITZ.CONF on macOS, /etc//
+# and /etc/./, and a relative jolitz.conf after cd /etc. A write
 # to any file of that name is denied with it. Not closable: a
-# glob (/etc/heinzel.c*) or a name built at run time still gets
+# glob (/etc/jolitz.c*) or a name built at run time still gets
 # through, so the written rule stays the first line of defence.
 # Reading it stays allowed.
-LOCKFILE='[Hh][Ee][Ii][Nn][Zz][Ee][Ll]\.[Cc][Oo][Nn][Ff]'
+LOCKFILE='[Jj][Oo][Ll][Ii][Tt][Zz]\.[Cc][Oo][Nn][Ff]'
 
 # The guard's own files. A model that rewrites the hook, or adds
 # an env block with the override to a settings file, has
@@ -391,18 +391,11 @@ LOCKFILE='[Hh][Ee][Ii][Nn][Zz][Ee][Ll]\.[Cc][Oo][Nn][Ff]'
 # whichever one the session started in.
 SELF='\.claude/(settings(\.local)?\.json|hooks/)'
 
-# The same files as a command reaches them: .claude on its own
-# (cd .claude && echo x > settings.json), .claude/hooks and
-# .claude/settings*, and settings.local.json, a name only Claude
-# Code uses. .claude/skills stays out: the macOS cleanup skill
-# runs its scanner from there and redirects the result.
-SELF_ANY='(^|[^[:alnum:]_.-])\.claude(/+(hooks|settings)|/*(["'\''[:space:];|&)]|$))|(^|[^[:alnum:]_.-])settings\.local\.json'
-
 # An assignment of the override, in shell (VAR=1), JSON
 # ("VAR": "1") or jq (.env.VAR="1") form. A bare mention, as in
 # this file's documentation, stays allowed. The backslash is for
 # file mode, which scans the JSON input, where a quote is \".
-DISARM='HEINZEL_GUARD_DISABLE[\"'\'']*[[:space:]]*(=|:[^-])'
+DISARM='JOLITZ_GUARD_DISABLE[\"'\'']*[[:space:]]*(=|:[^-])'
 
 # A general-purpose language runtime. See the interpreter section
 # at the bottom for why this list, and not a list of the ways
@@ -446,9 +439,9 @@ hit_without() {
   return 0
 }
 
-# Opt-in denial log for the operator: HEINZEL_GUARD_LOG=1
+# Opt-in denial log for the operator: JOLITZ_GUARD_LOG=1
 # in the environment Claude Code starts with. One line per
-# denial in ~/.cache/heinzel/guard.log (time, mode, reason,
+# denial in ~/.cache/jolitz/guard.log (time, mode, reason,
 # the first 200 characters of the command or the edited
 # path). It shows which blocks get in the way of real work,
 # so false positives reach the test matrix. A command line
@@ -456,10 +449,10 @@ hit_without() {
 # it never changes the decision: every failure is ignored
 # and deny() denies either way.
 guard_log() {
-  [ "${HEINZEL_GUARD_LOG:-}" = "1" ] || return 0
+  [ "${JOLITZ_GUARD_LOG:-}" = "1" ] || return 0
   (
     umask 077
-    d="$HOME/.cache/heinzel"
+    d="$HOME/.cache/jolitz"
     mkdir -p "$d" && [ -d "$d" ] && [ ! -L "$d/guard.log" ] || exit 0
     s=$(printf '%s' "$LOG_SUBJECT" | tr '\t\n\r' '   ' | cut -c1-200)
     r=$(printf '%s' "$1" | tr '\t\n\r' '   ')
@@ -474,7 +467,7 @@ deny() {
   # Reasons must stay plain ASCII without quotes/backslashes.
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse",'
   printf '"permissionDecision":"deny",'
-  printf '"permissionDecisionReason":"heinzel guard: %s ' "$1"
+  printf '"permissionDecisionReason":"jolitz guard: %s ' "$1"
   printf '(CLAUDE.md - Critical Safety Rules). Blocked in all '
   printf 'permission modes. Explain this to the user; do not '
   printf 'rephrase the command to evade the guard."}}\n'
@@ -594,11 +587,11 @@ normalised, so it cannot be shown to be an ordinary file"
   # is scanned here, because an env block or an export line
   # disarms the guard whatever file it lands in.
   if target_hit "$LOCKFILE"; then
-    deny "/etc/heinzel.conf is the server lock; only the \
-machine's owner changes it, never heinzel"
+    deny "/etc/jolitz.conf is the server lock; only the \
+machine's owner changes it, never jolitz"
   fi
   if printf '%s' "$INPUT" | LC_ALL=C grep -Eq "$DISARM"; then
-    deny "this edit writes an assignment of HEINZEL_GUARD_DISABLE; \
+    deny "this edit writes an assignment of JOLITZ_GUARD_DISABLE; \
 only the operator sets it, before the session"
   fi
   [ "$GUARD_OFF" -eq 1 ] && exit 0
@@ -621,7 +614,7 @@ and partition table"
   if target_hit "$SUDOERS"; then
     deny "writing sudoers or a sudoers.d file grants or revokes \
 root rights; edit it with visudo -f and the operator's \
-HEINZEL_GUARD_DISABLE"
+JOLITZ_GUARD_DISABLE"
   fi
   if target_hit "$ACCOUNTS"; then
     deny "writing an account file directly bypasses every check \
@@ -629,7 +622,7 @@ useradd and passwd make; use useradd, usermod or passwd"
   fi
   if target_hit "$EFIVARS"; then
     deny "writing a firmware variable can brick the board; boot \
-work runs with the operator's HEINZEL_GUARD_DISABLE \
+work runs with the operator's JOLITZ_GUARD_DISABLE \
 (rules/efi-boot.md)"
   fi
   exit 0
@@ -642,12 +635,12 @@ fi
 # assignment into a file or commit message also triggers
 # this; phrase such text without the equals sign.
 if hit "$DISARM"; then
-  deny "an assignment of HEINZEL_GUARD_DISABLE is not allowed - \
+  deny "an assignment of JOLITZ_GUARD_DISABLE is not allowed - \
 the operator must export it before launching the session"
 fi
 
 # --- Attack tools (rules/ethics.md) ---------------------------
-# heinzel is not an attack tool. This denies the password and
+# jolitz is not an attack tool. This denies the password and
 # key crackers, the network attack suites and the login brute-
 # forcers by name, both run and installed. Like every other
 # block here it names a KNOWN set, not the effect -- a renamed
@@ -671,18 +664,18 @@ ATTACK="$ATTACK"'|metasploit|msfconsole|msfvenom|sqlmap'
 ATTACK="$ATTACK"'|responder|crackmapexec|netexec|nxc|hashcat-utils'
 if hit "(^|[^[:alnum:]_.-])($ATTACK)([^[:alnum:]_.-]|\$)"; then
   deny "this is a password/key cracker or an attack tool; \
-heinzel does not recover passwords or attack systems, on any \
+jolitz does not recover passwords or attack systems, on any \
 host (rules/ethics.md)"
 fi
 # john the ripper: only when it looks like the tool, not the name
 if hit '(^|[^[:alnum:]_.-])john([[:space:]]+-|[[:space:]]+[^ ]*\.(pot|rec|rule|lst|txt|conf)|[[:space:]]+--)'; then
-  deny "john the ripper recovers passwords; heinzel does not do \
+  deny "john the ripper recovers passwords; jolitz does not do \
 this on any host (rules/ethics.md)"
 fi
 # Installing any of them is blocked too, whatever the manager.
 if hit '(apt-get|apt|aptitude|dnf|yum|zypper|pkg|brew|snap|pip3?|pipx|cargo|go)[[:space:]]+(-[^ ]+[[:space:]]+)*(install|add|-S|in)([[:space:]]|$)' \
   && hit "(^|[^[:alnum:]_.-])($ATTACK|john|john-the-ripper|johntheripper)([^[:alnum:]_.-]|\$)"; then
-  deny "installing a password cracker or attack tool; heinzel \
+  deny "installing a password cracker or attack tool; jolitz \
 does not do this on any host (rules/ethics.md)"
 fi
 
@@ -738,60 +731,185 @@ if hit "$LOCKFILE"; then
     || hit '(^|[[:space:]])-delete([[:space:]]|$)' \
     || writes_to "$LOCKFILE"
   then
-    deny "/etc/heinzel.conf is the server lock; only the \
-machine's owner changes it, never heinzel (cat and grep read it)"
+    deny "/etc/jolitz.conf is the server lock; only the \
+machine's owner changes it, never jolitz (cat and grep read it)"
   fi
 fi
 
 if hit "$INTERP" && hit "$LOCKFILE"; then
-  deny "an interpreter with /etc/heinzel.conf on its command \
+  deny "an interpreter with /etc/jolitz.conf on its command \
 line can lift the server lock - read it with cat or grep instead"
 fi
 
 # --- The operator's override ----------------------------------
-# Everything above holds whatever HEINZEL_GUARD_DISABLE says.
+# Everything above holds whatever JOLITZ_GUARD_DISABLE says.
 # Everything below is a taboo the operator can lift for a
 # session, by exporting it before the launch.
 [ "$GUARD_OFF" -eq 1 ] && exit 0
 
 # --- The guard's own files ------------------------------------
 # Rewriting the hook, or giving a settings file an env block,
-# disarms everything below. A command is judged when it names a
-# .claude path component or settings.local.json, or when the
-# session's cwd is inside a .claude directory: a relative target
-# there names no path at all. Then any write form counts, not
-# only one aimed at a spelled-out path: a redirect (except onto
-# /dev/null or a descriptor), sed or perl -i, an editor, a
-# delete, move, copy or re-permission, tee, find -delete, or an
-# interpreter. Accepted false positive: a read chained to an
-# unrelated write in the same command. Read the files in a call
-# of their own.
+# disarms everything below.
+#
+# A list of the ways to write cannot be closed: every review of
+# the earlier deny list found one more (ditto, curl -sSo, git
+# checkout-index, a glob, a cd out of skills/). So this section
+# is an ALLOW list. A command is in scope when it mentions .claude
+# in any case or spelling, names settings.local.json, or runs
+# with its cwd anywhere inside a .claude tree. In scope it may
+# only read: every invocation must be one of the read-only tools
+# below, with no redirect (except onto /dev/null or a
+# descriptor) and no command or process substitution. The one
+# exception is the macOS cleanup scanner, in exactly the two
+# forms its skill prescribes. Everything else that touches
+# .claude is denied; the operator runs it by hand.
 SELF_CWD=""
 if command -v jq >/dev/null 2>&1; then
   SELF_CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null) \
     || SELF_CWD=""
 fi
+LC_CWD=$(printf '%s' "$SELF_CWD" | LC_ALL=C tr '[:upper:]' '[:lower:]')
+LC_CMD=$(printf '%s' "$CMD" | LC_ALL=C tr '[:upper:]' '[:lower:]')
 IN_CLAUDE=0
-case "$SELF_CWD" in
-  */.claude|*/.claude/|*/.claude/hooks|*/.claude/hooks/*) IN_CLAUDE=1 ;;
+CWD_IN_CLAUDE=0
+case "$LC_CWD" in
+  */.claude|*/.claude/*) IN_CLAUDE=1; CWD_IN_CLAUDE=1 ;;
 esac
-if [ "$IN_CLAUDE" -eq 1 ] || hit "$SELF_ANY"; then
-  REDIR=$(printf '%s\n' "$CMD" \
-    | sed -E -e 's#[0-9]*>>?[[:space:]]*/dev/null##g' -e 's#[0-9]*>&[0-9-]##g')
-  if printf '%s\n' "$REDIR" | grep -q '>' \
-    || { hit '(^|[^[:alnum:]_-])(sed|perl)([^[:alnum:]_-]|$)' \
-         && hit '(^|[[:space:]])-i'; } \
-    || hit "(^|[^[:alnum:]_-])$EDITOR([^[:alnum:]_-]|\$)" \
-    || hit "(^|[^[:alnum:]_-])($CLOBBER|cp|tee|sponge|chflags)([^[:alnum:]_-]|\$)" \
-    || hit '(^|[[:space:]])-delete([[:space:]]|$)'
+case "$LC_CMD" in
+  *.claude*|*settings.local.json*) IN_CLAUDE=1 ;;
+esac
+# HFS+ skips zero-width characters and APFS folds a long s onto
+# s, so .clau<U+200B>de and ſettings.local.json reach the same
+# files. The shell drops quotes and backslashes (.cla""ude). With
+# all of those removed, either name in the rest puts the command
+# in scope. An umlaut elsewhere does not.
+UQ_CMD=$(printf '%s' "$LC_CMD" | LC_ALL=C tr -d '\200-\377"'\''\\')
+case $UQ_CMD in
+  *.claude*|*ettings.local.json*) IN_CLAUDE=1 ;;
+esac
+# A glob, brace or expansion in a path component can resolve to
+# .claude when the literal text before it still could: .c*,
+# .?laude, .{c,}laude, .$x, {.cl,}aude; .bash_profile.$(date)
+# cannot. Comments are skipped, as the shell skips them.
+# Only unquoted ones expand: inside quotes and after a backslash
+# they become _, so sed "s/ .*//" stays out of scope while
+# ".cl"* does not. A $ expands inside double quotes too, and an
+# unclosed quote counts as in scope. Accepted false positive:
+# such a command may only read. Not closable: a name built at run
+# time, in a variable (d=.cla; ${d}ude) or a command substitution
+# ($(printf .cla)ude). Every $( cannot count, or cp f
+# f.bak.$(date +%F) could not run. The guard is a backstop.
+GLOBBED=$(printf '%s\n' "$LC_CMD" | LC_ALL=C awk '
+  BEGIN { q = "" }
+  {
+    out = ""
+    for (i = 1; i <= length($0); i++) {
+      ch = substr($0, i, 1)
+      if (q == "" && ch == "#" \
+        && (i == 1 || index(" \t;&|(", substr($0, i - 1, 1)))) break
+      # An escaped character is literal: still part of the name,
+      # but no longer a glob.
+      if ((q == "" && ch == "\\") \
+        || (q == "\"" && ch == "\\" && index("\"\\$`", substr($0, i + 1, 1)))) {
+        i++; c = substr($0, i, 1)
+        out = out (index("*?[]{$", c) ? "_" : c); continue
+      }
+      if (q == "" && (ch == "\"" || ch == "\047")) { q = ch; continue }
+      if (q != "" && ch == q) { q = ""; continue }
+      if (q == "\047" && index("*?[]{$", ch)) ch = "_"
+      if (q == "\"" && index("*?[]{", ch)) ch = "_"
+      out = out ch
+    }
+    print out
+  }
+  END { if (q != "") print " .*" }')
+if printf '%s\n' "$GLOBBED" \
+  | LC_ALL=C grep -Eq \
+    '(^|[[:space:]/=<>:])(\.(c(l(a(u(de?)?)?)?)?)?[][*?{$]|\{[^[:space:]/]*\.)'; then
+  IN_CLAUDE=1
+fi
+# ANSI-C quoting with a hex, octal or Unicode escape spells any
+# name ($'\x2eclaude'). $'\t' and friends stay out of scope.
+if printf '%s\n' "$CMD" \
+  | LC_ALL=C grep -Eq "\\\$'[^']*\\\\([xuU]|[0-7])"; then
+  IN_CLAUDE=1
+fi
+if [ "$IN_CLAUDE" -eq 1 ]; then
+  # Backslash continuations folded, blanks squeezed. Any newline
+  # left separates a second command, so the scanner forms below
+  # only match a single line. With the cwd inside .claude, a bare
+  # redirect target is a guard file, so the redirect form is out.
+  NL=$(printf '\nx'); NL=${NL%x}
+  FLAT=$(printf '%s' "$CMD" \
+    | awk '{ if (sub(/\\$/, "")) printf "%s ", $0; else print }' \
+    | tr '\t' ' ' | tr -s ' ' | sed -e 's/^ //' -e 's/ $//')
+  SCAN='\.claude/skills/jolitz-macos-cleanup/scripts/scan\.py'
+  SARG='( ([A-Za-z0-9_.@:+-]+|"[A-Za-z0-9 _.@:+-]+"))*'
+  # Only the options CLAUDE.md prescribes, so no ProxyCommand,
+  # LocalCommand, -F or -S runs or reads anything else.
+  SSHOPT='( -o (BatchMode|ConnectTimeout|ControlMaster|ControlPath|ControlPersist|ServerAliveInterval|ServerAliveCountMax|Port)=[A-Za-z0-9_.%~/:@+-]+)* [A-Za-z0-9_][A-Za-z0-9_.@:-]*'
+  SOUT='( > [A-Za-z0-9_.-]+)?'
+  [ "$CWD_IN_CLAUDE" -eq 1 ] && SOUT=''
+  case "$FLAT" in
+    *"$NL"*|*"$(printf '\r')"*) FLAT='' ;;
+  esac
+  if [ -n "$FLAT" ] && { printf '%s\n' "$FLAT" | LC_ALL=C grep -Eq \
+       "^(/usr/bin/)?python3 $SCAN$SARG$SOUT\$" \
+    || printf '%s\n' "$FLAT" | LC_ALL=C grep -Eq \
+       "^ssh$SSHOPT /usr/bin/python3 -$SARG < $SCAN\$"; }
   then
-    deny "this command writes where the guard lives (.claude/hooks, \
-.claude/settings*.json); the operator edits those by hand - \
-read them with cat or grep in a call of their own"
-  fi
-  if hit "$INTERP"; then
-    deny "an interpreter next to the guard's own files can rewrite \
-them - read them with cat or grep"
+    :
+  else
+    case "$CMD" in
+      *'$('*|*'`'*|*'<('*|*'>('*)
+        deny "a command or process substitution next to the \
+guard's own files hides what it writes - read .claude with cat, \
+grep or ls in a call of their own" ;;
+    esac
+    REDIR=$(printf '%s\n' "$CMD" | sed -E \
+      -e 's#[0-9]*>>?[[:space:]]*/dev/null##g' -e 's#[0-9]*>&[0-9-]##g')
+    if printf '%s\n' "$REDIR" | grep -q '>'; then
+      deny "a redirect in a command that touches .claude can \
+overwrite the guard's own files - read them with cat, grep or \
+ls in a call of their own"
+    fi
+    READONLY='^(cd|pushd|popd|ls|cat|head|tail|wc|stat|file|grep|egrep|fgrep|diff|cmp|readlink|realpath|sha256sum|shasum|md5|md5sum|echo|printf|true|test|\[|jq|less|more)( |$)'
+    READGIT='^git( -C [^ ]+)? (log|show|diff|status|blame|ls-files|grep|rev-parse|cat-file)( |$)'
+    BAD=$(printf '%s\n' "$REDIR" | tr ';&|' '\n\n\n' \
+      | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+      | while IFS= read -r seg; do
+          [ -n "$seg" ] || continue
+          # The flags as the shell sees them, quotes removed
+          # (-"delete", --"output"). A brace or $ in a find or git
+          # segment can build a flag (-{delete,true}), so it does
+          # not pass.
+          uq=$(printf "%s" "$seg" | tr -d "\"'\\\\")
+          # git log/diff/show --output writes a file, grep -O and
+          # --ext-diff/--textconv run a program. git takes any
+          # unique prefix of a long option, so the prefixes count
+          # (--exit-code and --text with them). Not closable: a
+          # program set in git config (diff.external, a textconv
+          # driver) runs without a flag; the guard is a backstop.
+          if printf '%s\n' "$seg" | grep -Eq "$READONLY" \
+            || { printf '%s\n' "$seg" | grep -Eq "$READGIT" \
+              && ! printf '%s\n' "$uq" | grep -Eq \
+                '[{$]|(^| )-[A-Za-z]*O|(^| )--(op|ou|ex|te)[-a-z]*(=| |$)'; }
+          then
+            continue
+          fi
+          if printf '%s\n' "$seg" | grep -Eq '^find( |$)' \
+            && ! printf '%s\n' "$uq" \
+              | grep -Eq '[{$]|(^| )-(delete|exec|execdir|ok|okdir|fprint0?|fprintf|fls)( |$)'
+          then
+            continue
+          fi
+          printf '%s\n' "$seg"
+        done)
+    if [ -n "$BAD" ]; then
+      deny "a command that touches .claude may only read it (cat, \
+grep, ls, head, find without -exec or -delete, git log/show/diff) \
+- the guard's own files are edited by the operator by hand"
+    fi
   fi
 fi
 
@@ -1007,7 +1125,7 @@ fi
 
 # --- Boot loaders and firmware variables ----------------------
 # A boot entry, the boot order or the loader itself is the way
-# back into a host that has no console. heinzel reads them
+# back into a host that has no console. jolitz reads them
 # (efibootmgr -v, bootctl status, bless --info); a write runs
 # with the operator's override only (rules/efi-boot.md,
 # rules/dual-boot.md). Writers, by effect: efibootmgr in any
@@ -1024,12 +1142,12 @@ if hit '(^|[^[:alnum:]_.-])efibootmgr([^[:alnum:]_.-]|$)' \
 then
   deny "efibootmgr in a write form changes the boot entries or \
 the boot order (efibootmgr -v reads them); boot work needs the \
-operator override HEINZEL_GUARD_DISABLE"
+operator override JOLITZ_GUARD_DISABLE"
 fi
 if hit_without '(^|[^[:alnum:]_.-])grub2?-install([^[:alnum:]_.-]|$)' \
   '(^|[[:space:]])(-V|--version|--help)([[:space:]]|$)'; then
   deny "grub-install rewrites the boot loader; boot work needs the \
-operator override HEINZEL_GUARD_DISABLE"
+operator override JOLITZ_GUARD_DISABLE"
 fi
 if hit '(^|[^[:alnum:]_.-])update-grub2?([^[:alnum:]_.-]|$)' \
   || { hit '(^|[^[:alnum:]_.-])grub2?-mkconfig([^[:alnum:]_.-]|$)' \
@@ -1037,25 +1155,25 @@ if hit '(^|[^[:alnum:]_.-])update-grub2?([^[:alnum:]_.-]|$)' \
 then
   deny "update-grub and grub-mkconfig -o rewrite the boot loader \
 config (grub-mkconfig without -o only prints it); boot work needs the \
-operator override HEINZEL_GUARD_DISABLE"
+operator override JOLITZ_GUARD_DISABLE"
 fi
 if hit '(^|[^[:alnum:]_.-])bootctl([^[:alnum:]_.-]|$)' \
   && hit '(^|[[:space:]])(install|update|remove|cleanup|unlink|set-default|set-oneshot|set-timeout|set-timeout-oneshot|random-seed|reboot-to-firmware)([[:space:]]|$)'
 then
   deny "this bootctl verb installs, removes or reconfigures the \
 boot loader (bootctl status and list read it); boot work needs the \
-operator override HEINZEL_GUARD_DISABLE"
+operator override JOLITZ_GUARD_DISABLE"
 fi
 if hit_without '(^|[^[:alnum:]_.-])bless([^[:alnum:]_.-]|$)' \
   '(^|[[:space:]])(--info|--getBoot|--version|--help)([[:space:]]|$)'; then
   deny "bless in a write form changes what the Mac boots \
 (bless --info and --getBoot read it); boot work needs the \
-operator override HEINZEL_GUARD_DISABLE"
+operator override JOLITZ_GUARD_DISABLE"
 fi
 if hit '(^|[^[:alnum:]_.-])efivar([^[:alnum:]_.-]|$)' \
   && hit '(^|[[:space:]])(-w|--write|-a|--append)([[:space:]]|$)'; then
   deny "efivar -w writes a firmware variable; boot work needs the \
-operator override HEINZEL_GUARD_DISABLE"
+operator override JOLITZ_GUARD_DISABLE"
 fi
 if hit "$EFIVARS"; then
   if hit ">>?[[:space:]]*[\"']?[^[:space:];|&]*$EFIVARS" \
@@ -1066,7 +1184,7 @@ if hit "$EFIVARS"; then
     deny "writing to or deleting under the efivars mount changes \
 firmware variables and can brick the board (cat and ls read \
 them); boot work needs the \
-operator override HEINZEL_GUARD_DISABLE"
+operator override JOLITZ_GUARD_DISABLE"
   fi
 fi
 
@@ -1077,7 +1195,7 @@ fi
 # write to sudoers or to the account files themselves, where one
 # bad line is "sudo: parse error" for everybody. Creating an
 # account (useradd, pw useradd) and resetting a password stay
-# with the prompt: nothing breaks, and a reset is heinzel's own
+# with the prompt: nothing breaks, and a reset is jolitz's own
 # everyday work (rules/ethics.md).
 if hit '(^|[^[:alnum:]_.-])(userdel|deluser|luserdel|groupdel|delgroup|lgroupdel)([^[:alnum:]_.-]|$)' \
   || hit '(^|[^[:alnum:]_.-])pw[[:space:]]+(userdel|groupdel|user[[:space:]]+del|group[[:space:]]+del)([^[:alnum:]_-]|$)' \
@@ -1086,18 +1204,18 @@ if hit '(^|[^[:alnum:]_.-])(userdel|deluser|luserdel|groupdel|delgroup|lgroupdel
 then
   deny "deleting an account or a group locks people out and \
 cannot be undone; account work needs the \
-operator override HEINZEL_GUARD_DISABLE"
+operator override JOLITZ_GUARD_DISABLE"
 fi
 # visudo edits sudoers; visudo -c only checks a file.
 if hit_without '(^|[^[:alnum:]_.-])visudo([^[:alnum:]_.-]|$)' \
   '(^|[[:space:]])-c([[:space:]]|$)'; then
   deny "visudo edits sudoers, and one bad line locks everybody \
 out of sudo (visudo -c only checks); sudo work needs the \
-operator override HEINZEL_GUARD_DISABLE"
+operator override JOLITZ_GUARD_DISABLE"
 fi
 if hit '(^|[^[:alnum:]_.-])(vipw|vigr)([^[:alnum:]_.-]|$)'; then
   deny "vipw and vigr edit the account files in place; account \
-work needs the operator override HEINZEL_GUARD_DISABLE"
+work needs the operator override JOLITZ_GUARD_DISABLE"
 fi
 if hit "$SUDOERS"; then
   if hit '>>?[[:space:]]*["'\'']?[^[:space:];|&]*'"$SUDOERS" \
@@ -1109,7 +1227,7 @@ if hit "$SUDOERS"; then
   then
     deny "writing sudoers or a sudoers.d file grants or revokes \
 root rights (cat and visudo -c read it); sudo work needs the \
-operator override HEINZEL_GUARD_DISABLE"
+operator override JOLITZ_GUARD_DISABLE"
   fi
 fi
 if hit "$ACCOUNTS"; then
@@ -1123,7 +1241,7 @@ if hit "$ACCOUNTS"; then
     deny "writing an account file directly bypasses every check \
 useradd and passwd make (getent, grep and awk read them); \
 account work needs the \
-operator override HEINZEL_GUARD_DISABLE"
+operator override JOLITZ_GUARD_DISABLE"
   fi
 fi
 
@@ -1145,7 +1263,7 @@ fi
 #
 # This enumerates RUNTIMES, not write syntaxes, on purpose. The
 # set of ways to write a file grows with every language feature
-# and can never be closed; the set of interpreters heinzel might
+# and can never be closed; the set of interpreters jolitz might
 # meet on a server is small and moves slowly. It still is a list,
 # so this rule is a backstop against the everyday mistake, not a
 # sandbox: an interpreter that builds its target string at
@@ -1190,7 +1308,7 @@ line can write a firmware variable - read them with cat or ls \
 instead"
   fi
   if hit "$LOCKFILE"; then
-    deny "an interpreter with /etc/heinzel.conf on its command \
+    deny "an interpreter with /etc/jolitz.conf on its command \
 line can lift the server lock - read it with cat or grep instead"
   fi
 fi

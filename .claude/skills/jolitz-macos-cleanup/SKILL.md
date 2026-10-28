@@ -1,5 +1,5 @@
 ---
-name: heinzel-macos-cleanup
+name: jolitz-macos-cleanup
 argument-hint: "[app name]"
 description: Find and remove leftovers of uninstalled apps on a
   macOS machine, or uninstall one app with all its files, in
@@ -12,7 +12,7 @@ description: Find and remove leftovers of uninstalled apps on a
   only.
 ---
 
-# heinzel-macos-cleanup
+# jolitz-macos-cleanup
 
 Two modes on a macOS machine, local or over SSH:
 
@@ -20,13 +20,13 @@ Two modes on a macOS machine, local or over SSH:
 - **Uninstall:** one installed app with everything it created.
 
 **Never run automatically.** Only on explicit user request. The
-heinzel first-connection pipeline still applies first.
+jolitz first-connection pipeline still applies first.
 
 ## Workflow
 
-1. **Load overrides.** Apply the heinzel override chain (later
+1. **Load overrides.** Apply the jolitz override chain (later
    wins):
-   - `memory/custom-rules/heinzel-macos-cleanup.md` if present.
+   - `memory/custom-rules/jolitz-macos-cleanup.md` if present.
    - `memory/servers/<hostname>/memory.md`.
    - `memory/servers/<hostname>/rules.md` if present.
    `memory/custom-rules/all.md` is already loaded by the
@@ -45,12 +45,12 @@ heinzel first-connection pipeline still applies first.
    Local:
 
        /usr/bin/python3 \
-         .claude/skills/heinzel-macos-cleanup/scripts/scan.py orphans
+         .claude/skills/jolitz-macos-cleanup/scripts/scan.py orphans
 
    Remote (script on stdin, SSH options from `CLAUDE.md`):
 
        ssh <options> user@host /usr/bin/python3 - orphans \
-         < .claude/skills/heinzel-macos-cleanup/scripts/scan.py
+         < .claude/skills/jolitz-macos-cleanup/scripts/scan.py
 
    Log in as the user whose apps you clean up, never as root:
    the scanner reads its own user's Library and refuses root.
@@ -83,7 +83,7 @@ heinzel first-connection pipeline still applies first.
 10. **Log.** Journal and local changelog per
     `rules/changelog.md`:
 
-        logger -t heinzel "macOS cleanup: 42 leftovers of 9 \
+        logger -t jolitz "macOS cleanup: 42 leftovers of 9 \
         removed apps moved to Trash (1.2 GB)"
 
     For the uninstall mode, remove the app from

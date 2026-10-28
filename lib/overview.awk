@@ -1,4 +1,4 @@
-# overview.awk — renderer for bin/heinzel-overview.
+# overview.awk — renderer for bin/jolitz-overview.
 #
 # Input files (tab-separated, prepared by the script):
 #   hosts.tsv      host os ip distro lastconn tags port mode
@@ -11,7 +11,7 @@
 #   audit-cur.tsv  date host key value (newest snapshot)
 #   audit-prev.tsv date host key value (the one before)
 #   guard.tsv      time mode reason subject
-#   lint.txt       WARN lines of heinzel-memory-lint
+#   lint.txt       WARN lines of jolitz-memory-lint
 #
 # Variables: mode (html|text), today, now, days, tag, out,
 # mem, jq. Plain POSIX awk: it runs under the BWK awk of
@@ -353,7 +353,7 @@ function head(f, title) {
 
 function foot(f,   i) {
   printf "<p class=\"sub\" style=\"margin-top:40px\">Built %s by " \
-    "<code>bin/heinzel-overview</code> from <code>memory/</code>. " \
+    "<code>bin/jolitz-overview</code> from <code>memory/</code>. " \
     "No server was contacted.", esc(now) > f
   if (EP) {
     printf " End-of-life dates from endoflife.date, fetched" > f
@@ -505,7 +505,7 @@ function index_page(f,   i, k, h, n, cls, any, v, r, pa) {
 
   if (GN) {
     print "<h2>Guard denials, last 30 days</h2>" > f
-    print "<p class=\"sub\">From <code>~/.cache/heinzel/guard.log</code>. A denial that blocks real work is a false positive worth reporting; the commands stay in the log, not on this page.</p>" > f
+    print "<p class=\"sub\">From <code>~/.cache/jolitz/guard.log</code>. A denial that blocks real work is a false positive worth reporting; the commands stay in the log, not on this page.</p>" > f
     print "<div class=\"box\"><table><thead><tr><th>Count</th><th>Last</th><th>Reason</th></tr></thead><tbody>" > f
     for (i = 1; i <= GR; i++)
       printf "<tr><td>%d</td><td>%s</td><td>%s</td></tr>\n", gcount[grl[i]], \

@@ -14,7 +14,7 @@
 
 ## reload-always-ask
 # Services listed here will NOT auto-reload —
-# heinzel will ask before every `systemctl reload`.
+# jolitz will ask before every `systemctl reload`.
 # Use for stateful services where a bad config
 # reload could cause real damage.
 #
@@ -23,7 +23,7 @@
 
 ## restart-auto
 # Services listed here WILL auto-restart —
-# heinzel will run `systemctl restart` without
+# jolitz will run `systemctl restart` without
 # asking. Use for services that come back up
 # quickly and are not critical (e.g. reverse
 # proxies, stateless workers).
@@ -34,7 +34,7 @@
 
 ## restart-never
 # Services listed here CANNOT be restarted by
-# heinzel automatically — heinzel will refuse the
+# jolitz automatically — jolitz will refuse the
 # restart outright, without prompting, and tell
 # you to do it manually (or remove the entry).
 # Use for databases and anything where you want

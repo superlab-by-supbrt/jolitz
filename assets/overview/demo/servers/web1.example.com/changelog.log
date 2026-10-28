@@ -3,7 +3,7 @@ nginx now sends HSTS for app.example.com — because the
 security audit flagged its absence
   Detail: add_header Strict-Transport-Security
   "max-age=31536000" in /etc/nginx/sites-available/app.
-  Rollback: restore /var/backups/heinzel/app.20261027-1620.
+  Rollback: restore /var/backups/jolitz/app.20261027-1620.
   Verify: curl -sI shows the header; nginx -t ok.
 [2026-10-14 09:50] [alice as root]
 app.example.com now deploys blue/green, so releases go live
@@ -12,7 +12,7 @@ visitors
   Detail: templated app@.service (blue :4003, green :4005);
   upstream in /etc/nginx/snippets/app-upstream.conf.
   Rollback: re-enable app.service, restore the vhost backup
-  from /var/backups/heinzel/.
+  from /var/backups/jolitz/.
   Verify: 135 HTTPS probes during two slot switches, all 200.
   Flags: database migrations must now stay
   backward-compatible.

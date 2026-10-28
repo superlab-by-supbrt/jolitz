@@ -5,5 +5,5 @@ read-only: checked replication lag and the last backup
 sshd on db1 now allows key logins only — because password
 logins were still on
   Detail: PasswordAuthentication no in
-  /etc/ssh/sshd_config.d/10-heinzel.conf.
+  /etc/ssh/sshd_config.d/10-jolitz.conf.
   Rollback: delete that file, reload ssh.

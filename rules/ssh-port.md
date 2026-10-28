@@ -26,7 +26,7 @@ No line means port 22. Never write `- SSH port: 22`.
   a single call ("try 2200 this time") is not
   stored.
 - **`~/.ssh/config` sets `Port`** for the host: ssh
-  uses it without help, so heinzel adds nothing and
+  uses it without help, so jolitz adds nothing and
   does not copy it into memory — two sources drift.
 
 On a first connection the memory file does not
@@ -82,7 +82,7 @@ As usual. Read the error:
   listens on 22. Go to step 3.
 - Timeout — the host is down or a filter drops the
   packets. Do **not** try other ports: that adds
-  connections to a block that may be heinzel's own.
+  connections to a block that may be jolitz's own.
   Follow `rules/ssh-unreachable.md`, then ask
   (step 4).
 - Any other answer (`Permission denied`, `Host key
@@ -104,7 +104,7 @@ Any other answer (`Permission denied`, a banner
 error): stop and ask — something listens there, but
 it may be a container's SSH, not the host's sshd.
 
-heinzel keeps **no** list of "common" ports: several
+jolitz keeps **no** list of "common" ports: several
 ports in a row on one host look like a port scan to
 psad, portsentry and provider IPS. Never scan
 (`nc -z`, `nmap`, `ssh-keyscan`;
@@ -115,7 +115,7 @@ psad, portsentry and provider IPS. Never scan
 Same picker rules as `rules/ssh-user.md`
 (`AskUserQuestion`, ASCII fallback). Question:
 *"Port 22 on `<host>` <refused / timed out>. Which
-SSH port should heinzel use?"* Options:
+SSH port should jolitz use?"* Options:
 
 1. the first alternative port not yet tried —
    "from your alternative ports"
@@ -150,7 +150,7 @@ stored port, the port is not settled yet. Ask which
 known host it is (picker: each match as `host:port`,
 plus "a different machine") instead of assuming 22.
 
-The port heinzel connects to can also differ from
+The port jolitz connects to can also differ from
 the port sshd listens on: a router forwards 2222 to
 22 inside. The stored port is the connect port; a
 firewall on the host keeps open the ports sshd

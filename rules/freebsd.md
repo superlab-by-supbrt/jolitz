@@ -61,7 +61,7 @@ Rules for FreeBSD (all versions).
 - When changing pf rules over SSH, arm a rollback
   timer first (`rules/rollback-timer.md`). It
   reloads the saved ruleset
-  (`pfctl -f /var/backups/heinzel/pf.conf.<ts>`)
+  (`pfctl -f /var/backups/jolitz/pf.conf.<ts>`)
   rather than disabling pf, which would leave the
   host without a firewall.
 - After enabling, verify the default policy blocks
@@ -280,7 +280,7 @@ Lua scripts in `/boot/lua/`. The entry point is
   auto-detection can fail after cross-OS
   replacement or when EFI boot entries change.
 - **No `journalctl`** — logs are in `/var/log/`.
-  Use `tail`, `grep`, or `less`. The heinzel
+  Use `tail`, `grep`, or `less`. The jolitz
   changelog uses `logger`, which writes to syslog.
 - **`sudo` is not installed by default** — install
   with `pkg install sudo` and configure

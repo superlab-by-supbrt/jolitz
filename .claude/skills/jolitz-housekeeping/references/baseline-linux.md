@@ -230,7 +230,7 @@ systemctl is-active nftables
 nft list chains | grep -B1 -e ^table -e "hook input"
 ```
 
-Default deny as in `heinzel-security` →
+Default deny as in `jolitz-security` →
 `references/firewall-nftables-docker.md`. Input chains that
 fail2ban or Docker add with `policy accept;` are not a
 firewall, and neither is the stock config's empty chain.

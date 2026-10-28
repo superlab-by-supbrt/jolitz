@@ -1,5 +1,5 @@
 ---
-name: heinzel-email
+name: jolitz-email
 argument-hint: "[hostname | fleet] [recipient]"
 description: Send an email about a managed server — ad-hoc text
   and/or file attachments. Use when the user asks to "email me
@@ -16,14 +16,14 @@ description: Send an email about a managed server — ad-hoc text
   request.
 ---
 
-# heinzel-email
+# jolitz-email
 
 Send ad-hoc text and file attachments by email about a managed
 server. The report content is *about* the server; whether the
 mail leaves *from* the server or *from* your workstation is a
 per-host preference that's asked once and remembered.
 
-The full heinzel first-connection onboarding pipeline still
+The full jolitz first-connection onboarding pipeline still
 applies before any of this runs.
 
 ## Workflow
@@ -34,9 +34,9 @@ applies before any of this runs.
    detection, SSH user lookup, OS detection, server memory
    load, and activity check.
 
-2. **Load overrides.** Apply the heinzel rule-override chain
+2. **Load overrides.** Apply the jolitz rule-override chain
    (later wins):
-   - `memory/custom-rules/heinzel-email.md` if present.
+   - `memory/custom-rules/jolitz-email.md` if present.
    - `memory/servers/<host>/memory.md` (recipient, source,
      transport, policies — see "Per-server memory" below).
    - `memory/servers/<host>/rules.md` if present.
@@ -205,12 +205,12 @@ the only root-privileged operation in the workflow.
 ## Shared steps (both 5L and 5R converge here)
 
 6. **Compose.**
-   - Default subject: `[heinzel/<short-hostname>] <topic>` —
+   - Default subject: `[jolitz/<short-hostname>] <topic>` —
      even on the local-side path, the subject names the
      server the report is *about*.
    - Body: plain text, in this order and nothing else — one
      line naming what ran and on which host, the report or the
-     user's content verbatim, then the Heinzel closing (see
+     user's content verbatim, then the jolitz closing (see
      **Greeting** and **Signature** below). If the user asks to
      send command output, run the command and embed
      stdout/stderr inline in a fenced block in place of the
@@ -262,24 +262,24 @@ the only root-privileged operation in the workflow.
       5 attachments per message in v1; refuse the 6th and
       suggest splitting the mail.
 
-   **Voice.** Heinzel, not the operator, is the apparent
+   **Voice.** jolitz, not the operator, is the apparent
    author of every outgoing message. Body text — including
    any casual sign-off the user asks for above the fixed
-   greeting — must speak in Heinzel's voice on the
+   greeting — must speak in jolitz's voice on the
    operator's behalf. If a closing line precedes the
    greeting (e.g. "Have a good week,"), attribute it to
-   Heinzel acting for the operator, like:
+   jolitz acting for the operator, like:
 
    ```
    Have a good week,
-   Heinzel (for <Operator name>)
+   jolitz (for <Operator name>)
    ```
 
-   Never write `<Operator> (via heinzel)`, `<Operator> via
-   heinzel`, or any phrasing that frames the operator as
-   the author with Heinzel as a delivery channel. The
-   persona is **"Heinzel for `<Operator>`"**, not
-   "`<Operator>` via Heinzel". Same applies to the subject
+   Never write `<Operator> (via jolitz)`, `<Operator> via
+   jolitz`, or any phrasing that frames the operator as
+   the author with jolitz as a delivery channel. The
+   persona is **"jolitz for `<Operator>`"**, not
+   "`<Operator>` via jolitz". Same applies to the subject
    and any inline narration.
 
    **Greeting.** Before the signature, every outgoing
@@ -289,14 +289,14 @@ the only root-privileged operation in the workflow.
 
    ```
    Viele Grüße
-   Heinzel
+   jolitz
    ```
 
-   Heinzel is the author of the closing — not the operator.
+   jolitz is the author of the closing — not the operator.
    The operator attribution lives in the signature block
    below. Keep the greeting fixed across languages; the
    subject and body may be English, the "Viele Grüße /
-   Heinzel" close stays the tool's voice. Users who want a
+   jolitz" close stays the tool's voice. Users who want a
    different wording can set a `Greeting:` line in
    `memory/user.md` (global) or
    `memory/servers/<host>/memory.md` (per-host); if present,
@@ -350,7 +350,7 @@ the only root-privileged operation in the workflow.
    Do not overwrite an `Operator name:` line that already
    exists; user edits win.
 
-   **From header.** Heinzel mail is machine-generated. Set
+   **From header.** jolitz mail is machine-generated. Set
    `From: noreply@<sending-host-fqdn>` so recipients see at
    a glance that the mailbox is not monitored:
 
@@ -373,12 +373,12 @@ the only root-privileged operation in the workflow.
    `alerts@<host>`).
 
    **Reply-To header.** Because the From mailbox is unread,
-   every Heinzel message MUST carry a `Reply-To:` pointing
+   every jolitz message MUST carry a `Reply-To:` pointing
    at the human operator, so recipients hitting "Reply"
    land in a real inbox.
 
    The operator email is the address of the human
-   *using* Heinzel — the same person logged into Claude
+   *using* jolitz — the same person logged into Claude
    Code right now. It is **never** an account on the
    managed server: no `root@<host>`, no
    `<ssh-user>@<host>`, no alias derived from `/etc/aliases`
@@ -386,7 +386,7 @@ the only root-privileged operation in the workflow.
    `getent passwd`, `id`, or any mail metadata on the
    managed host to resolve it. Replies must land in the
    operator's real inbox, not on the server they were
-   asking Heinzel to work on.
+   asking jolitz to work on.
 
    **Resolve `<operator email>`** in this order, stop at
    the first hit. Never fabricate an email from a short
@@ -408,7 +408,7 @@ the only root-privileged operation in the workflow.
       workstation.
    5. If still nothing, omit the Reply-To header, tag
       the report **WARN** with the reason, and tell the
-      user before sending — don't ship a Heinzel mail
+      user before sending — don't ship a jolitz mail
       with no working reply path silently.
 
    **Persist on first resolution via 3/4** — write
@@ -417,7 +417,7 @@ the only root-privileged operation in the workflow.
    probes and the user can edit the canonical value.
    Do not overwrite an existing `Reply-To:` line.
 
-   **Anti-auto-reply headers.** Every Heinzel email is an
+   **Anti-auto-reply headers.** Every jolitz email is an
    automated status message about a managed server. It
    should never fan out out-of-office or vacation replies
    back at the operator. To that end, every outgoing
@@ -445,10 +445,10 @@ the only root-privileged operation in the workflow.
    Together the three cover RFC-compliant systems, legacy
    Unix responders, and the Exchange-flavoured world.
    Do not make them per-host configurable; there is no
-   realistic Heinzel message that should be treated as
+   realistic jolitz message that should be treated as
    a normal human email by an auto-responder.
 
-7. **Send.** Because Heinzel always injects custom headers
+7. **Send.** Because jolitz always injects custom headers
    (the anti-auto-reply triple above, plus MIME headers
    when attaching), the canonical send path builds the
    full RFC 822 message and pipes it to a sendmail-style
@@ -493,7 +493,7 @@ the only root-privileged operation in the workflow.
    hand — `text/plain` body plus parts that are
    `text/plain` for `text/*` MIME types (detected via
    `file --mime-type`) and base64-encoded
-   `application/octet-stream` otherwise. Heinzel
+   `application/octet-stream` otherwise. jolitz
    constructs the headers (including the anti-auto-reply
    triple) and the boundary itself, then pipes into
    `sendmail -t -oi` (or `msmtp -t` when only msmtp is
@@ -552,7 +552,7 @@ the only root-privileged operation in the workflow.
 10. **Log to changelog** per `rules/changelog.md`:
 
     ```
-    logger -t heinzel "Email to <recipient> from \
+    logger -t jolitz "Email to <recipient> from \
         <local|remote/<user>>: <subject>"
     ```
 
@@ -565,7 +565,7 @@ The mail is about the fleet, not one server, so steps
 
 1. Build the body locally:
 
-       bin/heinzel-overview --text --days 7
+       bin/jolitz-overview --text --days 7
 
    Add `--tag <name>` when the user names a group, and
    another `--days` when they name a period. If it
@@ -611,7 +611,7 @@ absence means "ask next time".
                                      # (global default in memory/user.md)
 - Greeting: <closing text>           # per-host override for the greeting
                                      # (global default in memory/user.md;
-                                     # absent = "Viele Grüße / Heinzel")
+                                     # absent = "Viele Grüße / jolitz")
 - From: <mailbox>                    # per-host From override
                                      # (default: noreply@<host>)
 - Reply-To: <addr>                   # per-host Reply-To override
@@ -621,7 +621,7 @@ absence means "ask next time".
 The two policy lines are deliberately separate: a user may
 be happy to use a mature postfix that's already there
 ("send: always") but want to be asked every time before
-heinzel installs new packages on a different server
+jolitz installs new packages on a different server
 ("install: ask" = line absent). Mirrors the shape of
 `memory/service-policy.md`'s split between `restart-auto`
 and `restart-never`.

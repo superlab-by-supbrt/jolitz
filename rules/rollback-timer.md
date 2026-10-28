@@ -3,17 +3,17 @@
 Technique B of `rules/way-back.md`.
 
 Some changes, when they go wrong, take away the
-only way to fix them: heinzel's SSH connection. A
+only way to fix them: jolitz's SSH connection. A
 new IP address with a typo, a firewall rule in the
 wrong order, a route that sends the replies
 elsewhere. A backup does not help then, because
 restoring it needs a login.
 
-So before such a change heinzel arms a timer on the
+So before such a change jolitz arms a timer on the
 host that restores the old state on its own. Only a
 successful fresh login after the change disarms it.
 If nobody disarms it (the login fails, the session
-dies, heinzel crashes), the host rolls itself back.
+dies, jolitz crashes), the host rolls itself back.
 
 ## When it applies
 
@@ -42,7 +42,7 @@ is reached remotely by others or has no keyboard.
 
 A one-shot rollback timer armed in a running
 session is a safety net, not a run with nobody at
-the keyboard (`CLAUDE.md` → What Heinzel does not
+the keyboard (`CLAUDE.md` → What jolitz does not
 do). It is always allowed.
 
 ## The window
@@ -69,7 +69,7 @@ guard hook denies a redirect onto a computed target.
 
 1. **No other window open.** On Linux with systemd:
 
-       systemctl list-timers --all 'heinzel-rollback-*'
+       systemctl list-timers --all 'jolitz-rollback-*'
 
    A pending timer means another change is still in
    its window: wait for it or ask the user.
@@ -78,20 +78,20 @@ guard hook denies a redirect onto a computed target.
    `rules/backups.md`. For a live firewall also save
    the running ruleset (`nft list ruleset`,
    `iptables-save`, `pfctl -sr`) into
-   `/var/backups/heinzel/`.
+   `/var/backups/jolitz/`.
 
 3. **Write the rollback script** to
-   `/var/backups/heinzel/rollback-<ts>.sh`,
+   `/var/backups/jolitz/rollback-<ts>.sh`,
    `chmod 700`. It restores the **previous state**,
    not "everything off": the old file and its
    activation, the old ruleset, the old address. It
    ends with one journal line:
 
        #!/bin/sh
-       cp -p /var/backups/heinzel/50-cloud-init.yaml.<ts> \
+       cp -p /var/backups/jolitz/50-cloud-init.yaml.<ts> \
          /etc/netplan/50-cloud-init.yaml
        netplan apply
-       logger -t heinzel "rollback-<ts> ran: network config restored"
+       logger -t jolitz "rollback-<ts> ran: network config restored"
 
    Disabling the firewall is the rollback only when
    it was disabled before the change.
@@ -100,22 +100,22 @@ guard hook denies a redirect onto a computed target.
    session.
    - Linux with systemd:
 
-         systemd-run --unit=heinzel-rollback-<ts> \
+         systemd-run --unit=jolitz-rollback-<ts> \
            --on-active=120 \
-           /var/backups/heinzel/rollback-<ts>.sh
+           /var/backups/jolitz/rollback-<ts>.sh
 
      Check it shows up in `systemctl list-timers`.
    - FreeBSD:
 
-         daemon -f -p /var/run/heinzel-rollback-<ts>.pid \
-           sh -c 'sleep 120; sh /var/backups/heinzel/rollback-<ts>.sh'
+         daemon -f -p /var/run/jolitz-rollback-<ts>.pid \
+           sh -c 'sleep 120; sh /var/backups/jolitz/rollback-<ts>.sh'
 
      Not `at`: `atrun` runs from cron every five
      minutes, so the window becomes unpredictable.
    - Anything else (macOS, NetBSD, OpenRC):
 
-         nohup sh -c 'echo $$ > /var/run/heinzel-rollback-<ts>.pid; \
-           sleep 120; sh /var/backups/heinzel/rollback-<ts>.sh' \
+         nohup sh -c 'echo $$ > /var/run/jolitz-rollback-<ts>.pid; \
+           sleep 120; sh /var/backups/jolitz/rollback-<ts>.sh' \
            >/dev/null 2>&1 &
 
    No timer, no change: join steps 4 and 5 with
@@ -127,7 +127,7 @@ guard hook denies a redirect onto a computed target.
    drop the session, so a dying SSH connection does
    not kill the apply halfway:
 
-       systemd-run --unit=heinzel-apply-<ts> --wait netplan apply
+       systemd-run --unit=jolitz-apply-<ts> --wait netplan apply
 
    Where a tool separates runtime from boot config,
    change the runtime only and persist after step 7:
@@ -143,7 +143,7 @@ guard hook denies a redirect onto a computed target.
          -o ControlMaster=no -o ControlPath=none \
          -o HostKeyAlias=<hostname> root@<new-address> true
 
-   `HostKeyAlias` checks the key heinzel already
+   `HostKeyAlias` checks the key jolitz already
    knows; a new address is not in `known_hosts` and
    `BatchMode` refuses it otherwise. The old session
    proves nothing: the control socket and connection
@@ -153,10 +153,10 @@ guard hook denies a redirect onto a computed target.
 7. **Disarm only after that login worked**, and
    through it:
 
-       systemctl stop heinzel-rollback-<ts>.timer
+       systemctl stop jolitz-rollback-<ts>.timer
 
    FreeBSD and the rest:
-   `pkill -F /var/run/heinzel-rollback-<ts>.pid`.
+   `pkill -F /var/run/jolitz-rollback-<ts>.pid`.
    Check the timer is gone, then persist the runtime
    change (firewalld: repeat the command with
    `--permanent`) and update server memory with the
@@ -167,7 +167,7 @@ guard hook denies a redirect onto a computed target.
 Do not race the timer and do not fix the change
 through the old session. Wait the window plus 30
 seconds, log in on the old address and read
-`journalctl -t heinzel --since '-10 min'` (FreeBSD:
+`journalctl -t jolitz --since '-10 min'` (FreeBSD:
 `/var/log/messages`) for the `rollback-<ts> ran`
 line. Report in one line what was rolled back, then
 find the cause before trying again.
@@ -180,7 +180,7 @@ say plainly that the rollback did not bring it back.
 
 `netplan try` and `iptables-apply` roll back on
 their own, but confirm only from a keyboard on the
-terminal they run in. heinzel runs without a
+terminal they run in. jolitz runs without a
 terminal (`BatchMode`) and confirms from a second
 login, so they would always roll back. Use the
 recipe above instead.
@@ -192,7 +192,7 @@ from disk without the timer. Never reboot inside
 it. For a file-based change (netplan, `rc.conf`)
 say once that this residual risk exists.
 
-The rollback scripts stay in `/var/backups/heinzel/`
+The rollback scripts stay in `/var/backups/jolitz/`
 and age out with the backups after 30 days. Record
 the window, the outcome and the script path in the
 local changelog under `Rollback:`

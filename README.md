@@ -1,43 +1,40 @@
-# jolitz — System Administration with Safety Guardrails
+# jolitz
 
-jolitz is a set of rules that turns an AI coding assistant
-into a cautious, methodical sysadmin. Describe what you need
-in plain English. It works out the right commands for your
-OS, explains each one, and waits for your approval. It backs
-up configs, tests before applying, and remembers every server
-it has worked on.
+An AI at the keyboard of your servers, with a sysadmin's
+habits: it looks before it touches, backs up before it edits,
+knows the way back before it changes anything, and does
+nothing without your OK.
 
-It manages Linux, FreeBSD, NetBSD and macOS, remote over SSH or on
-the local machine, and runs in
-[Claude Code](https://docs.anthropic.com/en/docs/claude-code),
-[OpenCode](https://opencode.ai) or any terminal AI tool that
-reads project files and runs shell commands.
+jolitz is a rule set for a terminal AI tool
+([Claude Code](https://docs.anthropic.com/en/docs/claude-code),
+[OpenCode](https://opencode.ai) or any tool that reads project
+files and runs shell commands). It manages Linux, FreeBSD,
+NetBSD and macOS, over SSH or on the local machine.
 
-jolitz is a fork of
-[heinzel](https://github.com/wintermeyer/heinzel) by Stefan
-Wintermeyer; see [Origin](#origin). Inside, the rules, skills
-and journal entries still call the agent "heinzel", which
-keeps merges from upstream simple. Throughout this README,
-"Heinzel" means the agent as it runs.
+Free and open source under the MIT license, every feature
+included. There is no paid edition, and there will not be
+one.
 
-## Install
+```
+❯ /var is full on web1.example.com, what is eating it?
+❯ nginx answers 502 on shop.example.com
+❯ The certificate on mail.example.com runs out on Friday
+❯ Load on db1 has been at 12 since yesterday, why?
+❯ What did we change on app2 last week?
+❯ Replace CentOS with Debian on old.example.com
+❯ Auf backup1 läuft die Platte voll, räum die alten Dumps weg
+```
 
-You need:
+Ask in English, German or any other language; jolitz answers
+in the language you write. `Language:` in `memory/user.md`
+sets the default.
 
-- **An AI coding assistant in the terminal**, e.g. Claude
-  Code or OpenCode.
-- **SSH access to the server** as a normal user or as root,
-  with a key that does not ask for a passphrase. Not needed
-  for the local machine. New to SSH keys? See the
-  [Arch wiki guide](https://wiki.archlinux.org/title/SSH_keys).
-- **A workstation** running Linux, macOS, FreeBSD or Windows.
-  On Windows use
-  [WSL](https://learn.microsoft.com/windows/wsl/), or start
-  the AI tool from the Git Bash of
-  [Git for Windows](https://gitforwindows.org/). PowerShell
-  and `cmd.exe` are not supported.
+## Start
 
-Then:
+You need a terminal AI tool, a workstation with Linux, macOS,
+FreeBSD or Windows (WSL or Git Bash; not PowerShell or
+`cmd.exe`), and an SSH key without a passphrase for the
+servers, as a normal user or root.
 
 ```
 git clone https://github.com/superlab-by-supbrt/jolitz.git
@@ -45,342 +42,120 @@ cd jolitz
 claude        # or: opencode
 ```
 
-```
-❯ Install postgresql on server1.example.com
-```
+On the first connection jolitz asks once for what it cannot
+detect, usually the SSH user, and keeps the answer in
+`memory/user.md`. Pre-fill it from `memory/user.md.example`,
+language included (`Language: German`).
 
-On the first connection Heinzel may ask what it cannot
-detect, usually the SSH user. The answer goes to
-`memory/user.md`, so it asks once. You can pre-fill that file
-from `memory/user.md.example`. It also holds your language
-(`Language: German`).
+## What it does
 
-Heinzel proposes every command, says what it does and why,
-and waits for your approval.
+Every connection runs the same pipeline, also for a quick
+`df -h`: access lists, server lock, DNS aliases, SSH user, OS
+detection, the server's memory and the last 7 days of
+jolitz activity on it. Then the rule file for that platform
+supplies the commands, the package manager and the firewall
+tool.
 
-Heinzel shares one SSH connection per host and keeps it open
-for 10 minutes after the last call. The sockets live in
-`~/.cache/heinzel` (mode 0700), so any process of your local
-user can use an open connection without the key.
-
-## What you can ask
-
-- `Check on web1.example.com`: reads the server's memory file
-  and recent changes, then picks up where the last session
-  ended.
-- `Run housekeeping on app.example.com`: a health report on
+- **Housekeeping.** `Run housekeeping on app.example.com`:
   disk, memory, load, updates, firewall, certificates and
-  failed services. Problems come first.
-- `Run a security audit on app.example.com`: SSH, firewall,
-  accounts, open ports and kernel settings, by severity.
-- `Run a fleet audit`: compares update, sshd, firewall, mail
-  and time-sync policies across all known servers and shows
-  where they disagree. Changes nothing.
-- `Email me the output of "df -h" from app.example.com`:
-  sends text or files by mail, from your workstation or from
-  the server.
-- `Clean up leftovers of old apps on this Mac`: finds what
-  removed apps left in `~/Library` and `/Library`. Only what
-  you approve goes to the Trash.
-- `Update all Homebrew packages on this Mac`: local mode, no
-  SSH, same rules.
-- `Show me an overview of my servers`: builds
-  `memory/overview/index.html` from memory, without SSH (see
-  [Fleet overview](#fleet-overview)).
-- `Give me the handover sheet for web1.example.com`: one page
-  with facts, open to-dos, standing constraints, own rules
-  and every change with its way back.
-- `Run a fleet audit for prod`: the audit, limited to servers
-  tagged `prod`, with what changed since the last audit.
-- `Email me the weekly fleet summary`: changes, to-dos,
-  stale servers, end-of-life dates and audit drift as one
-  plain-text mail from your workstation.
-- `/plan Migrate the database on db.example.com`: explores
-  and drafts a plan, changes nothing until you approve.
-  `/plan` is Claude Code. In OpenCode, ask Heinzel to plan
-  first.
+  failed services, problems first.
+- **Security audit.** `Run a security audit on
+  app.example.com`: SSH, firewall, accounts, open ports and
+  kernel settings, by severity.
+- **Fleet overview.** `Show me an overview of my servers`:
+  one page per fleet and a handover sheet per server, built
+  from memory without SSH ([Fleet overview](#fleet-overview)).
+- **Fleet audit.** `Run a fleet audit for prod`: update,
+  sshd, firewall, mail and time-sync policy side by side, for
+  every known server or one tag, with what changed since the
+  last audit. Changes nothing.
+- **Fleet summary.** `Email me the weekly fleet summary`:
+  changes, to-dos, stale servers, end of life and audit drift
+  as one plain-text mail.
+- **Scheduled runs.** `Email me a housekeeping report for
+  every server each Monday`: cron or a systemd timer with
+  `claude -p` (`rules/scheduled-housekeeping.md`).
+- **OS replacement.** Wipe and reinstall over SSH, with the
+  partitions freed without data loss
+  (`rules/os-replacement.md`, `rules/partition-staging.md`,
+  `rules/cloud-image.md`). Needs the guard lifted.
+- **Dual boot and EFI.** A second OS next to the first, boot
+  entries and boot loaders (`rules/dual-boot.md`,
+  `rules/efi-boot.md`). Needs the guard lifted.
+- **Deploy users.** A dedicated account and key for CI, a
+  sudo line for the one command that needs it, with the
+  guard lifted (`rules/deployment.md`).
+- **Email.** `Email me the output of "df -h" from
+  app.example.com`, from your workstation or the server.
+- **macOS.** `Clean up leftovers of old apps on this Mac`
+  finds what removed apps left behind; only what you approve
+  goes to the Trash. Needs the Command Line Tools.
+- **Plans.** `/plan Migrate the database on db.example.com`
+  explores and drafts, and changes nothing until you approve.
 
-More that happens without asking:
-
-- **OS detection.** On first contact Heinzel detects the OS
-  and hardware and loads the rule file for that platform.
-- **Memory.** Each server gets a folder under
-  `memory/servers/` with its state, a changelog and an open
-  to-do list. An interrupted job shows up as pending on the
-  next connection.
-- **Long jobs.** A command that can take more than a
-  minute runs as a job on the host, output and exit
-  status in files, and is read back later, after a
-  dropped connection or in a new session too
-  (`rules/ssh-connections.md`).
-- **DNS aliases.** Several names for the same IP share one
-  memory. Each alias can have its own SSH user.
-- **SSH ports.** A port other than 22 is stored per server.
-  List the ports you use as `Alternative SSH ports:` in
-  `memory/user.md`. Heinzel tries those and never scans.
-- **Email details.** Mails carry a short signature with the
-  operator's name (`Operator name:` in `memory/user.md`) and
-  headers that keep out-of-office replies away. The first
-  mail per host asks where to send from. Heinzel uses an
-  existing MTA and asks before installing one.
-
-The macOS cleanup scanner needs the Command Line Tools
-(`xcode-select --install`).
-
-## Origin
-
-This is a fork of
-[heinzel](https://github.com/wintermeyer/heinzel) by Stefan
-Wintermeyer, under the MIT license. It keeps the work that
-upstream moved out in 3.0: partitions, boot loaders and OS
-replacement (`rules/os-replacement.md`, `rules/efi-boot.md`),
-accounts, SSH keys, sudo and deploy users
-(`rules/deployment.md`), secret rotation (`rules/secrets.md`),
-the fleet audit skill and scheduled housekeeping. It is not
-affiliated with or endorsed by the upstream author.
-
-## Safety & guardrails
-
-The safety rules are part of every session.
-
-- **Asks before acting.** Destructive commands, firewall
-  changes, reboots and service restarts need your approval.
-  Reloads run on their own when the config test passes
-  (`rules/service-reload.md`, `memory/service-policy.md`).
-- **Hard guardrails (Claude Code).** A PreToolUse hook
-  (`.claude/hooks/guard-taboos.sh`) blocks the absolute
-  taboos in every permission mode, even
-  `--dangerously-skip-permissions`: halt and poweroff,
-  `mkfs`, partition-table writers, boot-loader and EFI
-  writers, deleting or overwriting SSH keys, writes to
-  `sshd_config`, deleting accounts, writes to `sudoers`,
-  the account files and the server lock. It also catches
-  them inside `ssh host "…"`, behind `python3 -c` and when
-  the file-edit tools target one of those files. Read-only forms
-  (`fdisk -l`, `efibootmgr -v`, `visudo -c`) stay allowed.
-  For a legitimate exception such as an OS replacement,
-  start the session with `HEINZEL_GUARD_DISABLE=1`. Attack
-  tools and the server lock stay blocked even then. With the
-  guard on, the hook and `.claude/settings*.json` are
-  protected, and an assignment of the variable in a command
-  or in a written file is always denied, so the agent cannot
-  lift the guard itself. OpenCode does not run this hook;
-  there the written rules are the safety layer.
-- **Guard log, opt-in.** Start the session with
-  `HEINZEL_GUARD_LOG=1` and every denial is written to
-  `~/.cache/heinzel/guard.log` (mode 0600): time, reason and
-  the first 200 characters of the command, or only the path
-  of a file edit. The overview counts them by reason. A
-  denial that blocked real work is a false positive worth an
-  issue. A command line can contain a secret, which is why
-  the log is off by default. Writing it never changes a
-  decision.
-- **Verifies before it reports.** "It is gone since the
-  reboot" gets checked against the live system first
-  (`rules/verify-before-reporting.md`).
-- **Backs up config files** to `/var/backups/heinzel/` before
-  editing. Cleaned up after 30 days.
-- **Knows the way back before it changes anything.** Every
-  question before a change ends with `Way back: <how>` or
-  `Way back: none`. Heinzel prefers changes that last only
-  until the next reload until they are proven (`sysctl -w`
-  before `sysctl.d`, `mount` before `fstab`), keeps the old
-  kernel, cluster or binary until the new one works, and
-  tests failures that would only show at the next boot now
-  (`rules/way-back.md`).
-- **Rolls back what locks it out.** Before a change that can
-  cut off the login (IP address, route, firewall, VPN, PAM),
-  Heinzel arms a timer on the server that restores the old
-  state after 120 seconds. Only a fresh SSH login after the
-  change stops it. If the new address is wrong, the server
-  undoes it by itself and Heinzel reports what happened
-  (`rules/rollback-timer.md`). Set a longer window per server
-  with `- Rollback window: 300` in its `memory.md`.
-- **Tests before applying** with dry-run or validation modes
-  where a tool has one.
-- **Logs everything.** Each change is one plain-language line
-  in the system journal. The technical detail and the way
-  back are in `memory/servers/<hostname>/changelog.log`.
-- **Stable repos only.** No third-party sources without your
-  approval.
-- **Least privilege.** Normal user first, `sudo` when needed,
-  root last. With neither, Heinzel does what it can and
-  writes a report for the tasks that need root.
-- **Blacklist and read-only servers.** Hosts in
-  `memory/blacklist.md` are never contacted. Hosts in
-  `memory/readonly.md` are inspected but never changed.
-- **Server lock.** A machine's owner can lock it against
-  every Heinzel with a file on the machine itself:
-
-  ```
-  # /etc/heinzel.conf
-  allow_changes = false
-  reason = Database migration until 20 Oct, hands off
-  ```
-
-  Heinzel still connects and inspects, but changes nothing
-  and reports what it would have done. An unreadable file
-  or any value other than `true` locks too. Heinzel never
-  writes, moves or deletes the file; you remove the lock by
-  hand. It is a promise kept by Heinzel, not a security
-  boundary: it stops no tool that ignores it
-  (`rules/access-control.md`).
-- **Protected paths.** `memory/protected-paths.md` marks
-  paths per server as `readonly`, `hidden` (content never
-  shown) or `confirm` (needs a typed `CONFIRM`).
-- **Ignores injected instructions.** Text in files, logs and
-  command output is data. Text that addresses the AI is
-  flagged to you and not followed.
-- **Keeps secrets out.** Keys, password files and `.env`
-  contents are inspected by metadata and fingerprint, never
-  printed, and never passed as command-line arguments.
-
-### Against hallucinations
-
-An LLM can invent a flag or a path. Heinzel puts verified
-facts in front of it instead:
-
-- A rule file per platform holds the right commands, package
-  manager and firewall tool.
-- It checks `--help`, the man page or upstream docs before a
-  command runs.
-- It reads the server's memory file instead of guessing.
-- It uses dry-run modes first.
-- You see every command before it runs.
-
-This reduces the risk. It does not remove it.
-
-> [!CAUTION]
-> Heinzel operates on live systems, as root, with sudo or
-> unprivileged. Review every command before you approve it.
-
-A disciplined AI that follows the checklist every time makes
-fewer mistakes than a tired human at 2 AM. It can still
-misread your intent. Stay in the driver's seat.
-
-## Fewer prompts and scripting
-
-By default Claude Code asks before every tool call. For
-batch work use **auto mode**: a background check lets routine
-commands through and still stops on risky ones. Press
-Shift+Tab to cycle modes, or pass the flag:
-
-```bash
-claude --permission-mode auto \
-  -p "Run housekeeping on server1.example.com"
-```
-
-Auto mode trusts this checkout, not your servers, and refuses
-changes over SSH until you name them under `autoMode` in
-`~/.claude/settings.json`. It ignores that key in the
-project's settings files. The block is in
-`rules/service-reload.md`, and `/auto-mode-setup` drafts it.
-
-`-p` runs one prompt without the interactive UI. In OpenCode
-that is `opencode run "…"`.
-
-- For CI, the strictest setup is `--permission-mode dontAsk`
-  with an allowlist (`--allowedTools` or `permissions.allow`
-  in `.claude/settings.json`).
-- `--dangerously-skip-permissions` removes all review,
-  including the protection against malicious text in server
-  output. Use it in disposable environments only.
-- Whatever the mode, Heinzel's own rules still apply. See
-  the [permission modes docs](https://code.claude.com/docs/en/permission-modes)
-  for details.
-
-A nightly health check by cron:
-
-```
-17 6 * * * cd /path/to/heinzel && flock -n \
-  /tmp/heinzel-cron-server1.lock timeout 30m \
-  /abs/path/to/claude --permission-mode auto \
-  -p "Run housekeeping on server1.example.com and \
-email me the report" >> ~/heinzel-cron.log 2>&1
-```
-
-Run the exact prompt interactively once first, so one-time
-questions are answered and stored. Details and a systemd
-timer variant: `rules/scheduled-housekeeping.md`.
+Long jobs run on the host with their output in files, so a
+dropped connection loses nothing. SSH runs over one shared
+connection per host, held for 10 minutes; the sockets live in
+`~/.cache/jolitz` (mode 0700).
 
 ## Fleet overview
 
-Everything heinzel learns about your servers is in
-`memory/`. `bin/heinzel-overview` turns it into pages you can
-read at a glance, without connecting to any server:
+Everything jolitz learns about your servers is in `memory/`.
+`bin/jolitz-overview` turns it into pages, without touching a
+server:
 
 ```bash
-bin/heinzel-overview            # memory/overview/index.html
-bin/heinzel-overview --eol      # first fetch end-of-life dates
-bin/heinzel-overview --tag prod # only servers tagged prod
-bin/heinzel-overview --text     # plain text, last 7 days
+bin/jolitz-overview            # memory/overview/index.html
+bin/jolitz-overview --eol      # fetch end-of-life dates first
+bin/jolitz-overview --tag prod # only servers tagged prod
+bin/jolitz-overview --text     # plain text, last 7 days
 ```
 
-![Fleet overview with servers, end-of-life dates, to-dos, changes and audit drift](assets/overview/overview.png)
-
-The start page shows:
+![Fleet overview: servers, end of life, to-dos, changes, audit drift](assets/overview/overview.png)
 
 - **Needs attention:** releases past or within 180 days of
   their end of life, servers not connected for 90 days,
   settings that differ between servers or changed since the
-  last fleet audit, and memory files with a problem.
+  last fleet audit, memory files with a problem.
 - **Servers:** OS, end of life, IP, SSH port, aliases, tags,
-  own rule overrides, last connection (amber after 30 days,
-  red after 90), open to-dos and the last change.
-- **Open to-dos** of all servers, **changes** of the last 30
-  days with their detail and way back, the **fleet audit**
-  table, and, if you enabled it, the **guard denials**.
+  own rules, last connection (amber after 30 days, red after
+  90), open to-dos, last change.
+- **Open to-dos, changes** of the last 30 days with detail
+  and way back, the **fleet audit** table and, if enabled,
+  the **guard denials**.
 
 Tag buttons filter the page. Each server gets a handover
-sheet, `memory/overview/hosts/<hostname>.html`: facts, open
+sheet, `memory/overview/hosts/<host>.html`: facts, open
 to-dos, standing constraints (the `Flags:` of its
-changelog), its `rules.md`, every change with detail and
-rollback, its audit values and the full `memory.md`. It
-prints cleanly.
+changelog), its `rules.md`, every change with detail and way
+back, its audit values and the full `memory.md`. It prints
+cleanly.
 
 ![Handover sheet of one server](assets/overview/host.png)
 
-Try it on the demo data in the repository:
+On the demo data in the repository:
 
 ```bash
-bin/heinzel-overview -d assets/overview/demo -o /tmp/fleet-demo
+bin/jolitz-overview -d assets/overview/demo -o /tmp/fleet-demo
 open /tmp/fleet-demo/index.html   # xdg-open on Linux
 ```
 
-### Tags
+**Tags.** Tell jolitz what a server is for; it records the
+tags in the server's `memory.md` (`- Tags: prod, web`). The
+fleet audit, `--tag` and the summary mail take a tag.
 
-Tell heinzel what a server is for, and it records it in the
-server's `memory.md`:
-
-```markdown
-# web1.example.com
-- IP: 203.0.113.10
-- OS: Ubuntu 24.04.3 LTS
-- Tags: prod, web
-- Last connected: 2026-10-27
-```
-
-`Run a fleet audit for prod`, `bin/heinzel-overview --tag
-prod` and the fleet summary mail all take a tag.
-
-### End of life
-
-`--eol` asks [endoflife.date](https://endoflife.date) for the
-releases of the systems in your memory and caches the answer
-in `memory/eol/`. Only product names such as `debian` leave
-your machine, never a host name. The page names the source
-and the fetch date. Without `--eol` it uses the cache. Known
-products: Debian, Ubuntu, RHEL, Rocky, AlmaLinux, CentOS
+**End of life.** `--eol` asks [endoflife.date](https://endoflife.date)
+for the releases in your memory and caches the answer in
+`memory/eol/`. Only product names such as `debian` leave your
+machine, never a host name. Without `--eol` the cache is
+used. Known: Debian, Ubuntu, RHEL, Rocky, AlmaLinux, CentOS
 Stream, Fedora, openSUSE Leap, SLES, FreeBSD, NetBSD, macOS,
-Alpine, Proxmox VE and OPNsense.
+Alpine, Proxmox VE, OPNsense.
 
-### Plain text and mail
-
-`--text` prints the same summary for a terminal or a mail.
-On the demo data:
+**Plain text and mail.** `--text` on the demo data:
 
 ```
-$ bin/heinzel-overview -d assets/overview/demo --text --tag prod
+$ bin/jolitz-overview -d assets/overview/demo --text --tag prod
 jolitz fleet summary, 2026-10-28, tag prod
 Hosts: 2, open to-dos: 2, changes in 7 days: 1
 
@@ -405,33 +180,28 @@ Memory lint: 0 warnings
 EOL dates: endoflife.date, fetched debian 2026-10-28, macos 2026-10-28, rocky-linux 2026-10-28, ubuntu 2026-10-28
 ```
 
-`Email me the weekly fleet summary` sends this from your
-workstation. Scheduled every Monday by cron:
+Every Monday by cron:
 
 ```
 23 7 * * 1 cd /path/to/jolitz && flock -n \
-  /tmp/heinzel-cron-fleet.lock timeout 10m \
+  /tmp/jolitz-cron-fleet.lock timeout 10m \
   /abs/path/to/claude --permission-mode auto \
   -p "Email me the weekly fleet summary" \
-  >> ~/heinzel-cron.log 2>&1
+  >> ~/jolitz-cron.log 2>&1
 ```
 
-### Fleet audit history
-
-Each fleet audit saves its values in
+**Audit history.** Each fleet audit saves its values in
 `memory/audits/<YYYY-MM-DD-HHMM>.json` and reports what
 changed since the previous one. A change no changelog entry
-explains was made outside heinzel, and the report says so.
-Format: `.claude/skills/heinzel-fleet-audit/references/snapshot.md`.
+explains was made outside jolitz, and the report says so.
+Format: `.claude/skills/jolitz-fleet-audit/references/snapshot.md`.
 
-### Memory lint
-
-`bin/heinzel-memory-lint` checks the memory files. Heinzel
-runs it after each memory update, and the overview runs it
+**Memory lint.** `bin/jolitz-memory-lint` checks the memory
+files. jolitz runs it after each memory update, the overview
 before it writes a page:
 
 ```
-$ bin/heinzel-memory-lint
+$ bin/jolitz-memory-lint
 WARN  db1.example.com: memory.md: tag "DB" is not lowercase letters, digits and -
 ERROR web1.example.com: servers/web1.example.com/memory.md:14: looks like a secret value; record its location, not the value (rules/secrets.md)
 memory lint: 4 hosts, 1 errors, 1 warnings
@@ -440,109 +210,222 @@ memory lint: 4 hosts, 1 errors, 1 warnings
 - **ERROR:** something that looks like a credential: a
   private key block, a known token format, a password in a
   URL or in `PASSWORD=`, a password hash. The line number is
-  printed, the value never is. The overview refuses to build
+  printed, never the value. The overview refuses to build
   until it is gone, so a secret never lands in a page you
-  might forward. `Database password: in /root/.pgpass
-  (0600)` is a location and passes.
-- **WARN:** no `OS:` or `Last connected:` line, a date that
-  is not `YYYY-MM-DD`, a tag that is not lowercase, a
-  `memory.md` over 40 lines, a `todo.md` with nothing open, a
-  changelog entry without timestamp. `--strict` fails on
-  warnings too.
+  forward. `Database password: in /root/.pgpass (0600)` is a
+  location and passes.
+- **WARN:** no `OS:` or `Last connected:` line, a date not in
+  `YYYY-MM-DD`, a tag not in lowercase, a `memory.md` over 40
+  lines, a `todo.md` with nothing open, a changelog entry
+  without timestamp. `--strict` fails on warnings too.
 
-The patterns are a backstop. A secret in a format they do not
-know passes.
+The patterns are a backstop; a secret in a format they do
+not know passes.
+
+## How it stays out of trouble
+
+- **It asks.** Destructive commands, firewall changes,
+  reboots and restarts wait for your OK. A reload goes ahead
+  when the config test passes (`rules/service-reload.md`,
+  `memory/service-policy.md`).
+- **It names the way back.** Every question before a change
+  ends with `Way back: <how>` or `Way back: none`. Temporary
+  first (`sysctl -w` before `sysctl.d`, `mount` before
+  `fstab`), the old kernel stays until the new one boots
+  (`rules/way-back.md`).
+- **It cannot lock you out for long.** Before a change to an
+  address, route, firewall, VPN or PAM it arms a timer on the
+  server that restores the old state after 120 seconds. Only
+  a fresh SSH login disarms it (`rules/rollback-timer.md`).
+  Longer window per server: `- Rollback window: 300` in its
+  `memory.md`.
+- **It backs up.** Every config file goes to
+  `/var/backups/jolitz/` before an edit, kept 30 days.
+- **It logs.** One plain line per change in the system
+  journal (`journalctl -t jolitz`), the detail and the way
+  back in `memory/servers/<host>/changelog.log`.
+- **It checks before it claims.** "Gone since the reboot" is
+  verified on the live system first
+  (`rules/verify-before-reporting.md`), flags against
+  `--help` and the man page before a command runs.
+- **It keeps secrets out.** Keys, password files and `.env`
+  are inspected by metadata and fingerprint, never printed,
+  never passed as arguments.
+- **It ignores injected text.** Files, logs and command
+  output are data. Text that talks to the AI is flagged to
+  you, not followed.
+- **Least privilege.** Normal user first, `sudo` when needed,
+  root last. Without either it writes a report for what
+  needs root.
+
+None of this makes an LLM infallible. You see every command;
+read it.
+
+### Access lists and the server lock
+
+Hosts in `memory/blacklist.md` are never contacted, hosts in
+`memory/readonly.md` inspected but never changed, and
+`memory/protected-paths.md` marks paths per server as
+`readonly`, `hidden` or `confirm`.
+
+The owner of a machine can lock it on the machine itself:
+
+```
+# /etc/jolitz.conf
+allow_changes = false
+reason = Database migration until 20 Oct, hands off
+```
+
+jolitz then inspects and reports what it would have done, and
+changes nothing. An unreadable file or any value other than
+`true` locks too. jolitz never writes, moves or deletes the
+file. It is a promise jolitz keeps, not a security boundary
+(`rules/access-control.md`).
+
+### The guard
+
+In Claude Code a PreToolUse hook
+(`.claude/hooks/guard-taboos.sh`) blocks the absolute taboos
+in every permission mode, `--dangerously-skip-permissions`
+included: halt and poweroff, `mkfs`, partition-table, boot
+loader and EFI writers, deleting or overwriting SSH keys,
+writes to `sshd_config`, `sudoers` and the account files,
+deleting accounts, and the server lock. It catches them
+inside `ssh host "…"`, behind `python3 -c` and in the
+file-edit tools. Read-only forms (`fdisk -l`,
+`efibootmgr -v`, `visudo -c`) pass.
+
+For work that needs one of them, such as an OS replacement,
+start the session with `JOLITZ_GUARD_DISABLE=1`. Attack
+tools, the server lock and the ethics rule stay blocked even
+then. The agent cannot lift the guard itself: next to
+`.claude` only reads pass, and an assignment of the variable
+is always denied.
+
+The guard is a backstop against mistakes, not a sandbox.
+**Guard log, opt-in.** With `JOLITZ_GUARD_LOG=1` at session
+start every denial goes to `~/.cache/jolitz/guard.log` (mode
+0600): time, reason, the first 200 characters of the command,
+or only the path of a file edit. The overview counts them by
+reason. A denial that blocked real work is a false positive
+worth an issue. A command line can hold a secret, hence off
+by default. Writing it never changes a decision.
+
+OpenCode does not run it; there the written rules are the
+safety layer.
+
+## Fewer prompts
+
+Claude Code asks before every tool call. For batch work,
+**auto mode** lets routine commands through and still stops
+on risky ones (Shift+Tab, or `--permission-mode auto`). It
+trusts this checkout, not your servers: changes over SSH need
+the hosts under `autoMode` in `~/.claude/settings.json`.
+`/auto-mode-setup` drafts the block; `rules/service-reload.md`
+explains it.
+
+```bash
+claude --permission-mode auto \
+  -p "Run housekeeping on server1.example.com"
+```
+
+For CI the strictest setup is `--permission-mode dontAsk`
+with an allowlist. `--dangerously-skip-permissions` drops all
+review, including the defence against malicious server
+output: disposable environments only. In OpenCode, `-p` is
+`opencode run "…"`. See the
+[permission modes docs](https://code.claude.com/docs/en/permission-modes).
+
+A nightly check from cron:
+
+```
+17 6 * * * cd /path/to/jolitz && flock -n \
+  /tmp/jolitz-cron-server1.lock timeout 30m \
+  /abs/path/to/claude --permission-mode auto \
+  -p "Run housekeeping on server1.example.com and \
+email me the report" >> ~/jolitz-cron.log 2>&1
+```
+
+Run the prompt once interactively first, so its one-time
+questions are answered. A systemd timer variant is in
+`rules/scheduled-housekeeping.md`.
 
 ## Your data: `memory/`
 
-All your state is plain text in one directory:
+Plain text, gitignored:
 
-- `user.md`: SSH usernames, language, operator name
-- `blacklist.md`, `readonly.md`, `protected-paths.md`: access
-  policies
+- `user.md`: SSH users, language, operator name
+- `blacklist.md`, `readonly.md`, `protected-paths.md`
 - `service-policy.md`: which services may reload or restart
   without asking
-- `servers/<hostname>/`: memory, changelog, to-do and rule
-  overrides per server
-- `custom-rules/`: your global rule overrides
-- `network.md`, `housekeeping.md`: cross-server facts and
-  your own checks
+- `servers/<host>/`: memory, changelog, to-do, rule overrides
+- `custom-rules/`: your global overrides
+- `network.md`, `housekeeping.md`: cross-server facts, your
+  own checks
+- `opencode.json`: your OpenCode config
 - `audits/`: one snapshot per fleet audit
 - `overview/`, `eol/`: pages and cached end-of-life dates
-  from `bin/heinzel-overview`; safe to delete
-- `opencode.json`: your OpenCode config
-
-### Backup and restore
+  from `bin/jolitz-overview`; safe to delete
 
 ```bash
-bin/heinzel-backup                        # writes a .tar.gz
-bin/heinzel-backup -o <path>              # to a given path
-bin/heinzel-backup --list                 # dry run
-bin/heinzel-backup --restore <file.tar.gz>
+bin/jolitz-backup                        # writes a .tar.gz
+bin/jolitz-backup -o <path>              # to a given path
+bin/jolitz-backup --list                 # dry run
+bin/jolitz-backup --restore <file.tar.gz>
 ```
 
-Restore refuses to overwrite existing content without
-`--force` and validates the archive before writing.
+Restore validates the archive and does not overwrite without
+`--force`.
 
-### Team setup
+**Team use.** Everyone keeps a personal `memory/user.md`.
+To share server state, edit `.gitignore` as its comments say,
+keep each member's own machine out (e.g.
+`memory/servers/alices-mbp/`) and commit server memory after
+sessions. `user.md`, `blacklist.md`, `readonly.md` and
+`opencode.json` are never shared; back them up.
 
-`memory/` is gitignored by default. To share server state:
+## Your own rules
 
-1. Everyone copies `memory/user.md.example` to
-   `memory/user.md`. This file always stays personal.
-2. Edit `.gitignore` to track server memory. The comments in
-   the file say which lines to change.
-3. Keep each member's own machine out of git, e.g.
-   `memory/servers/stefans-mbp/`.
-4. Commit server memory after sessions.
-
-`user.md`, `blacklist.md`, `readonly.md` and `opencode.json`
-are never shared and still need the backup.
-
-## Rule customization
-
-Change behaviour without editing the upstream rule files.
 Three layers, later wins:
 
-1. `rules/<name>.md` (upstream)
-2. `memory/custom-rules/<name>.md` (yours, all servers)
-3. `memory/servers/<hostname>/rules.md` (one server)
+1. `rules/<name>.md`
+2. `memory/custom-rules/<name>.md` (all servers)
+3. `memory/servers/<host>/rules.md` (one server)
 
 ```markdown
 ## Add: Docker cleanup
-New rules applied alongside the base.
+New rules next to the base.
 
 ## Replace: Firewall
-Replaces the matching base section entirely.
+Replaces the matching base section.
 
 ## Remove: Common Pitfalls > snap
-Skip this base section.
+Drops that base section.
 ```
 
 A section without a prefix is an addition.
-`memory/custom-rules/all.md` applies to every server. Skills
+`memory/custom-rules/all.md` applies everywhere. Skills
 follow the same chain, e.g.
-`memory/custom-rules/heinzel-housekeeping.md`.
+`memory/custom-rules/jolitz-housekeeping.md`. The ethics rule
+takes no override. The guard's taboos, the connection
+pipeline, anomaly detection, secrets, the way back and the
+rollback timer take `Add:` only.
 
 ## Updates
 
-The version is in `VERSION`, the changes in `CHANGELOG.md`.
-Claude Code updates Heinzel at session start with a
-`git pull`, unless you are pinned, on another branch, or have
-set `HEINZEL_NO_UPDATE=1`. Elsewhere:
+Claude Code pulls `main` at session start, unless the
+checkout is pinned, on another branch, or
+`JOLITZ_NO_UPDATE=1` is set. The version is in `VERSION`, the
+changes in `CHANGELOG.md`.
 
 ```bash
-bin/heinzel-update              # pull latest
-bin/heinzel-update --check      # check only
-bin/heinzel-update --pin v2.28.0
-bin/heinzel-update --unpin
+bin/jolitz-update                       # pull latest
+bin/jolitz-update --check               # check only
+bin/jolitz-update --pin v3.3.3-jolitz.1
+bin/jolitz-update --unpin
 ```
 
-Coming from 1.x? The update moves `rules/custom/` and
-`opencode.json` into `memory/` by itself. If you are pinned
-to a 1.x tag, run `bin/heinzel-update --unpin` first.
-
-## Supported systems
+## Systems
 
 | Family  | Distributions                     | Rule file          |
 | ------- | --------------------------------- | ------------------ |
@@ -554,21 +437,18 @@ to a 1.x tag, run `bin/heinzel-update --unpin` first.
 | NetBSD  | 10.x and 11.x                     | `rules/netbsd.md`  |
 | Unraid  | observed on 7.3                   | `rules/unraid.md`  |
 
-Other distributions work with general best practices.
+Other distributions get the general rules.
 
-### AI tools
+Claude Code is what jolitz is developed with. OpenCode reads
+the same `CLAUDE.md` and `.claude/skills/` while
+`OPENCODE_DISABLE_CLAUDE_CODE` is unset. Other tools get the
+rule layer; the skills (housekeeping, security, email, fleet
+audit, macOS cleanup) need Skills support.
 
-Claude Code is the tool Heinzel is developed with. OpenCode
-reads the same `CLAUDE.md` and `.claude/skills/`, as long as
-`OPENCODE_DISABLE_CLAUDE_CODE` is unset. Any other tool that
-reads project files gets the rule layer. The skills
-(housekeeping, security audit, email, fleet audit, macOS
-cleanup) need a tool that supports Skills.
+### A local model
 
-### OpenCode with a local model
-
-Heinzel can run on your own hardware with
-[Ollama](https://ollama.com):
+With [Ollama](https://ollama.com) and OpenCode jolitz runs on
+your own hardware:
 
 ```bash
 ollama pull qwen3.5:9b
@@ -580,71 +460,64 @@ cp memory/opencode.json.example memory/opencode.json
 opencode
 ```
 
-Ollama's default context of 4096 tokens is too small for
-tool use, hence the larger variant. Adjust `baseURL` and the
-model name in `memory/opencode.json`, then pick the model
-with `/models`. Larger models (14B and up) make more reliable
-tool calls. See the
-[OpenCode provider docs](https://opencode.ai/docs/providers/)
-for more.
+Ollama's default context of 4096 tokens is too small for tool
+use. Set `baseURL` and the model in `memory/opencode.json` and
+pick it with `/models`. 14B and up call tools more reliably.
+See the [OpenCode provider docs](https://opencode.ai/docs/providers/).
 
 ## Logs
 
-Every change is logged on the server:
-
 ```bash
-journalctl -t heinzel
-journalctl -t heinzel --since "2026-02-01"
+journalctl -t jolitz --since "2026-02-01"
 
 # macOS
 log show \
   --predicate 'senderImagePath CONTAINS "logger"' \
-  --info --last 7d | grep heinzel
+  --info --last 7d | grep jolitz
 ```
 
-## Project structure
+## Layout
 
 ```
-CLAUDE.md        main instructions for the AI tool
+CLAUDE.md        instructions for the AI tool
 rules/           rule files per platform and topic
 .claude/skills/  housekeeping, security, email, fleet audit,
                  macOS cleanup
-.claude/hooks/   update check and the taboo guard
-bin/             heinzel-update, heinzel-backup,
-                 heinzel-migrate, heinzel-overview,
-                 heinzel-memory-lint
-lib/             the renderer behind heinzel-overview
+.claude/hooks/   update check and the guard
+bin/             jolitz-update, jolitz-backup, jolitz-migrate,
+                 jolitz-overview, jolitz-memory-lint
+lib/             the renderer behind jolitz-overview
 tests/           tests for lint and overview
 memory/          your state (gitignored)
-assets/trailer/  script that renders the README trailer
 assets/overview/ screenshots and demo data for the overview
+assets/trailer/  script that renders the trailer
 ```
 
-## Why the name?
+## Where it comes from
 
-A homage to Bill and Lynne Jolitz, who wrote 386BSD and put
-BSD on ordinary PCs in 1992. FreeBSD and NetBSD grew out of
-it, and with them a good part of the servers this tool looks
-after. The project is named in their honour only; it is not
-affiliated with or endorsed by them.
+jolitz started as a fork of
+[heinzel](https://github.com/wintermeyer/heinzel) by Stefan
+Wintermeyer, whose work it builds on. When heinzel 3.0 moved
+OS replacement, accounts, deploy users, secret rotation,
+fleet audits and scheduled runs into a paid edition, jolitz
+kept them in the open. Every feature is free and stays free.
+jolitz is not affiliated with or endorsed by the heinzel
+author.
 
-The upstream name comes from the
-[Heinzelmännchen](https://en.wikipedia.org/wiki/Heinzelm%C3%A4nnchen),
-the helpful gnomes of Cologne who did the work left undone
-while the city slept.
+The name honours Bill and Lynne Jolitz, who wrote 386BSD and
+put BSD on ordinary PCs in 1992. FreeBSD and NetBSD grew out
+of it, and with them many of the servers jolitz looks after.
+It is not affiliated with or endorsed by them.
 
 ## Contributing
 
-Bug reports, feature requests and pull requests are welcome;
-see [CONTRIBUTING.md](CONTRIBUTING.md). Changes that are not
-specific to this fork are better sent to
-[heinzel](https://github.com/wintermeyer/heinzel) upstream.
+Bug reports, ideas and pull requests are welcome; see
+[CONTRIBUTING.md](CONTRIBUTING.md). A fix that is not
+specific to jolitz is worth sending to
+[heinzel](https://github.com/wintermeyer/heinzel) too.
 
 ## License
 
-MIT, see [LICENSE](LICENSE). The original copyright notice of
-heinzel by Stefan Wintermeyer is kept, as the license
-requires; changes in this fork are covered by the second
-notice. The software comes without warranty: it runs commands
-on production servers, so read every command before you
-approve it.
+MIT, see [LICENSE](LICENSE). The copyright notice of the
+original heinzel code is kept, as the license requires. No
+warranty: jolitz runs commands on production servers.

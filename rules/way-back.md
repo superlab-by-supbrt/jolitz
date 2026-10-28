@@ -1,6 +1,6 @@
 # The Way Back
 
-Before heinzel changes anything, the way back is
+Before jolitz changes anything, the way back is
 decided. It must not depend on what the change can
 break.
 
@@ -59,7 +59,7 @@ stops it. Recipe: `rules/rollback-timer.md`.
 - the old PostgreSQL cluster stays until the new
   one serves the application;
 - the old certificate, binary and config stay in
-  `/var/backups/heinzel/`;
+  `/var/backups/jolitz/`;
 - DNS TTLs drop a day before a move;
 - before deleting, a copy whose readability is
   proven (`rules/backups.md`);
@@ -73,7 +73,7 @@ Some changes have none: `DROP DATABASE`, an upgrade
 that rewrites the data format, deleting the only
 copy. Say so before asking, and recommend a
 snapshot where one exists: ZFS, btrfs and LVM
-heinzel can take itself; a VM snapshot at the
+jolitz can take itself; a VM snapshot at the
 provider the user takes.
 
 ## Make it visible

@@ -6,8 +6,8 @@ setups, and boot loader configuration.
 The `guard-off` blocks below write boot entries or
 the boot loader. The guard hook blocks them until
 the operator starts the session with
-`HEINZEL_GUARD_DISABLE` set to 1. Ask for that
-only when the step is actually due; heinzel never
+`JOLITZ_GUARD_DISABLE` set to 1. Ask for that
+only when the step is actually due; jolitz never
 sets it.
 
 ## When to Read

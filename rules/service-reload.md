@@ -1,6 +1,6 @@
 # Service Reload & Restart Policy
 
-When the user asks heinzel to reload or restart a
+When the user asks jolitz to reload or restart a
 service, this rule decides whether to run silently,
 ask first, or refuse. The goal is to drop the noise
 on truly low-risk operations (mainly
@@ -88,7 +88,7 @@ On FreeBSD and macOS, match the `service` /
 
 ## Prompt Shape When Asking
 
-When heinzel has to ask (restart not on
+When jolitz has to ask (restart not on
 `restart-auto`, or reload on `reload-always-ask`),
 use `AskUserQuestion` with these four options:
 
@@ -160,12 +160,12 @@ even when the service is not in `reload-always-ask`:
   `service pf reload`). A rule error can drop SSH.
   Always ask. Covered by the "firewall changes"
   rule in `CLAUDE.md`.
-- **Reload as part of a config change heinzel is
-  making.** If heinzel just edited
+- **Reload as part of a config change jolitz is
+  making.** If jolitz just edited
   `/etc/nginx/...` in the same session, the
   reload is still auto-proceed (the user approved
   the edit; the reload is the natural next step).
-  But if heinzel is reloading to pick up changes
+  But if jolitz is reloading to pick up changes
   from an unknown source, ask first.
 - **Starting a stopped service.** Auto-proceed
   only applies to reload/restart of a service that
@@ -186,15 +186,15 @@ If an auto-proceeded reload or restart fails:
 
 ## When the Agent Harness Blocks the Reload
 
-Everything above is heinzel's **policy** layer: what
-heinzel decides it should do. The agent harness
-running heinzel has its own, independent
+Everything above is jolitz's **policy** layer: what
+jolitz decides it should do. The agent harness
+running jolitz has its own, independent
 **permission** layer, and that one can refuse a
 reload this rule file has already auto-approved.
 
 Tell them apart by who says no:
 
-- **heinzel** declines by explaining the policy
+- **jolitz** declines by explaining the policy
   ("nginx is on `reload-always-ask`").
 - **The harness** declines with a permission error
   naming the tool call, e.g. Claude Code's
@@ -221,7 +221,7 @@ reads it only from `~/.claude/settings.json`,
 managed settings or `--settings`. It ignores the
 key in `.claude/settings.json` and
 `.claude/settings.local.json`, so a repo cannot
-trust itself and heinzel cannot ship the fix. The
+trust itself and jolitz cannot ship the fix. The
 operator adds it once, to the user file:
 
 ```json
@@ -237,26 +237,26 @@ operator adds it once, to the user file:
 }
 ```
 
-`/auto-mode-setup`, run in the heinzel directory,
+`/auto-mode-setup`, run in the jolitz directory,
 drafts such entries from recent sessions, and
 `claude auto-mode config` shows what took effect.
 Keep the literal `"$defaults"` in every array:
 without it your lines replace the built-in rules
-instead of adding to them. heinzel never edits the
+instead of adding to them. jolitz never edits the
 file itself; the classifier rightly refuses to let
 an agent widen its own permissions.
 
-This does not weaken heinzel's taboos. Those are
+This does not weaken jolitz's taboos. Those are
 enforced by `.claude/hooks/guard-taboos.sh`, a
 PreToolUse hook, and hooks run regardless of
 permission mode; `permissions.deny` (halt,
 poweroff, mkfs) likewise still wins over any allow.
-Nor does it skip the gates above: heinzel still
+Nor does it skip the gates above: jolitz still
 runs the config test, still honours
 `reload-always-ask` / `restart-never`, and still
 asks before a restart that is not in
 `restart-auto`. It only stops the harness blocking
-the reload mechanically before heinzel's own policy
+the reload mechanically before jolitz's own policy
 gets to decide.
 
 **Why this matters more than it looks.** A blocked
@@ -273,7 +273,7 @@ than quietly moving on to the next task.
 
 ## Override Chain
 
-This rule follows the standard heinzel override
+This rule follows the standard jolitz override
 chain. Later wins:
 
 1. **Base:** `rules/service-reload.md`
@@ -294,13 +294,13 @@ Every auto-proceeded action still goes to the
 changelog per `rules/changelog.md`:
 
 ```bash
-logger -t heinzel "Reloaded <svc> (auto, policy)"
-logger -t heinzel "Restarted <svc> (auto, policy)"
+logger -t jolitz "Reloaded <svc> (auto, policy)"
+logger -t jolitz "Restarted <svc> (auto, policy)"
 ```
 
 For asked actions, log the user's answer too:
 
 ```bash
-logger -t heinzel "Restarted <svc> (user: once)"
-logger -t heinzel "Restarted <svc> (user: always, added to restart-auto)"
+logger -t jolitz "Restarted <svc> (user: once)"
+logger -t jolitz "Restarted <svc> (user: always, added to restart-auto)"
 ```
