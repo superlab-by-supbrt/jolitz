@@ -85,7 +85,9 @@ jobs:
       - name: go vet and test (SQLite and PostgreSQL)
         run: |
           cd hub
-          umask 077
+          # Only the DSN file is private; a umask here would
+          # also change the modes the tests create on purpose.
+          install -m 600 /dev/null "$RUNNER_TEMP/pg.dsn"
           printf '%s\n' 'postgres://hubtest:hubtest@127.0.0.1:5432/hubtest?sslmode=disable' > "$RUNNER_TEMP/pg.dsn"
           go vet ./...
           JOLITZ_HUB_TEST_PG="$RUNNER_TEMP/pg.dsn" go test ./...
