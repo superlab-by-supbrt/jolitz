@@ -121,6 +121,15 @@ workstation (`jolitz-email` → Fleet summary):
   >> ~/jolitz-cron.log 2>&1
 ```
 
+With a team hub (`rules/hub.md`) the weekly summary
+needs no cron line and no workstation at all: the
+hub's scheduler builds the same text from its
+database every week (`[summary]` in the hub's
+`hub.toml`, weekday and hour) and pushes it through
+the channels of `rules/notify.md` configured there.
+The crontab above stays the way for teams without a
+hub and for email, which the hub does not send.
+
 ## systemd Timer Alternative (Linux)
 
 A `jolitz-housekeeping.service` (Type=oneshot,

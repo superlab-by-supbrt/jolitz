@@ -1,0 +1,11 @@
+{{define "content"}}
+<h1>login</h1>
+<p class="sub">Paste the token your admin handed you. It is kept in an HttpOnly cookie; the hub stores only its hash.</p>
+{{if .Err}}<p class="pill bad">{{.Err}}</p>{{end}}
+<form method="post" action="/login" class="login">
+<label for="token">token</label>
+<input id="token" name="token" type="password" autocomplete="off" autofocus required>
+<button type="submit">enter</button>
+</form>
+<p class="sub">From the terminal: <code>jolitz-sync status</code>; the API is documented at <a href="/api">/api</a> once logged in.</p>
+{{end}}

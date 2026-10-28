@@ -333,6 +333,68 @@ tell. `jolitz-log` searches every host's changelog by host,
 tag, date and pattern. `jolitz-guard-report` turns the guard
 log into a table by reason, commands only on request.
 
+## Team hub, optional
+
+![jolitz hub: workstations push and pull memory over HTTPS; the hub serves API and UI; servers are reached only from workstations over SSH](assets/hub/hub.svg)
+
+Several admins, one picture: the hub is a small service on a
+host of yours that holds every member's `memory/` and shows
+it live, with who is working where. It is Go, one static
+binary, one SQLite file, behind your reverse proxy. Nothing
+of it is active until a workstation has
+`~/.config/jolitz/hub.conf`; without it jolitz runs as it
+always did, solo or in team mode over git.
+
+You do not install it by hand. You tell jolitz:
+
+```
+❯ Set up the jolitz hub on ops.example.com
+❯ Connect me to the hub at https://hub.example.com
+❯ Add bob to the hub as operator
+❯ Hub status
+```
+
+The `jolitz-hub` skill runs the usual pipeline on the host,
+checks service class and port, downloads the release binary
+that matches this checkout's `VERSION` and verifies it against
+`SHA256SUMS`, creates user, data directory, systemd unit (or
+the FreeBSD `rc.d` script) and the reverse proxy, asks before
+the firewall rule, backs up, logs and tells you the first
+admin token once. Joining asks for the URL and a token file
+you create yourself; the token never passes through jolitz.
+
+![jolitz hub, fleet page: hosts with owner, tags, OS, last contact, to-dos, who is on it; open to-dos; latest changes](assets/hub/fleet.png)
+
+What the hub does:
+
+- **Mirror.** `bin/jolitz-sync push` after every memory
+  change, `pull` at session start, both from the hooks; the
+  files arrive byte-identical, so every rule keeps reading
+  `memory/`. A memory file that looks like it holds a secret
+  is refused by client and server alike.
+- **Fleet, hosts, timeline, activity, search.** The pages of
+  the static overview, from the database, for everyone, plus
+  a column "who is on it" from the session heartbeats and a
+  claim per host ("Bob: migration until 20:00").
+- **Handover.** A host page starts with what the next person
+  needs: open to-dos, the last changes with their way back,
+  a running job from `todo.md`, the claim.
+- **API.** Everything the UI shows, as JSON under `/api/v1/`
+  with a bearer token per person and roles viewer, operator,
+  admin; `/api` documents it with curl examples; `/export`
+  returns a tarball that is exactly `memory/`, the way back
+  to files.
+
+![jolitz hub, host page: handover sheet with claim, open to-dos, standing constraints, changes with their way back](assets/hub/host.png)
+
+What it does not do: run a command, hold a token in clear,
+reach a server. Servers are reached from workstations over
+SSH, as before; the hub only ever sees the text jolitz
+writes about them. Keep it inside your network or behind a
+VPN; it holds the map of your fleet. Details, API table and
+the systemd unit: `hub/README.md`; the conventions:
+`rules/hub.md`.
+
 ## How it stays out of trouble
 
 - **It asks.** Destructive commands, firewall changes,
@@ -648,13 +710,17 @@ log show \
 CLAUDE.md        instructions for the AI tool
 rules/           rule files per platform and topic
 .claude/skills/  housekeeping, security, email, fleet audit,
-                 incident, updates, docker, macOS cleanup
+                 incident, updates, docker, macOS cleanup,
+                 hub (install, join, users)
 .claude/hooks/   update check and the guard
 bin/             jolitz-update, jolitz-backup, jolitz-migrate,
                  jolitz-overview, jolitz-memory-lint,
-                 jolitz-doctor, jolitz-log, jolitz-guard-report
+                 jolitz-doctor, jolitz-log, jolitz-guard-report,
+                 jolitz-sync
 lib/             the renderer behind jolitz-overview
-tests/           tests for lint, overview and the bin tools
+hub/             the team hub (Go), optional
+tests/           tests for lint, overview, the bin tools and
+                 the sync client
 memory/          your state (gitignored)
 assets/overview/ screenshots and demo data for the overview
 assets/trailer/  script that renders the trailer

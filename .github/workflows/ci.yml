@@ -53,6 +53,35 @@ jobs:
       - name: ShellCheck (error severity)
         run: shellcheck -S error bin/* .claude/hooks/*.sh tests/*.sh
 
+  # The team hub: Go code under hub/, tested with the Go
+  # tools, cross-built for the platforms the install skill
+  # downloads (the release workflow uploads the same four).
+  hub:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: hub/go.mod
+          cache-dependency-path: hub/go.sum
+      - name: gofmt
+        run: |
+          cd hub
+          test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - name: go vet and test
+        run: |
+          cd hub
+          go vet ./...
+          go test ./...
+      - name: Cross-build
+        run: |
+          cd hub
+          for t in linux/amd64 linux/arm64 freebsd/amd64 darwin/arm64; do
+            GOOS=${t%/*} GOARCH=${t#*/} CGO_ENABLED=0 \
+              go build -trimpath -o "/tmp/jolitz-hub_${t%/*}_${t#*/}" .
+          done
+          ls -l /tmp/jolitz-hub_*
+
   # The same scripts under busybox: ash as sh, busybox awk,
   # sed, tr and stat. Appliances and small hosts ship this
   # userland, and the guard must fail closed there, never

@@ -1,0 +1,95 @@
+{{define "page"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{.Title}} · jolitz hub</title>
+<style>{{.CSS}}</style>
+</head>
+<body{{if .Poll}} data-poll="30"{{end}}>
+<header class="top">
+<a class="brand" href="/">jolitz hub</a>
+<span class="sep">·</span><span><b>{{.Hosts}}</b> hosts</span>
+<span class="sep">·</span><span><b>{{.Online}}</b> online</span>
+{{if .User}}<nav>
+<a href="/"{{if eq .Nav "fleet"}} class="on"{{end}}>fleet</a>
+<a href="/timeline"{{if eq .Nav "timeline"}} class="on"{{end}}>timeline</a>
+<a href="/activity"{{if eq .Nav "activity"}} class="on"{{end}}>activity</a>
+<a href="/presence"{{if eq .Nav "presence"}} class="on"{{end}}>presence</a>
+<a href="/audit"{{if eq .Nav "audit"}} class="on"{{end}}>audit</a>
+<a href="/guard"{{if eq .Nav "guard"}} class="on"{{end}}>guard</a>
+<a href="/api"{{if eq .Nav "api"}} class="on"{{end}}>api</a>
+{{if eq .User.Role "admin"}}<a href="/settings"{{if eq .Nav "settings"}} class="on"{{end}}>settings</a>
+{{end}}<a href="/export">export</a>
+</nav>
+<span class="who">{{.User.Name}} <span class="muted">({{.User.Role}})</span>
+<form method="post" action="/logout" class="inline"><button type="submit" class="link">logout</button></form></span>{{end}}
+</header>
+<main id="main">
+{{template "content" .}}
+</main>
+<footer class="foot">jolitz-hub {{.Version}} · {{.Now}} · <a href="/api">/api</a> · built from memory/, no server was contacted</footer>
+<script>
+(function () {
+  function applyFilter() {
+    var q = (document.getElementById('q') || {}).value || '';
+    q = q.toLowerCase();
+    var tag = document.body.getAttribute('data-tag') || '';
+    document.querySelectorAll('[data-row]').forEach(function (el) {
+      var tags = ' ' + (el.getAttribute('data-tags') || '') + ' ';
+      var ok = (!tag || tags.indexOf(' ' + tag + ' ') >= 0) &&
+        (!q || el.textContent.toLowerCase().indexOf(q) >= 0);
+      el.hidden = !ok;
+    });
+    document.querySelectorAll('.filters button').forEach(function (b) {
+      b.setAttribute('aria-pressed', (b.getAttribute('data-filter') || '') === tag ? 'true' : 'false');
+    });
+  }
+  function bind() {
+    var q = document.getElementById('q');
+    if (q) q.addEventListener('input', applyFilter);
+    document.querySelectorAll('.filters button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var t = b.getAttribute('data-filter') || '';
+        document.body.setAttribute('data-tag', document.body.getAttribute('data-tag') === t ? '' : t);
+        applyFilter();
+      });
+    });
+    applyFilter();
+  }
+  document.addEventListener('keydown', function (e) {
+    var q = document.getElementById('q');
+    if (e.key === '/' && q && document.activeElement !== q &&
+        !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) {
+      e.preventDefault(); q.focus(); q.select();
+    }
+    if (e.key === 'Escape' && q && document.activeElement === q) { q.value = ''; applyFilter(); q.blur(); }
+  });
+  bind();
+  var poll = parseInt(document.body.getAttribute('data-poll') || '0', 10);
+  if (poll > 0) {
+    setInterval(function () {
+      if (document.hidden) return;
+      fetch(location.href, {credentials: 'same-origin', headers: {'Accept': 'text/html'}})
+        .then(function (r) { if (r.status === 200) return r.text(); throw r; })
+        .then(function (html) {
+          var doc = new DOMParser().parseFromString(html, 'text/html');
+          var fresh = doc.getElementById('main');
+          var q = document.getElementById('q');
+          var typed = q ? q.value : '';
+          var focused = q && document.activeElement === q;
+          if (fresh) document.getElementById('main').replaceWith(fresh);
+          var hdr = doc.querySelector('header.top');
+          if (hdr) document.querySelector('header.top').replaceWith(hdr);
+          var nq = document.getElementById('q');
+          if (nq) { nq.value = typed; if (focused) nq.focus(); }
+          bind();
+        }).catch(function () {});
+    }, poll * 1000);
+  }
+})();
+</script>
+</body>
+</html>{{end}}
+{{define "change"}}<li data-row data-tags="{{.Tags}}"><details><summary><b>{{.C.Date}} {{.C.Time}}</b> <a href="/hosts/{{.C.Host}}">{{.C.Host}}</a> {{if .C.Who}}<span class="muted">[{{.C.Who}}]</span> {{end}}{{.C.Headline}}{{if .C.Flags}} <span class="pill warn">flags</span>{{end}}</summary>{{if .C.Detail}}<pre>{{range $i, $l := .C.Detail}}{{if $i}}
+{{end}}{{$l}}{{end}}</pre>{{else}}<p class="sub">No detail recorded.</p>{{end}}</details></li>{{end}}

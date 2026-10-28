@@ -1,0 +1,16 @@
+{{define "content"}}
+<div class="bar"><h1>audit</h1>
+{{if .Date}}<span class="sub">snapshot {{.Date}}{{if .PrevDate}}, compared with {{.PrevDate}}{{end}} · <b>{{.Drift}}</b> settings differ between hosts</span>{{else}}<span class="sub">no fleet audit snapshot pushed yet (memory/audits/*.json)</span>{{end}}
+<input id="q" type="search" placeholder="filter  (/)" autocomplete="off">
+</div>
+{{if .Changed}}<h2>changed since {{.PrevDate}}</h2>
+<ul class="list">{{range .Changed}}<li data-row><span class="pill warn">changed</span> <a href="/hosts/{{.Host}}">{{.Host}}</a>: <code>{{.Key}}</code> <code>{{.From}}</code> → <code>{{.To}}</code></li>{{end}}</ul>{{end}}
+{{if .Keys}}<h2>settings</h2>
+<div class="box"><table class="dense matrix">
+<thead><tr><th>setting</th>{{range .AuditHosts}}<th><a href="/hosts/{{.}}">{{.}}</a></th>{{end}}</tr></thead>
+<tbody>
+{{range .Keys}}<tr data-row{{if .Drift}} class="drift"{{end}}><th>{{.Key}}</th>{{range .Values}}<td{{if hasPrefix . "unknown"}} class="muted"{{end}}>{{.}}</td>{{end}}</tr>
+{{end}}
+</tbody></table></div>{{end}}
+{{if gt (len .Snaps) 2}}<p class="sub">{{len .Snaps}} snapshots in the hub; the API lists them all (<code>GET /api/v1/audits</code>).</p>{{end}}
+{{end}}

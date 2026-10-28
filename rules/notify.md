@@ -164,3 +164,29 @@ curl -sS --fail -K "$HOME/.config/jolitz/webhook.curlrc" \
   run notes the channel, not the content.
 - Never send on your own: no push without a request
   or a scheduled prompt that names it.
+
+## The hub as a sender
+
+A team with a hub (`rules/hub.md`) can let the hub
+send the weekly fleet summary instead of a
+workstation's cron: `jolitz-hub serve` has a
+scheduler, and `hub.toml` on the hub host names the
+same three channels under `[notify.ntfy]`,
+`[notify.matrix]` and `[notify.webhook]`. The keys
+are the same facts as the `Notify:` lines above:
+server and topic, server and room, the curlrc. The
+secrets stay in files, mode 600, owned by the
+service user, in the hub's data directory; the hub
+reads them at send time and keeps nothing in its
+database. The admin's `/settings` page shows the
+paths and a "send test message" button per channel,
+never a file's content.
+
+The hub sends on its own schedule, once a week, and
+retries a failed send once; that is the scheduled
+run this rule allows, configured by the operator in
+`hub.toml`, not a push jolitz decides on. Everything
+else here stays: a housekeeping result or an
+incident report goes out from the workstation, on
+request, with `curl` as above. `hub/README.md` has
+the keys.

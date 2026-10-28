@@ -1,0 +1,15 @@
+{{define "content"}}
+<div class="bar">
+<h1>activity</h1>
+<span class="sub">every changelog, newest first{{if .Host}} · host {{.Host}}{{end}}</span>
+<form method="get" action="/activity" class="inline search">
+{{if .Host}}<input type="hidden" name="host" value="{{.Host}}">{{end}}
+<input id="q" name="q" type="search" value="{{.Q}}" placeholder="search headlines, details, who  (/)" autocomplete="off">
+<button type="submit">search</button>
+</form>
+</div>
+<p class="sub">{{len .Changes}} entries{{if eq (len .Changes) .Limit}} (first {{.Limit}}; narrow the search){{end}}. Typing filters the list; enter searches the whole hub.</p>
+<ul class="list">
+{{range .Changes}}{{template "change" (ci . $.TagsOf)}}{{else}}<li class="muted">Nothing found.</li>{{end}}
+</ul>
+{{end}}

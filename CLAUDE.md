@@ -770,6 +770,23 @@ server memory.
 New team members: copy `memory/user.md.example`
 to `memory/user.md`.
 
+## Team Hub (optional)
+
+Read `rules/hub.md`. A team may run one hub: a
+service on a host of the team that mirrors every
+member's `memory/` and shows fleet, hosts, timeline,
+activity, presence and claims in a web UI. Nothing is
+active without `~/.config/jolitz/hub.conf`. The
+`jolitz-hub` skill in `.claude/skills/jolitz-hub/`
+installs the hub on a server, joins a workstation,
+adds users, shows the status and leaves; only on
+request, like any other install, with its questions
+and `Way back:`. The hub runs no command and holds
+no token in clear text; the token lives in a mode-600
+file under `~/.config/jolitz/`, never in memory or in
+a command. `bin/jolitz-sync` is the only client; the
+hooks call it when `hub.conf` exists.
+
 ## Network Memory
 
 Cross-server facts go in `memory/network.md`.

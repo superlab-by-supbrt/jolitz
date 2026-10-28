@@ -127,3 +127,9 @@ written before the change runs
 (`rules/way-back.md`); `none` is a valid value.
 
 Trim entries older than 2 years when writing.
+
+When `~/.config/jolitz/hub.conf` exists, run
+`bin/jolitz-sync push` after writing changelog and
+memory; it mirrors them to the team hub
+(`rules/hub.md`). Without that file the step does
+not apply.

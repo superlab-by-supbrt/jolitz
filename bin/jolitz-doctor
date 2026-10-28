@@ -1,9 +1,11 @@
 #!/bin/sh
 # jolitz-doctor — check the workstation jolitz runs on:
 # Claude Code version, guard hooks, tools, cache, git
-# state, memory, logs, ssh agent. Reads local files
-# only; never connects to a server. Only --fetch goes
-# online, to the git remote of this checkout.
+# state, memory, logs, ssh agent, team hub. Reads local
+# files only; never connects to a server. Only --fetch
+# goes online, to the git remote of this checkout, and
+# the hub line, to the hub in ~/.config/jolitz/hub.conf
+# when that file exists.
 #
 # Usage:
 #   jolitz-doctor                Run every check
@@ -27,7 +29,8 @@
 # uncommitted changes in tracked files, no
 # memory/user.md, lint warnings, EOL cache older
 # than 30 days, guard.log or ~/jolitz-cron.log over
-# 10 MB, ssh agent without a key.
+# 10 MB, ssh agent without a key, the hub unreachable
+# or rejecting the token (bin/jolitz-sync status).
 #
 # Exit status: 0 all OK, 1 warnings with --strict,
 # 2 any FAIL or a usage error.
@@ -245,6 +248,24 @@ elif [ -x "$SCRIPT_DIR/jolitz-memory-lint" ]; then
   fi
 else
   warn "memory lint: bin/jolitz-memory-lint not found"
+fi
+
+# --- team hub ------------------------------------------------
+# Only when the operator joined one; otherwise not a line.
+HUBCONF="$HOME/.config/jolitz/hub.conf"
+if [ -r "$HUBCONF" ]; then
+  if [ ! -f "$SCRIPT_DIR/jolitz-sync" ]; then
+    warn "hub: bin/jolitz-sync not found"
+  else
+    rc=0
+    out=$(sh "$SCRIPT_DIR/jolitz-sync" -d "$MEM" status --short 2>&1) || rc=$?
+    out=$(printf '%s\n' "$out" | grep . | tail -n 1)
+    case "$rc" in
+      0) ok "hub: $out" ;;
+      3) warn "hub: unreachable ($out)" ;;
+      *) warn "hub: $out" ;;
+    esac
+  fi
 fi
 
 # --- EOL cache -----------------------------------------------

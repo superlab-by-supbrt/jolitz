@@ -1,0 +1,45 @@
+{{define "content"}}
+<div class="bar">
+<h1>fleet</h1>
+<span class="kpi"><b>{{len .HostList}}</b> hosts</span>
+<span class="kpi"><b>{{.Stale}}</b> not seen 90+ d</span>
+<span class="kpi"><b>{{.OpenTodo}}</b> open to-dos</span>
+<span class="kpi"><b>{{len .Sessions}}</b> sessions</span>
+<span class="kpi"><b>{{len .Claims}}</b> claims</span>
+<input id="q" type="search" placeholder="filter  (/)" autocomplete="off">
+</div>
+{{if .Tags}}<div class="filters">{{range .Tags}}<button type="button" data-filter="{{.}}" aria-pressed="false">{{.}}</button>{{end}}</div>{{end}}
+
+{{if or .Sessions .Claims}}<div class="strip">
+{{range .Sessions}}<span class="who-on"><span class="dot{{if .Stale}} stale{{end}}"></span>{{.User}}{{if .Workstation}}<span class="muted">@{{.Workstation}}</span>{{end}}{{if .Host}} on <a href="/hosts/{{.Host}}">{{.Host}}</a>{{end}} <span class="muted">{{since .LastBeat}}{{if .Stale}}, stale{{end}}</span></span>
+{{end}}{{range .Claims}}<span class="who-on"><span class="pill warn">claim</span> <a href="/hosts/{{.Host}}">{{.Host}}</a> {{.User}}{{if .Note}}: {{.Note}}{{end}} <span class="muted">{{since .Since}}</span></span>
+{{end}}</div>{{end}}
+
+<table class="dense">
+<thead><tr><th>host</th><th>owner</th><th>tags</th><th>os</th><th>ip</th><th>last contact</th><th>to-dos</th><th>last change</th><th>who is on it</th></tr></thead>
+<tbody>
+{{range .HostList}}<tr data-row data-tags="{{join .Tags " "}}">
+<td><a href="/hosts/{{.Name}}">{{.Name}}</a>{{if .Aliases}}<br><span class="sub">also {{join .Aliases " "}}</span>{{end}}{{if .Rules}}<br><span class="sub">own rules.md</span>{{end}}</td>
+<td>{{.Owner}}</td>
+<td>{{range .Tags}}<span class="tag">{{.}}</span>{{end}}</td>
+<td>{{.OS}}{{if .Mode}} <span class="sub">({{.Mode}})</span>{{end}}{{if .Guest}}<br><span class="sub">guest {{join .Guest ", "}}</span>{{end}}</td>
+<td>{{.IP}}{{if .SSHPort}}<br><span class="sub">ssh port {{.SSHPort}}</span>{{end}}</td>
+<td>{{with agecls .LastConnectedDays}}<span class="pill {{.}}">{{end}}{{agetext .}}{{if agecls .LastConnectedDays}}</span>{{end}}</td>
+<td class="num">{{if .Todos}}{{.Todos}}{{else}}<span class="muted">0</span>{{end}}</td>
+<td>{{.LastChange}}</td>
+<td>{{range .Sessions}}<span class="dot{{if .Stale}} stale{{end}}"></span>{{.User}}{{if .Workstation}}<span class="muted">@{{.Workstation}}</span>{{end}} {{end}}{{with .Claim}}<span class="pill warn">{{.User}}{{if .Note}}: {{.Note}}{{end}}</span>{{end}}</td>
+</tr>
+{{else}}<tr><td colspan="9" class="muted">No host yet. Push one with <code>jolitz-sync push</code>.</td></tr>{{end}}
+</tbody></table>
+
+<h2>open to-dos</h2>
+<ul class="list">
+{{range .Todos}}<li data-row data-tags="{{index $.TagsOf .Host}}"><a href="/hosts/{{.Host}}">{{.Host}}</a>: {{.Text}}</li>
+{{else}}<li class="muted">Nothing open.</li>{{end}}
+</ul>
+
+<h2>latest changes <span class="sub"><a href="/activity">all</a> · <a href="/timeline">timeline</a></span></h2>
+<ul class="list">
+{{range .Changes}}{{template "change" (ci . $.TagsOf)}}{{else}}<li class="muted">No changelog yet.</li>{{end}}
+</ul>
+{{end}}
