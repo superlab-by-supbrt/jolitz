@@ -1,0 +1,9 @@
+[2026-10-20 11:05] [bob as root]
+read-only: checked replication lag and the last backup
+  Verify: backup from 2026-10-20 02:15 complete, 118 GB.
+[2026-09-02 08:30] [bob as root]
+sshd on db1 now allows key logins only — because password
+logins were still on
+  Detail: PasswordAuthentication no in
+  /etc/ssh/sshd_config.d/10-jolitz.conf.
+  Rollback: delete that file, reload ssh.

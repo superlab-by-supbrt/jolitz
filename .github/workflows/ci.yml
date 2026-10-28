@@ -18,6 +18,11 @@ jobs:
       - name: Guard test matrix
         run: sh .claude/hooks/guard-taboos-test.sh
 
+      # Lint and overview against a throwaway memory/ tree,
+      # under the mawk that Ubuntu ships as awk.
+      - name: Memory lint and overview tests
+        run: sh tests/memory-tools-test.sh
+
       - name: Validate tracked JSON files
         run: |
           git ls-files '*.json' | while read -r f; do
@@ -27,13 +32,13 @@ jobs:
 
       - name: Shell syntax check
         run: |
-          for f in bin/* .claude/hooks/*.sh; do
+          for f in bin/* .claude/hooks/*.sh tests/*.sh; do
             echo "checking $f"
             sh -n "$f"
           done
 
       - name: ShellCheck (error severity)
-        run: shellcheck -S error bin/* .claude/hooks/*.sh
+        run: shellcheck -S error bin/* .claude/hooks/*.sh tests/*.sh
 
   macos-cleanup-scanner:
     # The skill runs the Command Line Tools Python.

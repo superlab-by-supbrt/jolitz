@@ -1,0 +1,329 @@
+#!/bin/sh
+# jolitz-overview — build a fleet overview from
+# memory/: one HTML page for all servers and one
+# handover page per server, or a plain-text summary.
+# Reads local files only and never connects to a
+# server. Only --eol goes online, to endoflife.date,
+# and sends product names, never host names.
+#
+# Usage:
+#   jolitz-overview                Write memory/overview/
+#   jolitz-overview --text         Summary on stdout
+#   jolitz-overview --days <n>     Window for "recent
+#                                   changes" (default: 30,
+#                                   with --text 7)
+#   jolitz-overview --tag <tag>    Only servers with this
+#                                   tag (- Tags: in memory.md)
+#   jolitz-overview --eol          Fetch end-of-life dates
+#                                   first; cached in
+#                                   memory/eol/
+#   jolitz-overview -d <dir>       Use <dir> as memory/
+#   jolitz-overview -o <dir>       Write the pages to <dir>
+#   jolitz-overview --help         Show this help
+#
+# Sources: memory/servers/*/{memory.md,todo.md,
+# changelog.log,rules.md}, the newest two fleet audit
+# snapshots in memory/audits/, cached EOL data in
+# memory/eol/, and the guard log
+# ~/.cache/jolitz/guard.log if JOLITZ_GUARD_LOG=1
+# wrote one. bin/jolitz-memory-lint runs first; a
+# value that looks like a secret stops the build.
+set -e
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+REPO_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
+SELF="$SCRIPT_DIR/$(basename "$0")"
+ORIG_PWD=$(pwd)
+
+usage() {
+  awk '/^# jolitz-overview/{in_help=1} in_help{if(/^[^#]/)exit; sub(/^# ?/,""); print}' "$SELF"
+}
+
+resolve_path() {
+  case "$1" in
+    /*) printf '%s\n' "$1" ;;
+    *)  printf '%s\n' "$ORIG_PWD/$1" ;;
+  esac
+}
+
+MEM="$REPO_DIR/memory"
+OUT=""
+MODE=html
+DAYS=""
+TAG=""
+FETCH_EOL=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --text) MODE=text ;;
+    --eol) FETCH_EOL=1 ;;
+    --days|--tag|-d|-o)
+      [ $# -ge 2 ] || { usage >&2; exit 2; }
+      case "$1" in
+        --days) DAYS=$2 ;;
+        --tag) TAG=$2 ;;
+        -d) MEM=$(resolve_path "$2") ;;
+        -o) OUT=$(resolve_path "$2") ;;
+      esac
+      shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "error: unknown argument $1" >&2; usage >&2; exit 2 ;;
+  esac
+  shift
+done
+case "$DAYS" in
+  '') if [ "$MODE" = text ]; then DAYS=7; else DAYS=30; fi ;;
+  *[!0-9]*) echo "error: --days takes a number" >&2; exit 2 ;;
+esac
+[ -n "$OUT" ] || OUT="$MEM/overview"
+
+if [ ! -d "$MEM/servers" ]; then
+  echo "error: $MEM/servers does not exist" >&2
+  exit 2
+fi
+
+# A secret in memory must not be copied into a page
+# that is easy to forward. Lint errors stop here.
+LINT_RC=0
+LINT=$("$SCRIPT_DIR/jolitz-memory-lint" -d "$MEM" 2>&1) || LINT_RC=$?
+if [ "$LINT_RC" -ne 0 ]; then
+  printf '%s\n' "$LINT" | grep -v '^WARN' >&2
+  echo "error: overview not built; fix the lines above first" >&2
+  exit 1
+fi
+
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/jolitz-overview.XXXXXX")
+trap 'rm -rf "$WORK"' EXIT
+TAB=$(printf '\t')
+printf '%s\n' "$LINT" | grep '^WARN' > "$WORK/lint.txt" || true
+: > "$WORK/hosts.tsv"
+: > "$WORK/todos.tsv"
+: > "$WORK/changes.tsv"
+: > "$WORK/aliases.tsv"
+: > "$WORK/eol.tsv"
+: > "$WORK/audit-cur.tsv"
+: > "$WORK/audit-prev.tsv"
+: > "$WORK/guard.tsv"
+
+# --- memory.md: top-level "- Key: value" lines -------------
+# Prints one TSV row: host, os, ip, distro, last
+# connected, tags, ssh port, mode, product, version.
+cat > "$WORK/facts.awk" <<'AWK'
+BEGIN { OFS = "\t" }
+/^- [A-Za-z][A-Za-z ]*:/ {
+  line = substr($0, 3)
+  k = substr(line, 1, index(line, ":") - 1)
+  v = substr(line, index(line, ":") + 1)
+  sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
+  gsub(/\t/, " ", v)
+  if (!(k in f)) f[k] = v
+}
+function product(os,   l) {
+  l = tolower(os)
+  if (l ~ /proxmox/) return "proxmox-ve"
+  if (l ~ /opnsense/) return "opnsense"
+  if (l ~ /centos stream/) return "centos-stream"
+  if (l ~ /rocky/) return "rocky-linux"
+  if (l ~ /alma/) return "almalinux"
+  if (l ~ /red hat|rhel/) return "rhel"
+  if (l ~ /fedora/) return "fedora"
+  if (l ~ /suse linux enterprise|sles/) return "sles"
+  if (l ~ /opensuse leap/) return "opensuse"
+  if (l ~ /ubuntu/) return "ubuntu"
+  if (l ~ /debian/) return "debian"
+  if (l ~ /freebsd/) return "freebsd"
+  if (l ~ /netbsd/) return "netbsd"
+  if (l ~ /mac ?os/) return "macos"
+  if (l ~ /alpine/) return "alpine-linux"
+  return ""
+}
+function version(os, p,   l, v, sp) {
+  l = tolower(os)
+  if (!match(l, /[0-9]+(\.[0-9]+)*/)) return ""
+  v = substr(l, RSTART, RLENGTH)
+  if (p == "sles" && match(l, /sp[0-9]+/)) {
+    sp = substr(l, RSTART + 2, RLENGTH - 2)
+    sub(/\..*/, "", v)
+    v = v "." sp
+  }
+  return v
+}
+END {
+  # Tags: "prod, Web" -> "prod web"
+  t = f["Tags"]; gsub(/,/, " ", t); gsub(/[ \t]+/, " ", t)
+  sub(/^ /, "", t); sub(/ $/, "", t)
+  lc = f["Last connected"]; sub(/[ \t].*/, "", lc)
+  p = product(f["OS"])
+  print host, f["OS"], f["IP"], f["Distro family"], lc, t, \
+    f["SSH port"], f["Mode"], p, version(f["OS"], p)
+}
+AWK
+
+# --- changelog.log: one TSV row per entry ------------------
+# date, time, host, who, headline, rollback, flags,
+# detail (lines joined by \037).
+cat > "$WORK/changes.awk" <<'AWK'
+BEGIN { OFS = "\t"; US = "\037" }
+function flush() {
+  if (date != "") {
+    gsub(/\t/, " ", head); gsub(/\t/, " ", rb)
+    gsub(/\t/, " ", fl); gsub(/\t/, " ", det)
+    print date, time, host, who, head, rb, fl, det
+  }
+  date = ""; time = ""; who = ""; head = ""; rb = ""; fl = ""
+  det = ""; label = ""
+}
+/^\[[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]\]/ {
+  flush()
+  date = substr($0, 2, 10); time = substr($0, 13, 5)
+  rest = substr($0, 19); sub(/^[ \t]+/, "", rest)
+  if (substr(rest, 1, 1) == "[" && index(rest, "]") > 0) {
+    who = substr(rest, 2, index(rest, "]") - 2)
+    rest = substr(rest, index(rest, "]") + 1)
+    sub(/^[ \t]+/, "", rest)
+  }
+  head = rest; indet = 0
+  next
+}
+date == "" { next }
+/^[ \t]*$/ { next }
+/^[ \t]/ {
+  indet = 1
+  l = $0; sub(/^[ \t]+/, "", l)
+  det = (det == "" ? l : det US l)
+  if (l ~ /^Rollback:/) { label = "rb"; l = substr(l, 10) }
+  else if (l ~ /^Flags:/) { label = "fl"; l = substr(l, 7) }
+  else if (l ~ /^[A-Z][a-z]+:/) { label = ""; next }
+  sub(/^[ \t]+/, "", l)
+  if (label == "rb") rb = (rb == "" ? l : rb " " l)
+  if (label == "fl") fl = (fl == "" ? l : fl " " l)
+  next
+}
+!indet { head = (head == "" ? $0 : head " " $0) }
+END { flush() }
+AWK
+
+has_tag() {
+  case " $2 " in *" $1 "*) return 0 ;; esac
+  return 1
+}
+
+for d in "$MEM"/servers/*; do
+  [ -d "$d" ] || continue
+  h=${d##*/}
+  if [ -L "$d" ]; then
+    target=$(readlink "$d")
+    printf '%s\t%s\n' "$h" "${target##*/}" >> "$WORK/aliases.tsv"
+    continue
+  fi
+  row=$(awk -v host="$h" -f "$WORK/facts.awk" "$d/memory.md" 2>/dev/null \
+    || awk -v host="$h" -f "$WORK/facts.awk" /dev/null)
+  if [ -n "$TAG" ]; then
+    tags=$(printf '%s\n' "$row" | cut -f6)
+    has_tag "$TAG" "$tags" || continue
+  fi
+  todos=0
+  if [ -f "$d/todo.md" ]; then
+    grep '^[[:space:]]*- \[ \]' "$d/todo.md" \
+      | sed -e 's/^[[:space:]]*- \[ \][[:space:]]*//' -e "s/$TAB/ /g" \
+      | while IFS= read -r t; do
+          printf '%s\t%s\n' "$h" "$t"
+        done >> "$WORK/todos.tsv"
+    todos=$(grep -c '^[[:space:]]*- \[ \]' "$d/todo.md" || true)
+  fi
+  last=""
+  if [ -f "$d/changelog.log" ]; then
+    awk -v host="$h" -f "$WORK/changes.awk" "$d/changelog.log" \
+      > "$WORK/one.tsv"
+    cat "$WORK/one.tsv" >> "$WORK/changes.tsv"
+    last=$(cut -f1 "$WORK/one.tsv" | sort | tail -n 1)
+  fi
+  rules=0
+  [ -f "$d/rules.md" ] && rules=1
+  # Columns 9 and 10 (product, version) move behind
+  # the counters, so the renderer reads 1-8, then 9-11
+  # counters, then 12-13.
+  printf '%s\n' "$row" | awk -F "$TAB" -v r="$rules" -v t="$todos" \
+    -v l="$last" 'BEGIN{OFS="\t"} {print $1,$2,$3,$4,$5,$6,$7,$8,r,t,l,$9,$10}' \
+    >> "$WORK/hosts.tsv"
+done
+
+sort -t "$TAB" -k1,1r -k2,2r -k3,3 "$WORK/changes.tsv" -o "$WORK/changes.tsv"
+
+HAVE_JQ=0
+command -v jq >/dev/null 2>&1 && HAVE_JQ=1
+
+# --- end of life -------------------------------------------
+if [ "$FETCH_EOL" -eq 1 ]; then
+  if [ "$HAVE_JQ" -eq 0 ] || ! command -v curl >/dev/null 2>&1; then
+    echo "error: --eol needs curl and jq" >&2
+    exit 1
+  fi
+  mkdir -p "$MEM/eol"
+  for p in $(cut -f12 "$WORK/hosts.tsv" | sort -u); do
+    if curl -fsS --max-time 15 \
+        "https://endoflife.date/api/v1/products/$p/" \
+        -o "$WORK/$p.json" 2>/dev/null \
+      && jq -e '.result.releases | length > 0' "$WORK/$p.json" \
+        >/dev/null 2>&1; then
+      cat "$WORK/$p.json" > "$MEM/eol/$p.json"
+      date +%Y-%m-%d > "$MEM/eol/$p.fetched"
+    else
+      echo "warning: no EOL data for $p from endoflife.date;" \
+        "keeping the cached copy" >&2
+    fi
+  done
+fi
+if [ "$HAVE_JQ" -eq 1 ] && [ -d "$MEM/eol" ]; then
+  for f in "$MEM"/eol/*.json; do
+    [ -f "$f" ] || continue
+    p=$(basename "$f" .json)
+    fetched=$(cat "$MEM/eol/$p.fetched" 2>/dev/null || echo unknown)
+    printf 'F\t%s\t%s\n' "$p" "$fetched" >> "$WORK/eol.tsv"
+    jq -r --arg p "$p" '.result.releases[]
+      | ["R", $p, .name, (.eolFrom // "")] | @tsv' "$f" \
+      >> "$WORK/eol.tsv" 2>/dev/null || true
+  done
+fi
+
+# --- fleet audit snapshots ---------------------------------
+AUDIT_CUR=""
+AUDIT_PREV=""
+if [ -d "$MEM/audits" ]; then
+  AUDIT_CUR=$(find "$MEM/audits" -maxdepth 1 -name '*.json' \
+    | LC_ALL=C sort | tail -n 1)
+  AUDIT_PREV=$(find "$MEM/audits" -maxdepth 1 -name '*.json' \
+    | LC_ALL=C sort | tail -n 2 | sed -n '1p')
+  [ "$AUDIT_PREV" != "$AUDIT_CUR" ] || AUDIT_PREV=""
+fi
+flatten_audit() {
+  jq -r '.date as $d | .hosts | to_entries[] | .key as $h
+    | .value | to_entries[]
+    | [$d, $h, .key, (.value | tostring)] | @tsv' "$1" 2>/dev/null
+}
+if [ "$HAVE_JQ" -eq 1 ] && [ -n "$AUDIT_CUR" ]; then
+  flatten_audit "$AUDIT_CUR" > "$WORK/audit-cur.tsv" || true
+  [ -z "$AUDIT_PREV" ] \
+    || flatten_audit "$AUDIT_PREV" > "$WORK/audit-prev.tsv" || true
+fi
+
+# --- guard log ---------------------------------------------
+GUARD_LOG="$HOME/.cache/jolitz/guard.log"
+[ -r "$GUARD_LOG" ] && cp "$GUARD_LOG" "$WORK/guard.tsv"
+
+TODAY=$(date +%Y-%m-%d)
+NOW=$(date '+%Y-%m-%d %H:%M')
+
+if [ "$MODE" = html ]; then
+  mkdir -p "$OUT/hosts"
+fi
+
+awk -F "$TAB" -v mode="$MODE" -v today="$TODAY" -v now="$NOW" \
+  -v days="$DAYS" -v tag="$TAG" -v out="$OUT" -v mem="$MEM" \
+  -v jq="$HAVE_JQ" -f "$REPO_DIR/lib/overview.awk" \
+  "$WORK/hosts.tsv" "$WORK/todos.tsv" "$WORK/changes.tsv" \
+  "$WORK/aliases.tsv" "$WORK/eol.tsv" "$WORK/audit-cur.tsv" \
+  "$WORK/audit-prev.tsv" "$WORK/guard.tsv" "$WORK/lint.txt"
+
+if [ "$MODE" = html ]; then
+  echo "wrote $OUT/index.html"
+fi

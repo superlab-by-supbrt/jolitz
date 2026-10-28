@@ -1,10 +1,11 @@
 ---
 name: jolitz-email
-argument-hint: "[hostname] [recipient]"
+argument-hint: "[hostname | fleet] [recipient]"
 description: Send an email about a managed server — ad-hoc text
   and/or file attachments. Use when the user asks to "email me
   X", "send X by mail", "mail this to <address>", "attach
-  /var/log/foo to an email", or "send a report by email". The
+  /var/log/foo to an email", "send a report by email", or
+  "email me the fleet summary". The
   first email per host asks where to send from (local
   workstation vs the server itself). On the remote path,
   prefers the existing MTA (postfix, sendmail, msmtp,
@@ -554,6 +555,39 @@ the only root-privileged operation in the workflow.
     logger -t jolitz "Email to <recipient> from \
         <local|remote/<user>>: <subject>"
     ```
+
+## Fleet summary (no single host)
+
+"Email me the fleet summary", "send me the weekly
+report for all servers", "mail the prod overview".
+The mail is about the fleet, not one server, so steps
+1, 2 and 4 do not apply: nothing connects to a server.
+
+1. Build the body locally:
+
+       bin/jolitz-overview --text --days 7
+
+   Add `--tag <name>` when the user names a group, and
+   another `--days` when they name a period. If it
+   exits non-zero, stop and show its error. A lint
+   `ERROR` means memory holds something that looks
+   like a secret; that is fixed first, never mailed
+   around.
+2. Recipient as in step 3, without the per-server
+   level: an explicit address, else the default email
+   from auto-memory, else ask once. Never guess.
+3. Send from the workstation through **5L**. Subject:
+   `Fleet summary <YYYY-MM-DD>` (plus the tag). The
+   body is the command output as plain text, with the
+   usual signature.
+4. Attach `memory/overview/index.html` only when the
+   user asks for it: it lists every IP and host name.
+5. No journal line on any server. Note the send in the
+   session summary only.
+
+A weekly run by cron works as in
+`rules/scheduled-housekeeping.md`, with the prompt
+"Email me the weekly fleet summary".
 
 ## Per-server memory
 

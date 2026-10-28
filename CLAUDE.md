@@ -503,10 +503,28 @@ Only when the user asks. The `jolitz-fleet-audit` skill in
 posture, MTA, time sync, auto-reboot behaviour) across all
 servers in `memory/servers/` and surfaces silent drift in a
 side-by-side table. Makes no configuration changes on any
-host (only an audit-trail journal line per host). Use
-after fixing a config bug on one server to find which
-others carry the same bug, or as a periodic consistency
-check across the fleet.
+host (only an audit-trail journal line per host). Each run
+saves a snapshot in `memory/audits/` and reports what
+changed since the last one. `tag:<name>` limits it to
+servers with that tag. Use after fixing a config bug on
+one server to find which others carry the same bug, or as
+a periodic consistency check across the fleet.
+
+## Fleet Overview
+
+When the user asks for an overview of the servers, of
+what changed, or of what is open, run
+`bin/jolitz-overview` and give the path
+`memory/overview/index.html`. It builds one page for
+the fleet and one handover page per server
+(`memory/overview/hosts/<hostname>.html`) from memory
+alone, without SSH. `--text` prints the same as plain
+text, `--tag <name>` narrows it, `--eol` first fetches
+end-of-life dates from endoflife.date. Do not
+summarize the page from memory yourself; the script is
+the source. When the user asks for one server's
+handover sheet, build the overview and give that
+host's page.
 
 ## macOS Cleanup
 
@@ -647,7 +665,9 @@ system journal and mirror to local changelog.
 Read `rules/server-memory.md`. Each server gets
 `memory/servers/<hostname>/` with `memory.md`,
 `changelog.log`, and optionally `todo.md`. Update
-memory immediately after any system change.
+memory immediately after any system change, then run
+`bin/jolitz-memory-lint <hostname>`. Record tags the
+user gives a server as `- Tags:`.
 
 ## Team Usage
 

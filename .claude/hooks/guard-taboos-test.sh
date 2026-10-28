@@ -1457,5 +1457,49 @@ else
   PASS=$((PASS + 1))
 fi
 
+# --- denial log (JOLITZ_GUARD_LOG=1) ---------------------------
+# The log is opt-in, names the path but never the text of a file
+# edit, and can never turn a deny into a pass.
+LOGHOME=$(mktemp -d "${TMPDIR:-/tmp}/guard-log-test.XXXXXX")
+GLOG="$LOGHOME/.cache/jolitz/guard.log"
+log_run() {
+  # $1 HOME, $2 JOLITZ_GUARD_LOG, $3 mode ("" or file), stdin JSON
+  env -u JOLITZ_GUARD_DISABLE HOME="$1" JOLITZ_GUARD_LOG="$2" \
+    sh "$HOOK" $3 | grep -q '"permissionDecision":"deny"'
+}
+log_ok() {
+  if [ "$1" -eq 0 ]; then PASS=$((PASS + 1))
+  else FAIL=$((FAIL + 1)); echo "FAIL: guard log: $2"; fi
+}
+json_for 'halt' | log_run "$LOGHOME" 1 ""; log_ok $? "halt still denied"
+grep -q "	bash	.*	halt\$" "$GLOG" 2>/dev/null
+log_ok $? "a denial is logged with mode and command"
+[ "$(stat -c %a "$GLOG" 2>/dev/null || stat -f %Lp "$GLOG")" = 600 ]
+log_ok $? "the log is mode 0600"
+json_for 'ls /tmp' | log_run "$LOGHOME" 1 ""
+[ "$(wc -l < "$GLOG" | tr -d ' ')" = 1 ]
+log_ok $? "an allowed command is not logged"
+file_json Write file_path /etc/ssh/sshd_config 'PermitRootLogin yes LOGSECRET' \
+  | log_run "$LOGHOME" 1 file; log_ok $? "file edit still denied"
+grep -q '	file	.*	/etc/ssh/sshd_config$' "$GLOG"
+log_ok $? "a file edit logs its path"
+! grep -q LOGSECRET "$GLOG"
+log_ok $? "a file edit never logs the text written"
+NOLOG=$(mktemp -d "${TMPDIR:-/tmp}/guard-log-test.XXXXXX")
+json_for 'halt' | log_run "$NOLOG" 0 ""; log_ok $? "denied without the log"
+[ ! -e "$NOLOG/.cache/jolitz/guard.log" ]
+log_ok $? "no log without JOLITZ_GUARD_LOG=1"
+# A home whose .cache is a file: the log cannot be written.
+printf x > "$NOLOG/.cache" 2>/dev/null || { rm -rf "$NOLOG/.cache"; printf x > "$NOLOG/.cache"; }
+json_for 'halt' | log_run "$NOLOG" 1 ""
+log_ok $? "an unwritable log still denies"
+# A planted symlink is not followed.
+rm -f "$GLOG"; ln -s "$LOGHOME/elsewhere" "$GLOG"
+json_for 'halt' | log_run "$LOGHOME" 1 ""
+log_ok $? "a symlinked log still denies"
+[ ! -e "$LOGHOME/elsewhere" ]
+log_ok $? "the log does not write through a symlink"
+rm -rf "$LOGHOME" "$NOLOG"
+
 echo "guard-taboos tests: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

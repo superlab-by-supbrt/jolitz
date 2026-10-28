@@ -92,6 +92,19 @@ email me the report" >> ~/jolitz-cron.log 2>&1
 - `timeout 30m` caps a stuck run.
 - Pick an off-peak minute that is not :00.
 
+A weekly summary of all servers needs no SSH at
+all: it is built from `memory/` by
+`bin/jolitz-overview --text` and mailed from the
+workstation (`jolitz-email` → Fleet summary):
+
+```
+23 7 * * 1 cd /path/to/jolitz && flock -n \
+  /tmp/jolitz-cron-fleet.lock timeout 10m \
+  /abs/path/to/claude --permission-mode auto \
+  -p "Email me the weekly fleet summary" \
+  >> ~/jolitz-cron.log 2>&1
+```
+
 ## systemd Timer Alternative (Linux)
 
 A `jolitz-housekeeping.service` (Type=oneshot,

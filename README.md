@@ -62,9 +62,16 @@ tool.
 - **Security audit.** `Run a security audit on
   app.example.com`: SSH, firewall, accounts, open ports and
   kernel settings, by severity.
-- **Fleet audit.** `Run a fleet audit`: update, sshd,
-  firewall, mail and time-sync policy side by side for every
-  known server. Changes nothing.
+- **Fleet overview.** `Show me an overview of my servers`:
+  one page per fleet and a handover sheet per server, built
+  from memory without SSH ([Fleet overview](#fleet-overview)).
+- **Fleet audit.** `Run a fleet audit for prod`: update,
+  sshd, firewall, mail and time-sync policy side by side, for
+  every known server or one tag, with what changed since the
+  last audit. Changes nothing.
+- **Fleet summary.** `Email me the weekly fleet summary`:
+  changes, to-dos, stale servers, end of life and audit drift
+  as one plain-text mail.
 - **Scheduled runs.** `Email me a housekeeping report for
   every server each Monday`: cron or a systemd timer with
   `claude -p` (`rules/scheduled-housekeeping.md`).
@@ -90,6 +97,130 @@ Long jobs run on the host with their output in files, so a
 dropped connection loses nothing. SSH runs over one shared
 connection per host, held for 10 minutes; the sockets live in
 `~/.cache/jolitz` (mode 0700).
+
+## Fleet overview
+
+Everything jolitz learns about your servers is in `memory/`.
+`bin/jolitz-overview` turns it into pages, without touching a
+server:
+
+```bash
+bin/jolitz-overview            # memory/overview/index.html
+bin/jolitz-overview --eol      # fetch end-of-life dates first
+bin/jolitz-overview --tag prod # only servers tagged prod
+bin/jolitz-overview --text     # plain text, last 7 days
+```
+
+![Fleet overview: servers, end of life, to-dos, changes, audit drift](assets/overview/overview.png)
+
+- **Needs attention:** releases past or within 180 days of
+  their end of life, servers not connected for 90 days,
+  settings that differ between servers or changed since the
+  last fleet audit, memory files with a problem.
+- **Servers:** OS, end of life, IP, SSH port, aliases, tags,
+  own rules, last connection (amber after 30 days, red after
+  90), open to-dos, last change.
+- **Open to-dos, changes** of the last 30 days with detail
+  and way back, the **fleet audit** table and, if enabled,
+  the **guard denials**.
+
+Tag buttons filter the page. Each server gets a handover
+sheet, `memory/overview/hosts/<host>.html`: facts, open
+to-dos, standing constraints (the `Flags:` of its
+changelog), its `rules.md`, every change with detail and way
+back, its audit values and the full `memory.md`. It prints
+cleanly.
+
+![Handover sheet of one server](assets/overview/host.png)
+
+On the demo data in the repository:
+
+```bash
+bin/jolitz-overview -d assets/overview/demo -o /tmp/fleet-demo
+open /tmp/fleet-demo/index.html   # xdg-open on Linux
+```
+
+**Tags.** Tell jolitz what a server is for; it records the
+tags in the server's `memory.md` (`- Tags: prod, web`). The
+fleet audit, `--tag` and the summary mail take a tag.
+
+**End of life.** `--eol` asks [endoflife.date](https://endoflife.date)
+for the releases in your memory and caches the answer in
+`memory/eol/`. Only product names such as `debian` leave your
+machine, never a host name. Without `--eol` the cache is
+used. Known: Debian, Ubuntu, RHEL, Rocky, AlmaLinux, CentOS
+Stream, Fedora, openSUSE Leap, SLES, FreeBSD, NetBSD, macOS,
+Alpine, Proxmox VE, OPNsense.
+
+**Plain text and mail.** `--text` on the demo data:
+
+```
+$ bin/jolitz-overview -d assets/overview/demo --text --tag prod
+jolitz fleet summary, 2026-10-28, tag prod
+Hosts: 2, open to-dos: 2, changes in 7 days: 1
+
+Changes, last 7 days
+  2026-10-27 web1.example.com: nginx now sends HSTS for app.example.com — because the security audit flagged its absence
+
+Open to-dos
+  db1.example.com: Upgrade to Debian 12 (Bookworm)
+  db1.example.com: Move PostgreSQL 13 to 17 with pg_upgradecluster
+
+Not connected for 30 days or more
+  none
+
+End of life
+  db1.example.com: Debian 11 (Bullseye), ended 2026-08-31
+
+Fleet audit 2026-10-27 09:00: 3 settings differ, 2 changed since 2026-09-30 09:00
+  db1.example.com firewall.state: active -> inactive
+  db1.example.com time.service: chrony -> systemd-timesyncd
+
+Memory lint: 0 warnings
+EOL dates: endoflife.date, fetched debian 2026-10-28, macos 2026-10-28, rocky-linux 2026-10-28, ubuntu 2026-10-28
+```
+
+Every Monday by cron:
+
+```
+23 7 * * 1 cd /path/to/jolitz && flock -n \
+  /tmp/jolitz-cron-fleet.lock timeout 10m \
+  /abs/path/to/claude --permission-mode auto \
+  -p "Email me the weekly fleet summary" \
+  >> ~/jolitz-cron.log 2>&1
+```
+
+**Audit history.** Each fleet audit saves its values in
+`memory/audits/<YYYY-MM-DD-HHMM>.json` and reports what
+changed since the previous one. A change no changelog entry
+explains was made outside jolitz, and the report says so.
+Format: `.claude/skills/jolitz-fleet-audit/references/snapshot.md`.
+
+**Memory lint.** `bin/jolitz-memory-lint` checks the memory
+files. jolitz runs it after each memory update, the overview
+before it writes a page:
+
+```
+$ bin/jolitz-memory-lint
+WARN  db1.example.com: memory.md: tag "DB" is not lowercase letters, digits and -
+ERROR web1.example.com: servers/web1.example.com/memory.md:14: looks like a secret value; record its location, not the value (rules/secrets.md)
+memory lint: 4 hosts, 1 errors, 1 warnings
+```
+
+- **ERROR:** something that looks like a credential: a
+  private key block, a known token format, a password in a
+  URL or in `PASSWORD=`, a password hash. The line number is
+  printed, never the value. The overview refuses to build
+  until it is gone, so a secret never lands in a page you
+  forward. `Database password: in /root/.pgpass (0600)` is a
+  location and passes.
+- **WARN:** no `OS:` or `Last connected:` line, a date not in
+  `YYYY-MM-DD`, a tag not in lowercase, a `memory.md` over 40
+  lines, a `todo.md` with nothing open, a changelog entry
+  without timestamp. `--strict` fails on warnings too.
+
+The patterns are a backstop; a secret in a format they do
+not know passes.
 
 ## How it stays out of trouble
 
@@ -172,6 +303,14 @@ then. The agent cannot lift the guard itself: next to
 is always denied.
 
 The guard is a backstop against mistakes, not a sandbox.
+**Guard log, opt-in.** With `JOLITZ_GUARD_LOG=1` at session
+start every denial goes to `~/.cache/jolitz/guard.log` (mode
+0600): time, reason, the first 200 characters of the command,
+or only the path of a file edit. The overview counts them by
+reason. A denial that blocked real work is a false positive
+worth an issue. A command line can hold a secret, hence off
+by default. Writing it never changes a decision.
+
 OpenCode does not run it; there the written rules are the
 safety layer.
 
@@ -224,6 +363,9 @@ Plain text, gitignored:
 - `network.md`, `housekeeping.md`: cross-server facts, your
   own checks
 - `opencode.json`: your OpenCode config
+- `audits/`: one snapshot per fleet audit
+- `overview/`, `eol/`: pages and cached end-of-life dates
+  from `bin/jolitz-overview`; safe to delete
 
 ```bash
 bin/jolitz-backup                        # writes a .tar.gz
@@ -342,8 +484,12 @@ rules/           rule files per platform and topic
 .claude/skills/  housekeeping, security, email, fleet audit,
                  macOS cleanup
 .claude/hooks/   update check and the guard
-bin/             jolitz-update, jolitz-backup, jolitz-migrate
+bin/             jolitz-update, jolitz-backup, jolitz-migrate,
+                 jolitz-overview, jolitz-memory-lint
+lib/             the renderer behind jolitz-overview
+tests/           tests for lint and overview
 memory/          your state (gitignored)
+assets/overview/ screenshots and demo data for the overview
 assets/trailer/  script that renders the trailer
 ```
 

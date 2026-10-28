@@ -24,6 +24,31 @@ add `Mode: local` for localhost). Add
 `- SSH port: <port>` only for a port other than 22
 (`rules/ssh-port.md`).
 
+Keep `- Key: value` at the start of the line for
+these fields, and the date as `YYYY-MM-DD`:
+`bin/jolitz-overview` reads them to build the fleet
+overview, and `bin/jolitz-memory-lint` checks them.
+
+**Tags.** When the user names a role or group for a
+server ("this is prod", "one of the customer-a
+boxes"), record it:
+
+```markdown
+- Tags: prod, web, customer-a
+```
+
+Lowercase letters, digits and `-`, comma-separated.
+Never invent a tag. The fleet audit, housekeeping
+across several hosts and the overview take a tag to
+narrow their scope ("fleet audit for prod").
+
+**Lint after editing.** After changing memory
+files, run `bin/jolitz-memory-lint <hostname>`. An
+`ERROR` means a value that looks like a credential:
+replace it with its location before anything else.
+Fix `WARN` lines when they concern the file just
+edited.
+
 **Update memory immediately after any system
 change.** Keep it compact (~30 lines max). Remove
 outdated entries, merge related items.

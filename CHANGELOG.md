@@ -1,5 +1,42 @@
 # Changelog
 
+## 3.3.3-jolitz.4 — 2026-10-28
+
+- **A fleet overview from memory.** `bin/jolitz-overview`
+  writes `memory/overview/index.html`: servers with OS, end
+  of life, last connection, tags, open to-dos and last
+  change; a "needs attention" list; recent changes with
+  their way back; the latest fleet audit. Each server gets
+  a handover sheet with its standing constraints, own rules
+  and full changelog. `--text` prints a summary, `--tag`
+  narrows it. No server is contacted. Demo data and
+  screenshots are in `assets/overview/`.
+- **End-of-life dates from a live source.** `--eol` fetches
+  them from endoflife.date for the products in memory,
+  never host names, and caches them in `memory/eol/`. The
+  page names source and fetch date.
+- **Memory lint.** `bin/jolitz-memory-lint` flags values
+  that look like credentials (by line, never by value) and
+  shape problems: missing OS or last-connected line, bad
+  dates, tags, oversized memory, a todo.md with nothing
+  open. A secret stops the overview from being built.
+  jolitz runs it after each memory update.
+- **Tags.** `- Tags: prod, web` in `memory.md`. The fleet
+  audit takes `tag:<name>`, the overview `--tag`.
+- **The fleet audit keeps its history.** Each run saves a
+  snapshot in `memory/audits/` and reports what changed
+  since the last one, and which of those changes no
+  changelog entry explains.
+- **Fleet summary by mail.** "Email me the weekly fleet
+  summary" sends the text summary from the workstation;
+  `rules/scheduled-housekeeping.md` has the cron line.
+- **Opt-in guard log.** With `JOLITZ_GUARD_LOG=1` the
+  guard appends each denial to `~/.cache/jolitz/guard.log`
+  (0600): time, reason and the first 200 characters of the
+  command, or only the path of a file edit. Writing it
+  never changes a decision; an unwritable or symlinked log
+  still denies. The overview counts denials by reason.
+
 ## 3.3.3-jolitz.3 — 2026-10-28
 
 - **Everything is named jolitz.** Skills

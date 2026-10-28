@@ -1,0 +1,8 @@
+{
+  "date": "2026-09-30 09:00",
+  "hosts": {
+    "web1.example.com": {"ua.Unattended-Upgrade": "1", "ua.Automatic-Reboot": "true", "sshd.permitrootlogin": "prohibit-password", "sshd.passwordauthentication": "no", "firewall.state": "active", "time.service": "chrony"},
+    "db1.example.com": {"ua.Unattended-Upgrade": "1", "ua.Automatic-Reboot": "false", "sshd.permitrootlogin": "prohibit-password", "sshd.passwordauthentication": "no", "firewall.state": "active", "time.service": "chrony"}
+  },
+  "skipped": {"mac-mini.local": "macOS not yet supported"}
+}

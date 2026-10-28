@@ -1,9 +1,10 @@
 ---
 name: jolitz-fleet-audit
-argument-hint: "[hostname1 hostname2 ...]"
+argument-hint: "[hostname1 hostname2 ... | tag:<name>]"
 description: Compare key policies across all servers in
   memory/servers/ to surface silent drift. Makes no configuration
-  changes; writes one audit-trail line to each host's journal.
+  changes; writes one audit-trail line to each host's journal
+  and one local snapshot to memory/audits/ for comparison.
   Probes unattended-upgrades, sshd effective config, firewall
   posture, MTA, time sync, and auto-reboot behaviour. Use when
   the user asks to "fleet audit", "vergleiche alle server",
@@ -21,10 +22,12 @@ settings on every server in `memory/servers/` and rendering a
 side-by-side comparison so silent drift becomes visible.
 
 **No configuration changes.** The audit never alters any
-host's configuration. The only write is a single audit-trail
-line to each host's system journal (step 6 below). Acting on
-findings is a separate step (jolitz-housekeeping for
-per-host fixes, or manual edits with explicit user approval).
+host's configuration. The only write on a host is a single
+audit-trail line to its system journal (step 6 below);
+locally it saves one snapshot for the next comparison
+(step 7). Acting on findings is a separate step
+(jolitz-housekeeping for per-host fixes, or manual edits
+with explicit user approval).
 
 **Never run automatically** — only on explicit user request.
 
@@ -46,7 +49,9 @@ servers" — that maps to single-host housekeeping.
    (skip placeholders like `server1.example.com` and
    `192.168.64.20` unless the user names them explicitly).
    The user may pass an explicit subset as arguments — in
-   that case audit only those.
+   that case audit only those. An argument `tag:<name>`
+   ("fleet audit for prod") selects the hosts whose
+   `memory.md` has `<name>` in its `- Tags:` line.
 
 2. **Resolve SSH users.** Read `memory/user.md` for the
    per-host SSH user. Hosts without a mapping go on a
@@ -78,11 +83,21 @@ servers" — that maps to single-host housekeeping.
    (One line per host — this is an audit trail, not a
    change record.)
 
-7. **No memory updates.** The audit is a snapshot; it does
-   not own server state. If the audit uncovers a memory
-   file that contradicts the live config, mention it in
-   the "Drift detected" section so the user can decide
-   what to fix.
+7. **Save the snapshot.** Write every probed value to
+   `memory/audits/<YYYY-MM-DD-HHMM>.json` in the format of
+   `references/snapshot.md`, with the agent's file-edit
+   tool. Then compare it with the newest earlier snapshot
+   and add a "Changed since <date>" section to the report:
+   each host and setting whose value changed. A changed
+   value nobody logged in `changelog.log` is the drift
+   worth naming first. `bin/jolitz-overview` shows the
+   newest snapshot and these changes.
+
+8. **No server memory updates.** The audit does not own
+   server state: `memory/servers/` stays as it is. If the
+   audit uncovers a memory file that contradicts the live
+   config, mention it in the "Drift detected" section so
+   the user can decide what to fix.
 
 ## References
 
@@ -92,6 +107,8 @@ Read on demand:
   category (UA, sshd, firewall, MTA, time, auto-reboot).
 - `references/output-format.md` — table layout and the
   "Drift detected" section format.
+- `references/snapshot.md` — the JSON file written to
+  `memory/audits/`.
 
 ## Scope and limits
 
