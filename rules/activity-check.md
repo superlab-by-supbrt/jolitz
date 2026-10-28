@@ -124,6 +124,24 @@ Recent jolitz activity (last 7 days):
 - If there are more than 10 entries, summarize the
   oldest and show the most recent 5 in detail.
 
+## With a team hub
+
+When `~/.config/jolitz/hub.conf` exists, the hub's
+view of the host is part of this report: run
+`bin/jolitz-sync handover <hostname>` and add what
+it prints that the journal cannot know — who holds
+a claim on the host and why, which sessions are on
+it right now, the open to-dos and running jobs, the
+last changes with their way back (`rules/hub.md` →
+Claims and handover). Another person's claim or an
+open session on the host is said before the user's
+request runs, as step 6 of
+`rules/first-connection.md` requires. The hub is
+reached over HTTP from the workstation, never from
+the server; an unreachable hub is one line
+("hub unreachable, local copy") and the journal
+check stands alone.
+
 ## No activity
 
 If the journal has no jolitz entries, say nothing.

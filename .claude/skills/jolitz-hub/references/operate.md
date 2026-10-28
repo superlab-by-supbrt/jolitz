@@ -115,11 +115,64 @@ page. `bin/jolitz-doctor` prints one `hub:` line when
 
 A 401 (exit 2) means the token file does not match a user: the
 file was changed, or the admin rotated or removed the user. A
-403 on `push` means role `viewer`. 412 is a conflict: another
+403 on `push` means role `viewer`. 409 is a conflict: another
 workstation pushed first; the hub's version lands as the
-`.hub` file (`rules/hub.md` → Conflicts). 422 is the lint: the
-line number in the answer names the value that looks like a
-credential, and `push` counts the file as refused (exit 1).
+`.hub` file and the line count is printed, `resolve` ends it
+(`rules/hub.md` → Versions and conflicts). 428 is a `PUT`
+without `If-Match` on a file the hub already has; `jolitz-sync`
+never sends one, a hand-written `curl` must add the header.
+422 is the lint: the line number in the answer names the value
+that looks like a credential, and `push` counts the file as
+refused (exit 1). `stale` in the first lines of `status` means
+the last pull did not reach the hub: `bin/jolitz-sync pull`
+before working on a host (`rules/hub.md` → Pull at session
+start).
+
+## Claims and handover
+
+A claim is etiquette: "I am on this host; ask before you do".
+The hub refuses nothing because of it (`rules/hub.md` → Claims
+and handover). From the workstation:
+
+```
+bin/jolitz-sync claim db1.example.com "migration until 20:00"
+bin/jolitz-sync claim --keep db1.example.com "migration until 20:00"
+bin/jolitz-sync release db1.example.com
+bin/jolitz-sync handover db1.example.com
+bin/jolitz-sync history servers/db1.example.com/todo.md
+```
+
+`claim` sets the claim and prints the handover: claim, sessions
+on the host, open to-dos, running jobs (to-do lines naming
+`~/.jolitz/jobs/`), the last three changes with their
+`Rollback:` line. Without `--keep` the claim ends with the
+session: the Stop hook's `session end` releases every claim
+the session made (and the next `session start` releases what
+a crashed session left). `--keep` leaves it standing until
+`release`. Another person's claim is released only by them or
+by an admin, who may also take it over; `claim` then exits 1
+and names the holder. `handover` prints the same block without
+claiming; the UI shows it at the top of the host page, with
+the claim and release buttons.
+
+`history` lists the versions of one file with who and when; an
+old body is `GET /api/v1/files/<path>?version=N`. The UI's edits
+(to-dos, owner, tags, links) appear there as versions by the UI
+user and arrive on every workstation with the next pull.
+
+A conflict (`push` or `pull` exit 1, a `.hub` file next to the
+local one) ends with one of:
+
+```
+bin/jolitz-sync resolve servers/db1.example.com/todo.md --mine
+bin/jolitz-sync resolve servers/db1.example.com/todo.md --theirs
+```
+
+`--mine` pushes the local file over the hub's current version
+(after the memory lint); `--theirs` replaces the local file
+with the hub's. Both remove the `.hub` file. The user chooses
+after seeing `diff -u <file> <file>.hub`; jolitz never picks a
+side on its own.
 
 ## Leave
 

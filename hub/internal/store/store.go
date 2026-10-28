@@ -106,7 +106,12 @@ CREATE TABLE IF NOT EXISTS users(
   role TEXT NOT NULL, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS files(
   path TEXT PRIMARY KEY, body BLOB NOT NULL, sha256 TEXT NOT NULL,
-  size INTEGER NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL);
+  size INTEGER NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE IF NOT EXISTS file_versions(
+  path TEXT NOT NULL, version INTEGER NOT NULL, body BLOB NOT NULL,
+  sha256 TEXT NOT NULL, size INTEGER NOT NULL, updated_at TEXT NOT NULL,
+  updated_by TEXT NOT NULL, PRIMARY KEY(path, version));
 CREATE TABLE IF NOT EXISTS hosts(
   name TEXT PRIMARY KEY, os TEXT NOT NULL DEFAULT '', ip TEXT NOT NULL DEFAULT '',
   distro TEXT NOT NULL DEFAULT '', tags TEXT NOT NULL DEFAULT '',
@@ -137,7 +142,35 @@ CREATE TABLE IF NOT EXISTS jobs(name TEXT PRIMARY KEY, last_run TEXT NOT NULL, o
 `
 
 func (s *Store) migrate() error {
-	_, err := s.db.Exec(schema)
+	if _, err := s.db.Exec(schema); err != nil {
+		return err
+	}
+	// A phase-1 database has files without a version column.
+	// Every stored file becomes version 1, its row the first
+	// entry of its history.
+	has := false
+	if err := s.each(`PRAGMA table_info(files)`, func(sc scanner) error {
+		var cid int
+		var name, typ string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := sc.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
+			return err
+		}
+		if name == "version" {
+			has = true
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	if !has {
+		if _, err := s.db.Exec(`ALTER TABLE files ADD COLUMN version INTEGER NOT NULL DEFAULT 1`); err != nil {
+			return err
+		}
+	}
+	_, err := s.db.Exec(`INSERT OR IGNORE INTO file_versions(path, version, body, sha256, size, updated_at, updated_by)
+		SELECT path, version, body, sha256, size, updated_at, updated_by FROM files`)
 	return err
 }
 
@@ -318,9 +351,12 @@ func Classify(path string) (kind Kind, host string) {
 	return KindInvalid, ""
 }
 
-// FileInfo is one row of the manifest.
+// FileInfo is one row of the manifest. Version counts the
+// writes of a path from 1; every write keeps the previous body
+// in the history.
 type FileInfo struct {
 	Path      string    `json:"path"`
+	Version   int       `json:"version"`
 	SHA256    string    `json:"sha256"`
 	Size      int64     `json:"size"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -335,7 +371,7 @@ func SHA256(b []byte) string {
 
 // ListFiles returns the manifest, by path.
 func (s *Store) ListFiles() ([]FileInfo, error) {
-	rows, err := s.db.Query(`SELECT path, sha256, size, updated_at, updated_by FROM files ORDER BY path`)
+	rows, err := s.db.Query(`SELECT path, version, sha256, size, updated_at, updated_by FROM files ORDER BY path`)
 	if err != nil {
 		return nil, err
 	}
@@ -344,7 +380,7 @@ func (s *Store) ListFiles() ([]FileInfo, error) {
 	for rows.Next() {
 		var f FileInfo
 		var at string
-		if err := rows.Scan(&f.Path, &f.SHA256, &f.Size, &at, &f.UpdatedBy); err != nil {
+		if err := rows.Scan(&f.Path, &f.Version, &f.SHA256, &f.Size, &at, &f.UpdatedBy); err != nil {
 			return nil, err
 		}
 		f.UpdatedAt = parseTime(at)
@@ -353,13 +389,16 @@ func (s *Store) ListFiles() ([]FileInfo, error) {
 	return out, rows.Err()
 }
 
-// GetFile returns a file's bytes and manifest row.
-func (s *Store) GetFile(path string) ([]byte, *FileInfo, error) {
+type querier interface {
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+func getFile(q querier, path string) ([]byte, *FileInfo, error) {
 	var body []byte
 	var f FileInfo
 	var at string
-	err := s.db.QueryRow(`SELECT path, body, sha256, size, updated_at, updated_by FROM files WHERE path = ?`, path).
-		Scan(&f.Path, &body, &f.SHA256, &f.Size, &at, &f.UpdatedBy)
+	err := q.QueryRow(`SELECT path, version, body, sha256, size, updated_at, updated_by FROM files WHERE path = ?`, path).
+		Scan(&f.Path, &f.Version, &body, &f.SHA256, &f.Size, &at, &f.UpdatedBy)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil, ErrNotFound
 	}
@@ -373,30 +412,132 @@ func (s *Store) GetFile(path string) ([]byte, *FileInfo, error) {
 	return body, &f, nil
 }
 
-// PutFile stores a file and rebuilds the tables derived from it.
-// ifMatch, when not empty, must equal the stored sha256 (or the
-// file must not exist when ifMatch is "-"). An alias body that is
-// not a host name is ErrInvalid.
-func (s *Store) PutFile(path string, body []byte, by, ifMatch string) (*FileInfo, error) {
+// GetFile returns a file's bytes and manifest row.
+func (s *Store) GetFile(path string) ([]byte, *FileInfo, error) {
+	return getFile(s.db, path)
+}
+
+// GetFileVersion returns one version of a file from its
+// history, current or old; ErrNotFound when the path never had
+// that version.
+func (s *Store) GetFileVersion(path string, version int) ([]byte, *FileInfo, error) {
+	var body []byte
+	f := FileInfo{Path: path, Version: version}
+	var at string
+	err := s.db.QueryRow(`SELECT body, sha256, size, updated_at, updated_by FROM file_versions WHERE path = ? AND version = ?`,
+		path, version).Scan(&body, &f.SHA256, &f.Size, &at, &f.UpdatedBy)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	f.UpdatedAt = parseTime(at)
+	if body == nil {
+		body = []byte{}
+	}
+	return body, &f, nil
+}
+
+// FileHistory lists the versions of a path, newest first. A
+// deleted file keeps its history; an unknown path gives an
+// empty list.
+func (s *Store) FileHistory(path string) ([]FileInfo, error) {
+	out := []FileInfo{}
+	err := s.each(`SELECT version, sha256, size, updated_at, updated_by FROM file_versions WHERE path = ? ORDER BY version DESC`,
+		func(sc scanner) error {
+			f := FileInfo{Path: path}
+			var at string
+			if err := sc.Scan(&f.Version, &f.SHA256, &f.Size, &at, &f.UpdatedBy); err != nil {
+				return err
+			}
+			f.UpdatedAt = parseTime(at)
+			out = append(out, f)
+			return nil
+		}, path)
+	return out, err
+}
+
+// checkPath validates a path and body for PutFile.
+func checkPath(path string, body []byte) (Kind, string, error) {
 	kind, host := Classify(path)
 	if kind == KindInvalid {
-		return nil, fmt.Errorf("%w: path %q", ErrInvalid, path)
+		return kind, "", fmt.Errorf("%w: path %q", ErrInvalid, path)
 	}
 	if kind == KindAlias && parse.Alias(body) == "" {
-		return nil, fmt.Errorf("%w: an alias file holds one canonical host name", ErrInvalid)
+		return kind, "", fmt.Errorf("%w: an alias file holds one canonical host name", ErrInvalid)
 	}
 	if kind == KindAudit {
 		if _, _, err := parse.Audit(body); err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
+			return kind, "", fmt.Errorf("%w: %v", ErrInvalid, err)
 		}
+	}
+	return kind, host, nil
+}
+
+// PutFile stores a file as a new version and rebuilds the tables
+// derived from it. ifMatch, when not empty, must equal the
+// stored sha256 (or the file must not exist when ifMatch is
+// "-"); otherwise ErrMismatch and nothing changes. An alias body
+// that is not a host name is ErrInvalid.
+func (s *Store) PutFile(path string, body []byte, by, ifMatch string) (*FileInfo, error) {
+	kind, host, err := checkPath(path, body)
+	if err != nil {
+		return nil, err
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
+	f, err := s.putFile(tx, kind, host, path, body, by, ifMatch)
+	if err != nil {
+		return nil, err
+	}
+	return f, tx.Commit()
+}
+
+// UpdateFile rewrites a file in one transaction: edit gets the
+// current body (nil when the file does not exist) and returns
+// the new one; an error from edit is returned as it is. The
+// write is a new version by user by, as PutFile makes it.
+func (s *Store) UpdateFile(path, by string, edit func(old []byte) ([]byte, error)) (*FileInfo, error) {
+	if kind, _ := Classify(path); kind == KindInvalid {
+		return nil, fmt.Errorf("%w: path %q", ErrInvalid, path)
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	old, cur, err := getFile(tx, path)
+	ifMatch := "-"
+	switch {
+	case errors.Is(err, ErrNotFound):
+		old = nil
+	case err != nil:
+		return nil, err
+	default:
+		ifMatch = cur.SHA256
+	}
+	body, err := edit(old)
+	if err != nil {
+		return nil, err
+	}
+	kind, host, err := checkPath(path, body)
+	if err != nil {
+		return nil, err
+	}
+	f, err := s.putFile(tx, kind, host, path, body, by, ifMatch)
+	if err != nil {
+		return nil, err
+	}
+	return f, tx.Commit()
+}
+
+func (s *Store) putFile(tx *sql.Tx, kind Kind, host, path string, body []byte, by, ifMatch string) (*FileInfo, error) {
 	var cur string
-	err = tx.QueryRow(`SELECT sha256 FROM files WHERE path = ?`, path).Scan(&cur)
+	err := tx.QueryRow(`SELECT sha256 FROM files WHERE path = ?`, path).Scan(&cur)
 	exists := err == nil
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
@@ -406,18 +547,38 @@ func (s *Store) PutFile(path string, body []byte, by, ifMatch string) (*FileInfo
 			return nil, ErrMismatch
 		}
 	}
+	// The counter continues after a delete, so a version number
+	// names one body for the life of the hub.
+	var version int
+	if err := tx.QueryRow(`SELECT coalesce(max(version), 0) + 1 FROM file_versions WHERE path = ?`, path).Scan(&version); err != nil {
+		return nil, err
+	}
 	now := s.now()
-	f := &FileInfo{Path: path, SHA256: SHA256(body), Size: int64(len(body)), UpdatedAt: parseTime(now), UpdatedBy: by}
-	if _, err := tx.Exec(`INSERT INTO files(path, body, sha256, size, updated_at, updated_by) VALUES(?,?,?,?,?,?)
+	f := &FileInfo{Path: path, Version: version, SHA256: SHA256(body), Size: int64(len(body)), UpdatedAt: parseTime(now), UpdatedBy: by}
+	if _, err := tx.Exec(`INSERT INTO files(path, body, sha256, size, updated_at, updated_by, version) VALUES(?,?,?,?,?,?,?)
 		ON CONFLICT(path) DO UPDATE SET body = excluded.body, sha256 = excluded.sha256, size = excluded.size,
-		updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
-		path, body, f.SHA256, f.Size, now, by); err != nil {
+		updated_at = excluded.updated_at, updated_by = excluded.updated_by, version = excluded.version`,
+		path, body, f.SHA256, f.Size, now, by, version); err != nil {
 		return nil, err
 	}
-	if err := derive(tx, kind, host, body, now); err != nil {
+	if _, err := tx.Exec(`INSERT INTO file_versions(path, version, body, sha256, size, updated_at, updated_by) VALUES(?,?,?,?,?,?,?)`,
+		path, version, body, f.SHA256, f.Size, now, by); err != nil {
 		return nil, err
 	}
-	return f, tx.Commit()
+	return f, derive(tx, kind, host, body, now)
+}
+
+// PruneFileVersions deletes history entries written before t.
+// The current version of every stored file stays, whatever its
+// age, as does the newest version of a deleted file.
+func (s *Store) PruneFileVersions(t time.Time) (int64, error) {
+	res, err := s.db.Exec(`DELETE FROM file_versions WHERE updated_at < ?
+		AND version < (SELECT max(version) FROM file_versions v WHERE v.path = file_versions.path)`,
+		t.UTC().Format(time.RFC3339))
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 // DeleteFile removes a file and what was derived from it.
@@ -802,6 +963,67 @@ func (s *Store) Host(name string) (*HostDetail, error) {
 		}
 	}
 	return d, nil
+}
+
+// Handover is what the next person on a host needs first: who
+// holds it, who is on it, what is open, what runs, and the last
+// changes with their way back.
+type Handover struct {
+	Host     string         `json:"host"`
+	Claim    *Claim         `json:"claim"`
+	Sessions []Session      `json:"sessions"`
+	Todos    []string       `json:"todos"`
+	Jobs     []string       `json:"jobs"`
+	Changes  []parse.Change `json:"changes"`
+}
+
+// JobsDir is what a to-do line names when it records a running
+// job (rules/ssh-connections.md).
+const JobsDir = ".jolitz/jobs/"
+
+// Handover builds the handover block of a host; ErrNotFound for
+// a host without files.
+func (s *Store) Handover(name string) (*Handover, error) {
+	hosts, err := s.scanHosts("WHERE name = ?", name)
+	if err != nil {
+		return nil, err
+	}
+	if len(hosts) == 0 {
+		return nil, ErrNotFound
+	}
+	h := &Handover{Host: name, Sessions: []Session{}, Todos: []string{}, Jobs: []string{}}
+	if c, err := s.Claim(name); err == nil {
+		h.Claim = c
+	} else if !errors.Is(err, ErrNotFound) {
+		return nil, err
+	}
+	sessions, err := s.OpenSessions()
+	if err != nil {
+		return nil, err
+	}
+	for _, se := range sessions {
+		if se.Host == name {
+			h.Sessions = append(h.Sessions, se)
+		}
+	}
+	todos, err := s.Todos(name)
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range todos {
+		if !t.Open {
+			continue
+		}
+		if strings.Contains(t.Text, JobsDir) {
+			h.Jobs = append(h.Jobs, t.Text)
+		} else {
+			h.Todos = append(h.Todos, t.Text)
+		}
+	}
+	if h.Changes, err = s.Changes(ChangeFilter{Host: name, Limit: 3}); err != nil {
+		return nil, err
+	}
+	return h, nil
 }
 
 // ---- changes, todos, links, audits -------------------------

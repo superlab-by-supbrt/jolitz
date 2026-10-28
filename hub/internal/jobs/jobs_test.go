@@ -55,7 +55,15 @@ func TestRetention(t *testing.T) {
 	id, _ := st.StartSession("alice", "web1.example.com", "mbp")
 	_ = st.EndSession(id)
 	_ = st.AddGuard("alice", old, "old")
+	c.set(c.now().AddDate(-3, 0, 0))
+	v1, err := st.PutFile("network.md", []byte("v1\n"), "alice", "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	c.set(time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC))
+	if _, err := st.PutFile("network.md", []byte("v2\n"), "alice", v1.SHA256); err != nil {
+		t.Fatal(err)
+	}
 	_ = st.AddGuard("bob", c.now(), "new")
 	cfg := config.Default()
 	cfg.EOL.Enabled = false
@@ -66,11 +74,14 @@ func TestRetention(t *testing.T) {
 	}
 	s.RunDue(context.Background())
 	r, _ := st.JobRun("retention")
-	if r == nil || !r.OK || r.Result != "1 sessions, 1 guard rows removed; file versions: not in phase 1" {
+	if r == nil || !r.OK || r.Result != "1 sessions, 1 guard rows, 1 old file versions removed" {
 		t.Errorf("run %+v", r)
 	}
 	if _, _, err := st.Session(id); err == nil {
 		t.Error("old session kept")
+	}
+	if h, _ := st.FileHistory("network.md"); len(h) != 1 || h[0].Version != 2 {
+		t.Errorf("history after retention %+v, want only version 2", h)
 	}
 	gs, _ := st.GuardCounts(time.Time{})
 	if len(gs) != 1 || gs[0].Reason != "new" {
@@ -84,7 +95,7 @@ func TestRetention(t *testing.T) {
 	}
 	c.set(c.now().Add(2 * time.Hour))
 	s.RunDue(context.Background())
-	if r3, _ := st.JobRun("retention"); r3.At.Equal(r.At) || r3.Result != "0 sessions, 0 guard rows removed; file versions: not in phase 1" {
+	if r3, _ := st.JobRun("retention"); r3.At.Equal(r.At) || r3.Result != "0 sessions, 0 guard rows, 0 old file versions removed" {
 		t.Errorf("second run %+v", r3)
 	}
 	d := s.Describe()

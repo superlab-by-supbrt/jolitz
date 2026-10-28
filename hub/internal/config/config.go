@@ -422,7 +422,7 @@ func (c *Config) Public() []KV {
 		{"metrics_public", b(c.MetricsPublic)},
 		{"retention.sessions_days", i(c.Retention.SessionsDays)},
 		{"retention.guard_days", i(c.Retention.GuardDays)},
-		{"retention.versions_years", i(c.Retention.VersionsYears) + " (file versions: not in phase 1)"},
+		{"retention.versions_years", i(c.Retention.VersionsYears) + " (old file versions; the current one is kept)"},
 		{"eol.enabled", b(c.EOL.Enabled)},
 		{"summary.weekday", c.Summary.Weekday},
 		{"summary.hour", i(c.Summary.Hour)},

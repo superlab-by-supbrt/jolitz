@@ -22,7 +22,7 @@
 </tr>
 {{else}}<tr><td colspan="5" class="muted">No scheduler is running (tests, or serve started without one).</td></tr>{{end}}
 </tbody></table>
-<p class="sub">Retention and the EOL fetch run daily, the summary weekly at the configured hour in the hub host's local time; a hub that was down at that hour sends the summary when it is back. File versions are not kept in phase 1, so <code>retention.versions_years</code> has no job yet.</p>
+<p class="sub">Retention and the EOL fetch run daily, the summary weekly at the configured hour in the hub host's local time; a hub that was down at that hour sends the summary when it is back. Retention also removes file versions older than <code>retention.versions_years</code>; the current version of every file stays.</p>
 
 <h2>notify channels</h2>
 <table class="dense">

@@ -80,6 +80,9 @@ func New(cfg Config) http.Handler {
 	mux.HandleFunc("GET /hosts/{name}", s.page(s.host))
 	mux.HandleFunc("POST /hosts/{name}/claim", s.page(s.claim))
 	mux.HandleFunc("POST /hosts/{name}/release", s.page(s.release))
+	mux.HandleFunc("POST /hosts/{name}/todos", s.page(s.todos))
+	mux.HandleFunc("POST /hosts/{name}/facts", s.page(s.facts))
+	mux.HandleFunc("POST /links", s.page(s.links))
 	mux.HandleFunc("GET /timeline", s.page(s.timeline))
 	mux.HandleFunc("GET /activity", s.page(s.activity))
 	mux.HandleFunc("GET /presence", s.page(s.presence))
@@ -300,6 +303,7 @@ type fleetPage struct {
 	Claims   []store.Claim
 	Todos    []store.TodoRow
 	Changes  []parse.Change
+	Links    []parse.Link
 	Stale    int
 	OpenTodo int
 }
@@ -326,7 +330,9 @@ func (s *server) fleet(w http.ResponseWriter, r *http.Request, u *store.User) {
 			if p.Sessions, err = st.OpenSessions(); err == nil {
 				if p.Claims, err = st.Claims(); err == nil {
 					if p.Todos, err = st.Todos(""); err == nil {
-						p.Changes, err = st.Changes(store.ChangeFilter{Limit: 30})
+						if p.Changes, err = st.Changes(store.ChangeFilter{Limit: 30}); err == nil {
+							p.Links, err = st.Links()
+						}
 					}
 				}
 			}
@@ -358,10 +364,15 @@ func (s *server) fleet(w http.ResponseWriter, r *http.Request, u *store.User) {
 type hostPage struct {
 	base
 	H          *store.HostDetail
+	Handover   *store.Handover
 	Flags      []parse.Change
 	Mine       bool
 	Note       string
 	AuditDrift map[string]bool
+	TagsText   string
+	// MemoryVersion is the file version of memory.md, 0 without
+	// one.
+	MemoryVersion int
 }
 
 func (s *server) hostName(w http.ResponseWriter, r *http.Request) string {
@@ -392,7 +403,14 @@ func (s *server) host(w http.ResponseWriter, r *http.Request, u *store.User) {
 		s.fail(w, r, err)
 		return
 	}
-	p := hostPage{base: b, H: h, AuditDrift: map[string]bool{}}
+	p := hostPage{base: b, H: h, AuditDrift: map[string]bool{}, TagsText: strings.Join(h.Tags, ", ")}
+	if p.Handover, err = s.cfg.Store.Handover(name); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if _, info, err := s.cfg.Store.GetFile("servers/" + name + "/memory.md"); err == nil {
+		p.MemoryVersion = info.Version
+	}
 	for _, c := range h.Changes {
 		if c.Flags != "" {
 			p.Flags = append(p.Flags, c)

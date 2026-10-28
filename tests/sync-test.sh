@@ -160,7 +160,8 @@ TOKENS = re.compile("|".join([
 ASSIGN = re.compile(r"(^|[^A-Za-z0-9])(password|passwd|passphrase|secret|"
                     r"token|api[_-]?key)\s*=\s*[^\s$<{\"']", re.I)
 
-FILES = {}      # path -> dict(body, sha256, updated_at, updated_by)
+FILES = {}      # path -> dict(body, sha256, updated_at, updated_by, version)
+HISTORY = {}    # path -> list of dict(version, sha256, size, updated_at, updated_by)
 SESSIONS = {}   # id -> dict
 CLAIMS = {}     # host -> dict
 
@@ -214,15 +215,47 @@ class H(BaseHTTPRequestHandler):
             return self.send(200, {"user": user, "role": USERS[self.headers["Authorization"][7:]][1]})
         if r == "files":
             return self.send(200, [
-                {"path": p, "sha256": f["sha256"], "size": len(f["body"]),
-                 "updated_at": f["updated_at"], "updated_by": f["updated_by"]}
+                {"path": p, "version": f["version"], "sha256": f["sha256"],
+                 "size": len(f["body"]), "updated_at": f["updated_at"],
+                 "updated_by": f["updated_by"]}
                 for p, f in sorted(FILES.items())])
+        if r.startswith("files/") and r.endswith("/history"):
+            p = r[6:-8]
+            if p not in HISTORY:
+                return self.send(404, {"error": "no such file"})
+            return self.send(200, [{k: v for k, v in h.items() if k != "body"}
+                                   for h in reversed(HISTORY[p])])
         if r.startswith("files/"):
             p = r[6:]
+            q = self.path.split("?", 1)[1] if "?" in self.path else ""
+            m = re.match(r"^version=(\d+)$", q)
+            if m:
+                for h in HISTORY.get(p, []):
+                    if h["version"] == int(m.group(1)):
+                        return self.send(200, raw=h["body"], ctype="application/octet-stream")
+                return self.send(404, {"error": "no such version"})
             if p not in FILES:
                 return self.send(404, {"error": "no such file"})
             return self.send(200, raw=FILES[p]["body"],
                              ctype="application/octet-stream")
+        m = re.match(r"^hosts/([^/]+)/handover$", r)
+        if m:
+            h = m.group(1)
+            if not any(p.startswith("servers/" + h + "/") for p in FILES):
+                return self.send(404, {"error": "no such host"})
+            todo = FILES.get("servers/" + h + "/todo.md", {}).get("body", b"").decode("utf-8", "replace")
+            items = [l[6:] for l in todo.split("\n") if l.startswith("- [ ] ")]
+            t = time.time()
+            c = CLAIMS.get(h)
+            return self.send(200, {
+                "host": h,
+                "claim": ({"host": h, "user": c["user"], "note": c["note"], "since": c["since"]} if c else None),
+                "sessions": [{"id": i, "user": s["user"], "host": s["host"], "workstation": s["workstation"],
+                              "age_seconds": int(t - s["t0"]), "stale": False}
+                             for i, s in SESSIONS.items() if s["host"] == h],
+                "todos": [x for x in items if ".jolitz/jobs/" not in x],
+                "jobs": [x for x in items if ".jolitz/jobs/" in x],
+                "changes": []})
         if r == "sessions":
             t = time.time()
             return self.send(200, [
@@ -247,18 +280,30 @@ class H(BaseHTTPRequestHandler):
             p = r[6:]
             if not PATH_RE.match(p) or "<" in p or '"' in p:
                 return self.send(400, {"error": "path outside the allowed set"})
-            cur = FILES.get(p)
-            im = self.headers.get("If-Match")
-            if im and (cur is None or cur["sha256"] != im.lower()):
-                return self.send(412, {"error": "If-Match does not match",
-                                       "sha256": cur["sha256"] if cur else None})
             for n, line in enumerate(data.decode("utf-8", "replace").split("\n"), 1):
                 if TOKENS.search(line) or ASSIGN.search(line):
                     return self.send(422, {"line": n,
                                            "reason": "looks like a secret value"})
-            FILES[p] = {"body": data, "sha256": hashlib.sha256(data).hexdigest(),
-                        "updated_at": now(), "updated_by": user}
-            return self.send(200, {"path": p, "sha256": FILES[p]["sha256"]})
+            cur = FILES.get(p)
+            im = self.headers.get("If-Match", "").strip('"')
+            yours = hashlib.sha256(data).hexdigest()
+            if im and im != "*" and (cur is None or cur["sha256"] != im.lower()):
+                return self.send(409, {"error": "If-Match does not match",
+                                       "version": cur["version"] if cur else 0,
+                                       "sha256": cur["sha256"] if cur else "",
+                                       "yours_sha256": yours, "diff": "",
+                                       "lines_added": 0, "lines_removed": 0})
+            if not im and cur is not None:
+                return self.send(428, {"error": "If-Match required", "version": cur["version"],
+                                       "sha256": cur["sha256"], "yours_sha256": yours, "diff": ""})
+            v = (HISTORY[p][-1]["version"] + 1) if p in HISTORY else 1
+            FILES[p] = {"body": data, "sha256": yours, "updated_at": now(),
+                        "updated_by": user, "version": v}
+            HISTORY.setdefault(p, []).append({"version": v, "sha256": yours, "size": len(data),
+                                             "updated_at": now(), "updated_by": user,
+                                             "body": data})
+            return self.send(201 if v == 1 else 200,
+                             {"path": p, "version": v, "sha256": yours})
         if r.startswith("claims/"):
             h = r[7:]
             try:
@@ -471,9 +516,11 @@ has "$T/o" 'pull: 0 files' "status: nothing to pull from an empty hub"
 hasnt "$T/o" 'user.md' "status never lists user.md"
 hasnt "$T/o" 'notes' "status never lists an unknown file"
 has "$T/o" 'workstation: test-ws' "status shows the workstation"
+has "$T/o" 'pulled: never, stale (never pulled; run jolitz-sync pull)' "status: stale before the first pull"
 "$SYNC" -d "$M" status --short > "$T/o" 2>&1
 has "$T/o" "$URL: hub " "status --short starts with the url"
 has "$T/o" ', alice, operator, 8 to push, 0 to pull, 0 conflicts' "status --short: user, role, counts"
+has "$T/o" ', stale' "status --short says stale before the first pull"
 n=$(wc -l < "$T/o" | tr -d ' ')
 [ "$n" -eq 1 ]; ok $? "status --short is one line (got $n)"
 
@@ -529,6 +576,26 @@ ok $? "the alias points to the canonical directory"
 "$SYNC" -d "$M2" pull --quiet > "$T/o" 2>&1; rc=$?
 ok $(( rc != 0 )) "quiet pull with nothing to do exits 0 (got $rc)"
 [ ! -s "$T/o" ]; ok $? "quiet pull with nothing to do is silent"
+[ -s "$M2/.hub-sync.pulled" ]; ok $? "pull records its time"
+"$SYNC" -d "$M2" status > "$T/o" 2>&1
+grep -q '^pulled: 20[0-9-]*T[0-9:]*Z$' "$T/o"; ok $? "status: pulled with a time, not stale ($(grep '^pulled' "$T/o"))"
+"$SYNC" -d "$M2" status --short > "$T/o" 2>&1
+hasnt "$T/o" 'stale' "status --short is not stale after a pull"
+# An unreachable hub at the next pull marks the copy stale.
+printf 'url=http://127.0.0.1:1\ntoken_file=%s\nworkstation=test-ws\n' "$HDR_A" > "$CONF"
+"$SYNC" -d "$M2" pull --quiet > "$T/o" 2>&1; rc=$?
+ok $(( rc != 3 )) "pull against a dead hub exits 3 (got $rc)"
+[ -s "$M2/.hub-sync.pull-failed" ]; ok $? "a failed pull is recorded"
+printf 'url=%s\ntoken_file=%s\nworkstation=test-ws\n' "$URL" "$HDR_A" > "$CONF"
+"$SYNC" -d "$M2" status > "$T/o" 2>&1
+grep -q '^pulled: 20.*, stale (pull failed at 20.*; run jolitz-sync pull)$' "$T/o"
+ok $? "status: stale after a failed pull ($(grep '^pulled' "$T/o"))"
+"$SYNC" -d "$M2" status --short > "$T/o" 2>&1
+has "$T/o" ', stale' "status --short says stale after a failed pull"
+"$SYNC" -d "$M2" pull --quiet > /dev/null 2>&1
+[ ! -e "$M2/.hub-sync.pull-failed" ]; ok $? "a pull that ran clears the failure"
+"$SYNC" -d "$M2" status --short > "$T/o" 2>&1
+hasnt "$T/o" 'stale' "status --short: fresh again"
 
 # A host directory that is a symlink out of memory/ (planted,
 # or a mistake) must not receive the hub's files: the write
@@ -545,9 +612,19 @@ has "$T/o" 'outside memory/' "pull names the link that leaves memory/"
 # --- a colleague's change arrives ----------------------------
 printf '%s\n- Tags: prod, web, bob\n' "$(cat "$M/servers/web1.example.com/memory.md")" \
   > "$T/bob.md"
+# hub_sha <path>: the hub's current sha256 of a file.
+hub_sha() {
+  hub "$HDR_B" files > /dev/null
+  jq -r --arg p "$1" '.[] | select(.path == $p) | .sha256' "$T/hub.out"
+}
+# Once a file exists the hub wants If-Match (428 without).
 code=$(hub "$HDR_B" files/servers/web1.example.com/memory.md -T "$T/bob.md")
+[ "$code" = 428 ]; ok $? "a PUT on an existing file without If-Match is 428 (got $code)"
+code=$(hub "$HDR_B" files/servers/web1.example.com/memory.md -T "$T/bob.md" \
+  -H "If-Match: $(hub_sha servers/web1.example.com/memory.md)")
 [ "$code" = 200 ] || [ "$code" = 201 ] || [ "$code" = 204 ]
-ok $? "bob PUTs memory.md (got $code)"
+ok $? "bob PUTs memory.md with If-Match (got $code)"
+jq -e '.version == 2' "$T/hub.out" > /dev/null 2>&1; ok $? "the PUT answer carries version 2"
 "$SYNC" -d "$M2" pull > "$T/o" 2>&1; rc=$?
 ok $(( rc != 0 )) "pull of an unchanged local file exits 0 (got $rc)"
 has "$T/o" 'pull: servers/web1.example.com/memory.md' "pull fetches the changed file"
@@ -559,8 +636,8 @@ printf '%s\n- Tags: prod, web, alice\n' "$(cat "$M/servers/web1.example.com/memo
 cp "$M/servers/web1.example.com/memory.md" "$T/alice.md"
 "$SYNC" -d "$M" pull > "$T/o" 2>&1; rc=$?
 ok $(( rc != 1 )) "pull with a conflict exits 1 (got $rc)"
-has "$T/o" 'conflict: servers/web1.example.com/memory.md (kept; hub version in servers/web1.example.com/memory.md.hub)' \
-  "pull lists the conflict"
+has "$T/o" 'conflict: servers/web1.example.com/memory.md (kept; hub version in servers/web1.example.com/memory.md.hub, +1 -1 lines against yours; resolve --mine|--theirs)' \
+  "pull lists the conflict with the diff summary"
 has "$T/o" '1 conflict' "pull summary counts the conflict"
 same "$M/servers/web1.example.com/memory.md" "$T/alice.md" "the local file is kept"
 same "$M/servers/web1.example.com/memory.md.hub" "$T/bob.md" ".hub holds the hub version"
@@ -572,12 +649,70 @@ code=$(hub "$HDR_B" files/servers/web1.example.com/memory.md)
 same "$T/hub.out" "$T/bob.md" "the hub still holds bob's version"
 "$SYNC" -d "$M" status > "$T/o" 2>&1
 has "$T/o" 'conflicts: 1' "status counts the conflict"
-# Resolve: take the hub version, drop the .hub file.
-mv "$M/servers/web1.example.com/memory.md.hub" "$M/servers/web1.example.com/memory.md"
-"$SYNC" -d "$M" pull > "$T/o" 2>&1; rc=$?
-ok $(( rc != 0 )) "pull after resolving exits 0 (got $rc)"
+has "$T/o" '  servers/web1.example.com/memory.md' "status names the conflicting file"
+# A push that races another push: 409 on the server side, with
+# both shas and the diff of the hub's body against the request.
+code=$(hub "$HDR_B" files/servers/web1.example.com/memory.md -T "$T/alice.md" \
+  -H 'If-Match: 0000000000000000000000000000000000000000000000000000000000000000')
+[ "$code" = 409 ]; ok $? "a stale If-Match gets 409 (got $code)"
+jq -e '.error and .version == 2 and (.sha256 | length) == 64
+  and (.yours_sha256 | length) == 64 and (.diff | type) == "string"' \
+  "$T/hub.out" > /dev/null 2>&1; ok $? "the 409 body has error, version, sha256, yours_sha256, diff"
+if [ "$MODE" = real ]; then
+  jq -r '.diff' "$T/hub.out" > "$T/diff"
+  has "$T/diff" '-- Tags: prod, web, bob' "the 409 diff removes the hub line"
+  has "$T/diff" '+- Tags: prod, web, alice' "the 409 diff adds the pushed line"
+  has "$T/diff" '--- a/servers/web1.example.com/memory.md (hub, version 2, bob)' \
+    "the 409 diff names the hub version and who wrote it"
+  jq -e '.lines_added == 1 and .lines_removed == 1' "$T/hub.out" > /dev/null 2>&1
+  ok $? "the 409 body counts the lines"
+fi
+# Resolve --theirs: the hub version replaces the local file.
+"$SYNC" -d "$M" resolve servers/web1.example.com/memory.md.hub --theirs > "$T/o" 2>&1; rc=$?
+ok $(( rc != 0 )) "resolve --theirs exits 0 (got $rc: $(cat "$T/o" | tr '\n' ' '))"
+has "$T/o" 'resolved: servers/web1.example.com/memory.md (hub version taken)' "resolve --theirs confirms"
+same "$M/servers/web1.example.com/memory.md" "$T/bob.md" "resolve --theirs installed the hub version"
+[ ! -e "$M/servers/web1.example.com/memory.md.hub" ]; ok $? "resolve --theirs removed the .hub file"
 "$SYNC" -d "$M" status --short > "$T/o" 2>&1
 has "$T/o" '0 to push, 0 to pull, 0 conflicts' "resolved: in sync"
+"$SYNC" -d "$M" pull > "$T/o" 2>&1; rc=$?
+ok $(( rc != 0 )) "pull after resolving exits 0 (got $rc)"
+# Resolve --mine: a second conflict, this time alice wins.
+cp "$T/alice.md" "$M/servers/web1.example.com/memory.md"
+printf '%s\n- Tags: prod, web, bob, again\n' "$(cat "$T/bob.md")" > "$T/bob2.md"
+code=$(hub "$HDR_B" files/servers/web1.example.com/memory.md -T "$T/bob2.md" \
+  -H "If-Match: $(hub_sha servers/web1.example.com/memory.md)")
+"$SYNC" -d "$M" push > "$T/o" 2>&1; rc=$?
+ok $(( rc != 1 )) "push into a 409 exits 1 (got $rc)"
+has "$T/o" 'conflict: servers/web1.example.com/memory.md' "push lists the 409 as a conflict"
+has "$T/o" 'lines against yours' "push shows the diff summary"
+same "$M/servers/web1.example.com/memory.md.hub" "$T/bob2.md" "the 409 wrote the hub version as .hub"
+"$SYNC" -d "$M" resolve --mine servers/web1.example.com/memory.md > "$T/o" 2>&1; rc=$?
+ok $(( rc != 0 )) "resolve --mine exits 0 (got $rc: $(cat "$T/o" | tr '\n' ' '))"
+has "$T/o" 'resolved: servers/web1.example.com/memory.md (yours pushed' "resolve --mine confirms"
+code=$(hub "$HDR_B" files/servers/web1.example.com/memory.md)
+same "$T/hub.out" "$T/alice.md" "the hub holds the local version after resolve --mine"
+[ ! -e "$M/servers/web1.example.com/memory.md.hub" ]; ok $? "resolve --mine removed the .hub file"
+"$SYNC" -d "$M" status --short > "$T/o" 2>&1
+has "$T/o" '0 to push, 0 to pull, 0 conflicts' "resolve --mine: in sync"
+"$SYNC" -d "$M" resolve servers/web1.example.com/memory.md > /dev/null 2>&1; rc=$?
+ok $(( rc != 2 )) "resolve without a side exits 2 (got $rc)"
+"$SYNC" -d "$M" resolve servers/web1.example.com/notes.txt --mine > /dev/null 2>&1; rc=$?
+ok $(( rc != 2 )) "resolve of a file outside the set exits 2 (got $rc)"
+# history: every version with who and when.
+"$SYNC" -d "$M" history servers/web1.example.com/memory.md > "$T/o" 2>&1; rc=$?
+ok $(( rc != 0 )) "history exits 0 (got $rc: $(cat "$T/o" | tr '\n' ' '))"
+has "$T/o" 'history: servers/web1.example.com/memory.md' "history names the file"
+has "$T/o" '  v4  ' "history lists version 4"
+has "$T/o" '  v1  ' "history lists version 1"
+grep -q '  v[0-9]*  .*  alice  ' "$T/o"; ok $? "history names alice"
+grep -q '  v[0-9]*  .*  bob  ' "$T/o"; ok $? "history names bob"
+code=$(hub "$HDR_B" 'files/servers/web1.example.com/memory.md?version=1')
+[ "$code" = 200 ]; ok $? "GET ?version=1 answers (got $code)"
+hasnt "$T/hub.out" 'Tags: prod, web, alice' "version 1 predates alice's tag"
+has "$T/hub.out" '- Owner: alice' "version 1 is the first push"
+"$SYNC" -d "$M" history servers/web1.example.com/nothing.md > /dev/null 2>&1; rc=$?
+ok $(( rc != 2 )) "history of a file outside the set exits 2 (got $rc)"
 
 # --- a local change pushes with If-Match ---------------------
 printf '%s\n- Note: pushed with If-Match\n' "$(cat "$M/servers/web1.example.com/memory.md")" \
@@ -591,10 +726,6 @@ ok $(( rc != 0 )) "push of a local change exits 0 (got $rc: $(cat "$T/o" | tr '\
 has "$T/o" 'push: 1 file' "push sends one file"
 code=$(hub "$HDR_B" files/servers/web1.example.com/memory.md)
 same "$T/hub.out" "$M/servers/web1.example.com/memory.md" "the hub holds the new version"
-# A stale If-Match is a 412 on the server side.
-code=$(hub "$HDR_B" files/servers/web1.example.com/memory.md -T "$T/bob.md" \
-  -H 'If-Match: 0000000000000000000000000000000000000000000000000000000000000000')
-[ "$code" = 412 ]; ok $? "a stale If-Match gets 412 (got $code)"
 
 # --- push <path> ---------------------------------------------
 printf -- '- [ ] Vacuum\n' >> "$M/servers/db1.example.com/todo.md"
@@ -703,9 +834,16 @@ ok $(( rc != 0 )) "session beat without a session starts one (got $rc)"
 ok $(( rc != 1 )) "session with a bad host exits 1, never 2 (got $rc)"
 
 # --- claims --------------------------------------------------
+# Without a session the claim stands on its own.
 "$SYNC" -d "$M" claim db1.example.com "migration until 20:00" > "$T/o" 2>&1; rc=$?
 ok $(( rc != 0 )) "claim exits 0 (got $rc: $(cat "$T/o"))"
 has "$T/o" 'claimed db1.example.com: migration until 20:00' "claim confirms"
+hasnt "$T/o" 'released at session end' "a claim outside a session is not tied to one"
+has "$T/o" 'handover: db1.example.com' "claim prints the handover"
+has "$T/o" 'claim: alice since ' "the handover names the claim"
+has "$T/o" '(migration until 20:00)' "the handover carries the note"
+has "$T/o" 'open to-dos: 0' "the handover counts the open to-dos (todo.md was deleted above)"
+has "$T/o" 'sessions: none' "the handover says nobody is on the host"
 code=$(hub "$HDR_B" claims)
 jq -e '.[] | select(.host == "db1.example.com" and .user == "alice"
   and .note == "migration until 20:00")' "$T/hub.out" > /dev/null 2>&1
@@ -721,6 +859,92 @@ n=$(jq 'length' "$T/hub.out" 2>/dev/null)
 [ "${n:-x}" = 0 ]; ok $? "GET claims is empty after release (got $n)"
 "$SYNC" -d "$M" claim 'x/y' > /dev/null 2>&1; rc=$?
 ok $(( rc != 2 )) "claim with a bad host exits 2 (got $rc)"
+
+# --- handover ------------------------------------------------
+"$SYNC" -d "$M" handover web1.example.com > "$T/o" 2>&1; rc=$?
+ok $(( rc != 0 )) "handover exits 0 (got $rc: $(cat "$T/o" | tr '\n' ' '))"
+has "$T/o" 'handover: web1.example.com' "handover names the host"
+has "$T/o" 'claim: none' "handover: no claim"
+has "$T/o" 'open to-dos: 0' "handover: nothing open on web1"
+if [ "$MODE" = real ]; then
+  has "$T/o" 'last changes: 2' "handover counts the last changes"
+  has "$T/o" '  2026-06-13 08:00 [alice as root] quoted "value" and back\slash' "handover lists the newest change first"
+  has "$T/o" '    Rollback: none recorded' "handover marks a change without a way back"
+  has "$T/o" '    Rollback: re-enable app.service.' "handover prints the way back"
+fi
+"$SYNC" -d "$M" handover nope.example.com > "$T/o" 2>&1; rc=$?
+ok $(( rc != 1 )) "handover of an unknown host exits 1 (got $rc)"
+has "$T/o" '404' "handover of an unknown host names 404"
+# A running job (a to-do naming ~/.jolitz/jobs/) is listed apart.
+cat > "$M/servers/db1.example.com/todo.md" <<'EOF'
+# To-do
+- [ ] Upgrade PostgreSQL
+- [ ] dist-upgrade running in ~/.jolitz/jobs/20261028-1200-upgrade
+EOF
+"$SYNC" -d "$M" push servers/db1.example.com/todo.md > /dev/null 2>&1
+"$SYNC" -d "$M" handover db1.example.com > "$T/o" 2>&1
+has "$T/o" 'running jobs: 1' "handover counts the running job"
+has "$T/o" '  - [ ] dist-upgrade running in ~/.jolitz/jobs/20261028-1200-upgrade' "handover names the job directory"
+has "$T/o" 'open to-dos: 1' "the job is not counted as a to-do"
+
+# --- claims end with the session that made them ---------------
+"$SYNC" -d "$M" session start db1.example.com > /dev/null 2>&1
+"$SYNC" -d "$M" claim db1.example.com "patching" > "$T/o" 2>&1; rc=$?
+ok $(( rc != 0 )) "claim in a session exits 0 (got $rc)"
+has "$T/o" '(released at session end; claim --keep keeps it)' "claim says it ends with the session"
+grep -q '^claim	db1.example.com$' "$HOME/.cache/jolitz/hub-session"; ok $? "the session file lists the claim"
+"$SYNC" -d "$M" claim --keep web1.example.com "stays" > "$T/o" 2>&1; rc=$?
+ok $(( rc != 0 )) "claim --keep exits 0 (got $rc: $(cat "$T/o" | tr '\n' ' '))"
+hasnt "$T/o" 'released at session end' "claim --keep is not tied to the session"
+hasnt "$HOME/.cache/jolitz/hub-session" 'web1' "the session file does not list a --keep claim"
+"$SYNC" -d "$M" status > "$T/o" 2>&1
+has "$T/o" 'alice@db1.example.com from test-ws' "status: the session is open"
+"$SYNC" -d "$M" session end > "$T/o" 2>&1; rc=$?
+ok $(( rc != 0 )) "session end exits 0 (got $rc: $(cat "$T/o"))"
+code=$(hub "$HDR_B" claims)
+jq -e '[.[] | select(.host == "db1.example.com")] | length == 0' "$T/hub.out" > /dev/null 2>&1
+ok $? "session end released the session's claim ($(cat "$T/hub.out"))"
+jq -e '.[] | select(.host == "web1.example.com" and .note == "stays")' "$T/hub.out" > /dev/null 2>&1
+ok $? "session end kept the --keep claim"
+# release removes the bookkeeping line too.
+"$SYNC" -d "$M" session start > /dev/null 2>&1
+"$SYNC" -d "$M" claim db1.example.com > /dev/null 2>&1
+"$SYNC" -d "$M" release db1.example.com > /dev/null 2>&1
+hasnt "$HOME/.cache/jolitz/hub-session" 'claim' "release drops the session's claim line"
+"$SYNC" -d "$M" session end > /dev/null 2>&1
+"$SYNC" -d "$M" release web1.example.com > /dev/null 2>&1
+
+# --- a UI edit arrives with the next pull ----------------------
+# The UI takes the bearer token like the API; the form rewrites
+# todo.md as a new version by that user.
+if [ "$MODE" = real ]; then
+  code=$(curl -sS -o "$T/hub.out" -w '%{http_code}' -H @"$HDR_B" \
+    --data-urlencode 'action=toggle' --data-urlencode 'text=Upgrade PostgreSQL' \
+    --data-urlencode 'done=1' "$URL/hosts/db1.example.com/todos")
+  [ "$code" = 303 ]; ok $? "the UI to-do toggle answers 303 (got $code)"
+  code=$(curl -sS -o "$T/hub.out" -w '%{http_code}' -H @"$HDR_B" \
+    --data-urlencode 'action=add' --data-urlencode 'text=Vacuum' \
+    "$URL/hosts/db1.example.com/todos")
+  [ "$code" = 303 ]; ok $? "the UI to-do add answers 303 (got $code)"
+  code=$(curl -sS -o "$T/hub.out" -w '%{http_code}' -H @"$HDR_V" \
+    --data-urlencode 'action=add' --data-urlencode 'text=nope' \
+    "$URL/hosts/db1.example.com/todos")
+  [ "$code" = 403 ]; ok $? "a viewer cannot edit in the UI (got $code)"
+  "$SYNC" -d "$M" pull > "$T/o" 2>&1; rc=$?
+  ok $(( rc != 0 )) "pull after the UI edit exits 0 (got $rc: $(cat "$T/o" | tr '\n' ' '))"
+  has "$T/o" 'pull: servers/db1.example.com/todo.md' "pull fetches the edited todo.md"
+  cat > "$T/want.todo" <<'EOF'
+# To-do
+- [x] Upgrade PostgreSQL
+- [ ] dist-upgrade running in ~/.jolitz/jobs/20261028-1200-upgrade
+- [ ] Vacuum
+EOF
+  same "$M/servers/db1.example.com/todo.md" "$T/want.todo" "the UI edit is in the local todo.md"
+  "$SYNC" -d "$M" history servers/db1.example.com/todo.md > "$T/o" 2>&1
+  grep -q '  v[0-9]*  .*  bob  ' "$T/o"; ok $? "the UI edit is a version by bob"
+  "$SYNC" -d "$M" status --short > "$T/o" 2>&1
+  has "$T/o" '0 to push, 0 to pull, 0 conflicts' "after the UI edit: in sync"
+fi
 
 # --- the token stays in its file ------------------------------
 grep -nE "Bearer[^\"']*\\\$|-H[ =]['\"]?Authorization" "$SYNC" > "$T/o" || true

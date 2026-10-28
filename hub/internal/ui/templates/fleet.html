@@ -38,6 +38,13 @@
 {{else}}<li class="muted">Nothing open.</li>{{end}}
 </ul>
 
+<h2>links <span class="sub">network.md</span></h2>
+<ul class="list">
+{{range .Links}}<li data-row>{{.Src}} → {{.Dst}}{{if .Label}} <span class="muted">({{.Label}})</span>{{end}}{{if $.CanEdit}} <form method="post" action="/links" class="inline"><input type="hidden" name="action" value="remove"><input type="hidden" name="from" value="{{.Src}}"><input type="hidden" name="to" value="{{.Dst}}"><input type="hidden" name="label" value="{{.Label}}"><button type="submit" class="link">remove</button></form>{{end}}</li>
+{{else}}<li class="muted">No links in network.md.</li>{{end}}
+</ul>
+{{if .CanEdit}}<form method="post" action="/links" class="editrow"><input type="hidden" name="action" value="add"><input name="from" placeholder="from host" required> → <input name="to" placeholder="to host" required> <input name="label" placeholder="label (postgresql 5432)" maxlength="100"> <button type="submit">add link</button></form>{{end}}
+
 <h2>latest changes <span class="sub"><a href="/activity">all</a> · <a href="/timeline">timeline</a></span></h2>
 <ul class="list">
 {{range .Changes}}{{template "change" (ci . $.TagsOf)}}{{else}}<li class="muted">No changelog yet.</li>{{end}}

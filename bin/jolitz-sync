@@ -8,10 +8,25 @@
 # Usage:
 #   jolitz-sync pull [--prune] [--quiet]  Hub -> memory/
 #   jolitz-sync push [<path> ...]         memory/ -> hub
-#   jolitz-sync status [--short]          Hub, user, what differs
+#   jolitz-sync resolve <path> --mine|--theirs
+#                                         End a conflict: push
+#                                         the local file, or take
+#                                         the hub's
+#   jolitz-sync history <path>            Versions of one file
+#   jolitz-sync status [--short]          Hub, user, what differs,
+#                                         stale when the last
+#                                         pull failed
 #   jolitz-sync session start|beat|end [<host>]
-#   jolitz-sync claim <host> [<note>]
+#   jolitz-sync claim [--keep] <host> [<note>]
+#                                         Claim a host, print its
+#                                         handover; released at
+#                                         session end unless
+#                                         --keep
 #   jolitz-sync release <host>
+#   jolitz-sync handover <host>           Claim, sessions, open
+#                                         to-dos, running jobs,
+#                                         last changes with their
+#                                         way back
 #   jolitz-sync -d <dir> <command> ...    Use <dir> as memory/
 #   jolitz-sync --help                    Show this help
 #
@@ -34,15 +49,30 @@
 # every file as last synced. A file changed on both sides
 # since then is never overwritten: pull keeps the local
 # file and writes the hub version as <file>.hub next to
-# it, push skips it; a 412 from the hub is handled the
-# same way. Both list the conflicts at the end; merge,
-# then delete the .hub file. On the first pull after a
-# join every file that differs is a conflict. A path
-# argument to push limits it to those files. pull --prune
-# removes local files the hub no longer has, synced set
-# only; push deletes on the hub what was deleted locally
-# after a sync. push runs bin/jolitz-memory-lint first
-# and stops on ERROR.
+# it, push skips it. The hub keeps every file with a
+# version number and requires If-Match on a push; a 409
+# (someone pushed first) is handled the same way, and its
+# line counts the lines that differ. Both list the
+# conflicts at the end. The user decides per file:
+# "resolve <path> --mine" pushes the local file over the
+# hub's current version, "--theirs" replaces it with the
+# hub's; both remove the .hub file. On the first pull
+# after a join every file that differs is a conflict. A
+# path argument to push limits it to those files. pull
+# --prune removes local files the hub no longer has,
+# synced set only; push deletes on the hub what was
+# deleted locally after a sync. push and resolve --mine
+# run bin/jolitz-memory-lint first and stop on ERROR.
+#
+# Stale: pull writes <memory>/.hub-sync.pulled when it
+# ran, .hub-sync.pull-failed when the hub did not answer.
+# status says "stale" while the last pull failed or none
+# ever ran; the local copy may then lag the team.
+#
+# Claims made in a session are listed in the session file
+# and released by "session end" (and by the next "session
+# start" when the end never ran); "claim --keep" leaves
+# the claim standing.
 #
 # Exit status: 0 ok, 1 conflicts written, lint errors or
 # a file the hub refused, 2 usage or configuration
@@ -78,9 +108,11 @@ CONF="$HOME/.config/jolitz/hub.conf"
 CACHE="$HOME/.cache/jolitz"
 SESSION_FILE="$CACHE/hub-session"
 STATE="$MEM/.hub-sync.tsv"
+PULLED="$MEM/.hub-sync.pulled"
+PULL_FAILED="$MEM/.hub-sync.pull-failed"
 
 case "$CMD" in
-  pull|push|status|session|claim|release) ;;
+  pull|push|resolve|history|status|session|claim|release|handover) ;;
   *) echo "error: unknown command $CMD" >&2; usage >&2; exit 2 ;;
 esac
 
@@ -196,7 +228,17 @@ api_error() {
 unreachable() {
   why=$(head -n 1 "$WORK/curl.err" | sed 's/^curl: ([0-9]*) //')
   echo "error: hub $URL unreachable: $why" >&2
+  if [ "$CMD" = pull ]; then
+    mkdir -p "$MEM" 2>/dev/null && date -u +%Y-%m-%dT%H:%M:%SZ > "$PULL_FAILED"
+  fi
   exit "$1"
+}
+
+# mark_pulled: a pull ran against the hub (conflicts or not).
+mark_pulled() {
+  mkdir -p "$MEM"
+  date -u +%Y-%m-%dT%H:%M:%SZ > "$PULLED"
+  rm -f "$PULL_FAILED"
 }
 
 # A 401 or 403 is configuration, not a sync result.
@@ -379,6 +421,14 @@ state_save() {
   mv -f "$WORK/state.new" "$STATE"
 }
 
+# state_update <path> <sha>: one line of the saved state.
+state_update() {
+  mkdir -p "$MEM"
+  { [ -f "$STATE" ] && grep -v "^$(printf '%s' "$1" | sed 's/[.[\*^$]/\\&/g')	" "$STATE"
+    printf '%s\t%s\n' "$1" "$2"; } | sort > "$WORK/state.upd" || true
+  mv -f "$WORK/state.upd" "$STATE"
+}
+
 # fetch <path> <out>: GET one file. Exits on auth errors
 # and unreachable; returns 1 on other HTTP errors.
 fetch() {
@@ -393,6 +443,16 @@ fetch() {
   esac
 }
 
+# diffstat <mine> <theirs>: "+A -R lines" of theirs against
+# mine, as diff -u counts them; "" without diff.
+diffstat() {
+  command -v diff >/dev/null 2>&1 || return 0
+  diff -u "$1" "$2" 2>/dev/null | awk '
+    /^(\+\+\+|---) / { next }
+    /^\+/ { a++ } /^-/ { r++ }
+    END { if (a + r) printf "+%d -%d lines", a, r }'
+}
+
 # conflict <path> <hub sha>: keep the local file, put the
 # hub version next to it. An alias has no .hub file; both
 # targets are named instead.
@@ -402,8 +462,9 @@ conflict() {
     servers/*/*|network.md|audits/*)
       if fetch "$1" "$WORK/hubver"; then
         cp "$WORK/hubver" "$MEM/$1.hub"
+        ds=$(diffstat "$MEM/$1" "$WORK/hubver")
         CONFLICTS="$CONFLICTS
-conflict: $1 (kept; hub version in $1.hub)"
+conflict: $1 (kept; hub version in $1.hub${ds:+, $ds against yours}; resolve --mine|--theirs)"
       else
         CONFLICTS="$CONFLICTS
 conflict: $1 (kept; hub version not fetched)"
@@ -442,6 +503,7 @@ finish() {
   extra=""
   [ "$3" -eq 0 ] || extra=", $(plural "$3" "deleted")"
   [ "${REFUSED:-0}" -eq 0 ] || extra="$extra, $(plural "$REFUSED" "refused")"
+  [ "$1" = pull ] && mark_pulled
   if [ -n "$CONFLICTS" ] || [ "${REFUSED:-0}" -ne 0 ]; then
     echo "$1: $(plural "$2" "file")$extra, $(plural "$n" "conflict")"
     exit 1
@@ -500,6 +562,31 @@ do_pull() {
   finish pull "$N" "$D"
 }
 
+# lint_or_stop <verb>: nothing leaves the workstation with a
+# secret in it.
+lint_or_stop() {
+  [ -d "$MEM/servers" ] && [ -f "$SCRIPT_DIR/jolitz-memory-lint" ] || return 0
+  if ! sh "$SCRIPT_DIR/jolitz-memory-lint" -d "$MEM" > "$WORK/lint" 2>&1; then
+    if grep -q '^ERROR' "$WORK/lint"; then
+      grep '^ERROR' "$WORK/lint"
+      n=$(grep -c '^ERROR' "$WORK/lint")
+      echo "$1: stopped, memory lint found $n errors; nothing sent"
+      exit 1
+    fi
+  fi
+}
+
+# norm_path <arg>: a push/resolve argument as a hub path.
+norm_path() {
+  np=${1#"$MEM"/}
+  np=${np#memory/}
+  np=${np#./}
+  np=${np%.hub}
+  printf '%s\n' "$np" | grep -Eq "$PATH_RE" \
+    || { echo "error: $1 is not in the synced set" >&2; exit 2; }
+  printf '%s' "$np"
+}
+
 # --- push ----------------------------------------------------
 do_push() {
   QUIET=0
@@ -509,24 +596,10 @@ do_push() {
     case "$arg" in
       -*) echo "error: push: unknown option $arg" >&2; usage >&2; exit 2 ;;
     esac
-    p=${arg#"$MEM"/}
-    p=${p#memory/}
-    p=${p#./}
-    printf '%s\n' "$p" | grep -Eq "$PATH_RE" \
-      || { echo "error: $arg is not in the synced set" >&2; exit 2; }
+    p=$(norm_path "$arg") || exit 2
     printf '%s\n' "$p" >> "$WORK/only"
   done
-  # Nothing leaves the workstation with a secret in it.
-  if [ -d "$MEM/servers" ] && [ -f "$SCRIPT_DIR/jolitz-memory-lint" ]; then
-    if ! sh "$SCRIPT_DIR/jolitz-memory-lint" -d "$MEM" > "$WORK/lint" 2>&1; then
-      if grep -q '^ERROR' "$WORK/lint"; then
-        grep '^ERROR' "$WORK/lint"
-        n=$(grep -c '^ERROR' "$WORK/lint")
-        echo "push: stopped, memory lint found $n errors; nothing sent"
-        exit 1
-      fi
-    fi
-  fi
+  lint_or_stop push
   plan
   : > "$WORK/state.new"
   N=0
@@ -551,12 +624,11 @@ do_push() {
           0) state_set "$p" "$l"; N=$((N + 1)); say "push: $p" ;;
           3) unreachable 3 ;;
           *) auth_check
-             if [ "$CODE" = 412 ]; then
-               conflict "$p" "$h"
-             else
-               echo "refused: $p: $CODE $(api_error "$WORK/resp")"
-               REFUSED=$((REFUSED + 1))
-             fi
+             case "$CODE" in
+               409|412|428) conflict "$p" "$h" ;;
+               *) echo "refused: $p: $CODE $(api_error "$WORK/resp")"
+                  REFUSED=$((REFUSED + 1)) ;;
+             esac
              state_set "$p" "$s" ;;
         esac
         rc=0 ;;
@@ -585,6 +657,139 @@ do_push() {
   done < "$WORK/plan.tsv"
   state_save
   finish push "$N" "$D"
+}
+
+# --- resolve -------------------------------------------------
+# resolve <path> --mine|--theirs: end a conflict. --mine pushes
+# the local file with If-Match of the hub's current version
+# (from the manifest, not from the stale .hub copy); --theirs
+# fetches the hub's current version over the local file. Both
+# remove <path>.hub and record the new sync state.
+drop_hub_copy() {
+  [ -f "${MEM:?}/${1:?}.hub" ] && rm -f -- "${MEM:?}/${1:?}.hub"
+  return 0
+}
+
+do_resolve() {
+  side=""
+  path=""
+  for arg in "$@"; do
+    case "$arg" in
+      --mine|--theirs) side=${arg#--} ;;
+      -*) echo "error: resolve: unknown option $arg" >&2; usage >&2; exit 2 ;;
+      *) [ -z "$path" ] || { usage >&2; exit 2; }
+         path=$arg ;;
+    esac
+  done
+  [ -n "$side" ] && [ -n "$path" ] || { usage >&2; exit 2; }
+  rp=$(norm_path "$path") || exit 2
+  QUIET=0
+  REFUSED=0
+  case "$side" in
+    mine)
+      [ -e "$MEM/$rp" ] || [ -L "$MEM/$rp" ] \
+        || { echo "error: $rp does not exist here; use --theirs" >&2; exit 2; }
+      lint_or_stop resolve
+      plan
+      h=$(awk -F'\t' -v p="$rp" '$1 == p { print $3 }' "$WORK/plan.tsv")
+      l=$(awk -F'\t' -v p="$rp" '$1 == p { print $2 }' "$WORK/plan.tsv")
+      [ -n "$h" ] || h="-"
+      local_body "$rp" "$WORK/body"
+      rc=0
+      if [ "$h" = "-" ]; then
+        api "files/$rp" "$WORK/resp" -T "$WORK/body" || rc=$?
+      else
+        api "files/$rp" "$WORK/resp" -T "$WORK/body" -H "If-Match: $h" || rc=$?
+      fi
+      case "${rc:-0}" in
+        0) drop_hub_copy "$rp"
+           state_update "$rp" "$l"
+           v=$(jq -r '.version // empty' "$WORK/resp" 2>/dev/null) || v=""
+           echo "resolved: $rp (yours pushed${v:+, now version $v})"
+           exit 0 ;;
+        3) unreachable 3 ;;
+        *) auth_check
+           case "$CODE" in
+             409|412|428) conflict "$rp" "$h"
+                printf '%s\n' "${CONFLICTS#?}"
+                echo "resolve: the hub moved again; look at $rp.hub and resolve once more"
+                exit 1 ;;
+             *) echo "refused: $rp: $CODE $(api_error "$WORK/resp")"
+                exit 1 ;;
+           esac ;;
+      esac ;;
+    theirs)
+      fetch "$rp" "$WORK/dl" || exit 1
+      install_body "$rp" "$WORK/dl" || exit 1
+      drop_hub_copy "$rp"
+      state_update "$rp" "$(sha256 "$WORK/dl")"
+      echo "resolved: $rp (hub version taken)"
+      exit 0 ;;
+  esac
+}
+
+# --- history -------------------------------------------------
+do_history() {
+  [ $# -eq 1 ] || { usage >&2; exit 2; }
+  p=$(norm_path "$1") || exit 2
+  MAX_TIME=20
+  rc=0
+  api "files/$p/history" "$WORK/hist" || rc=$?
+  case "${rc:-0}" in
+    0) ;;
+    3) unreachable 3 ;;
+    *) auth_check
+       echo "error: history $p: $CODE $(api_error "$WORK/hist")" >&2
+       exit 1 ;;
+  esac
+  echo "history: $p"
+  jq -r 'if type == "array" then .[] |
+      "  v\(.version)  \(.updated_at)  \(.updated_by)  \(.size) B  \(.sha256[0:12])"
+      else empty end' "$WORK/hist" 2>/dev/null \
+    || { echo "error: GET files/$p/history did not return a list" >&2; exit 1; }
+  echo "  (pull writes the newest; GET files/$p?version=N returns an old body)"
+  exit 0
+}
+
+# --- handover ------------------------------------------------
+# print_handover <host>: GET hosts/<host>/handover as text.
+# Returns 1 when the hub refused, exits 3 when unreachable.
+print_handover() {
+  rc=0
+  api "hosts/$1/handover" "$WORK/ho" || rc=$?
+  case "${rc:-0}" in
+    0) ;;
+    3) unreachable 3 ;;
+    *) auth_check
+       echo "error: handover $1: $CODE $(api_error "$WORK/ho")" >&2
+       return 1 ;;
+  esac
+  jq -r '
+    "handover: \(.host)",
+    (if .claim then "claim: \(.claim.user) since \(.claim.since)" +
+        (if (.claim.note // "") != "" then " (\(.claim.note))" else "" end)
+     else "claim: none" end),
+    ("sessions: " + (if (.sessions | length) == 0 then "none" else
+        ([.sessions[] | "\(.user)@\(.workstation // "?")" +
+          (if .age_seconds then " (\((.age_seconds / 60) | floor)m)" else "" end) +
+          (if .stale then " stale" else "" end)] | join(", ")) end)),
+    "open to-dos: \(.todos | length)",
+    (.todos[] | "  - [ ] \(.)"),
+    (if (.jobs | length) > 0 then "running jobs: \(.jobs | length)", (.jobs[] | "  - [ ] \(.)") else empty end),
+    "last changes: \(.changes | length)",
+    (.changes[] | "  \(.date) \(.time)" +
+        (if (.who // "") != "" then " [\(.who)]" else "" end) + " \(.headline)",
+      "    " + (if (.rollback // "") != "" then "Rollback: \(.rollback)" else "Rollback: none recorded" end))
+  ' "$WORK/ho" 2>/dev/null \
+    || { echo "error: GET hosts/$1/handover: unexpected answer" >&2; return 1; }
+}
+
+do_handover() {
+  [ $# -eq 1 ] || { usage >&2; exit 2; }
+  check_host "$1"
+  MAX_TIME=20
+  print_handover "$1" || exit 1
+  exit 0
 }
 
 # --- status --------------------------------------------------
@@ -649,15 +854,29 @@ do_status() {
         + (if (.note // "") != "" then " (\(.note))" else "" end)
         else empty end' "$WORK/claims" 2>/dev/null) || claims=""
   fi
+  # stale: the last pull did not reach the hub, or none ran.
+  pulled=""
+  [ -r "$PULLED" ] && pulled=$(head -n 1 "$PULLED")
+  stale=""
+  if [ -z "$pulled" ]; then
+    stale="never pulled"
+  elif [ -r "$PULL_FAILED" ]; then
+    stale="pull failed at $(head -n 1 "$PULL_FAILED")"
+  fi
   if [ "$SHORT" -eq 1 ]; then
     echo "$URL: hub $ver${who:+, $who}, $npush to push, $npull to pull," \
       "$(plural "$ncon" conflict), $(plural "$nclaims" claim)," \
-      "$(plural "$nsess" session)"
+      "$(plural "$nsess" session)${stale:+, stale}"
     exit 0
   fi
   echo "hub: $URL (jolitz-hub $ver)"
   echo "token: accepted${who:+ ($who)}"
   echo "workstation: $WORKSTATION"
+  if [ -n "$stale" ]; then
+    echo "pulled: ${pulled:-never}, stale ($stale; run jolitz-sync pull)"
+  else
+    echo "pulled: $pulled"
+  fi
   echo "push: $(plural "$npush" file)"
   awk -F'\t' '$5 == "push" || $5 == "localgone" { print "  " $1 }' "$WORK/plan.tsv"
   echo "pull: $(plural "$npull" file)"
@@ -679,10 +898,27 @@ session_fail() {
   exit 1
 }
 
+# release_session_claims: drop the claims the session file
+# lists (set by "claim" without --keep). Stops at the first
+# unreachable answer; the Stop hook has 10 seconds.
+release_session_claims() {
+  [ -r "$SESSION_FILE" ] || return 0
+  MAX_TIME=4
+  awk -F'\t' '$1 == "claim" && $2 != "" { print $2 }' "$SESSION_FILE" \
+    | while read -r ch; do
+        rc=0
+        api "claims/$ch" "$WORK/resp" -X DELETE || rc=$?
+        [ "${rc:-0}" -eq 3 ] && exit 3
+        :
+      done || return $?
+  return 0
+}
+
 # session_start: close a session this workstation left
 # open, open a new one, keep its id.
 session_start() {
   if [ -n "$id" ]; then
+    release_session_claims || true
     api "sessions/$id" "$WORK/resp" -X DELETE >/dev/null 2>&1 || true
     rm -f "$SESSION_FILE"
   fi
@@ -739,6 +975,8 @@ do_session() {
       esac ;;
     end)
       [ -n "$id" ] || exit 0
+      release_session_claims \
+        || session_fail "unreachable, session $id and its claims left open (closed after 60 minutes)"
       rc=0
       api "sessions/$id" "$WORK/resp" -X DELETE || rc=$?
       case "${rc:-0}" in
@@ -760,6 +998,11 @@ check_host() {
 }
 
 do_claim() {
+  KEEP=0
+  if [ "${1:-}" = "--keep" ]; then
+    KEEP=1
+    shift
+  fi
   [ $# -ge 1 ] && [ $# -le 2 ] || { usage >&2; exit 2; }
   check_host "$1"
   MAX_TIME=20
@@ -768,7 +1011,14 @@ do_claim() {
   api "claims/$1" "$WORK/resp" -X PUT -H 'Content-Type: application/json' \
     --data-binary @"$WORK/req" || rc=$?
   case "${rc:-0}" in
-    0) echo "claimed $1${2:+: $2}" ;;
+    0) echo "claimed $1${2:+: $2}"
+       # Without --keep the claim ends with this session.
+       if [ "$KEEP" -eq 0 ] && [ -s "$SESSION_FILE" ]; then
+         grep -q "^claim	$1\$" "$SESSION_FILE" \
+           || printf 'claim\t%s\n' "$1" >> "$SESSION_FILE"
+         echo "(released at session end; claim --keep keeps it)"
+       fi
+       print_handover "$1" || true ;;
     3) unreachable 3 ;;
     *) auth_check
        echo "error: claim $1: $CODE $(api_error "$WORK/resp")" >&2
@@ -790,14 +1040,21 @@ do_release() {
        echo "error: release $1: $CODE $(api_error "$WORK/resp")" >&2
        exit 1 ;;
   esac
+  if [ -s "$SESSION_FILE" ] && grep -q "^claim	$1\$" "$SESSION_FILE"; then
+    grep -v "^claim	$1\$" "$SESSION_FILE" > "$WORK/sess" || true
+    cat "$WORK/sess" > "$SESSION_FILE"
+  fi
   exit 0
 }
 
 case "$CMD" in
   pull) do_pull "$@" ;;
   push) do_push "$@" ;;
+  resolve) do_resolve "$@" ;;
+  history) do_history "$@" ;;
   status) do_status "$@" ;;
   session) do_session "$@" ;;
   claim) do_claim "$@" ;;
   release) do_release "$@" ;;
+  handover) do_handover "$@" ;;
 esac

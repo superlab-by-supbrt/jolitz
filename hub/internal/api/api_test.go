@@ -144,18 +144,61 @@ func TestFilesRoundtrip(t *testing.T) {
 		t.Errorf("manifest %s", out)
 	}
 
-	// If-Match: matching sha updates, a stale one is 412 and
-	// leaves the file alone.
+	if info.Version != 1 {
+		t.Errorf("first version = %d", info.Version)
+	}
+
+	// If-Match: matching sha updates and makes version 2; a
+	// stale one is 409 with both shas and a diff, and leaves
+	// the file alone; none at all on an existing file is 428.
 	res, out = e.do("op", "PUT", "files/servers/web1.example.com/changelog.log", body+"[2026-06-14 08:00] x\n", "If-Match", info.SHA256)
 	e.want(200, res, out, "put with matching If-Match")
-	res, out = e.do("op", "PUT", "files/servers/web1.example.com/changelog.log", "other", "If-Match", `"`+info.SHA256+`"`)
-	e.want(412, res, out, "put with stale If-Match")
+	var info2 store.FileInfo
+	if err := json.Unmarshal([]byte(out), &info2); err != nil || info2.Version != 2 {
+		t.Errorf("second put %s", out)
+	}
+	res, out = e.do("op2", "PUT", "files/servers/web1.example.com/changelog.log", body+"[2026-06-14 09:00] y\n", "If-Match", `"`+info.SHA256+`"`)
+	e.want(409, res, out, "put with stale If-Match")
+	var c struct {
+		Error        string
+		Version      int
+		SHA256       string
+		YoursSHA256  string `json:"yours_sha256"`
+		Diff         string
+		LinesAdded   int `json:"lines_added"`
+		LinesRemoved int `json:"lines_removed"`
+	}
+	if err := json.Unmarshal([]byte(out), &c); err != nil || c.Version != 2 || c.SHA256 != info2.SHA256 ||
+		c.YoursSHA256 != store.SHA256([]byte(body+"[2026-06-14 09:00] y\n")) || c.Error == "" {
+		t.Errorf("409 body %s", out)
+	}
+	if !strings.Contains(c.Diff, "-[2026-06-14 08:00] x\n+[2026-06-14 09:00] y\n") || !strings.HasPrefix(c.Diff, "--- a/servers/web1.example.com/changelog.log (hub, version 2, op)\n+++ b/servers/web1.example.com/changelog.log (yours)\n@@ ") ||
+		c.LinesAdded != 1 || c.LinesRemoved != 1 {
+		t.Errorf("409 diff %q +%d -%d", c.Diff, c.LinesAdded, c.LinesRemoved)
+	}
 	_, got = e.do("viewer", "GET", "files/servers/web1.example.com/changelog.log", "")
 	if got != body+"[2026-06-14 08:00] x\n" {
-		t.Errorf("412 changed the file: %q", got)
+		t.Errorf("409 changed the file: %q", got)
+	}
+	res, out = e.do("op", "PUT", "files/servers/web1.example.com/changelog.log", "other")
+	e.want(428, res, out, "put on an existing file without If-Match")
+	if !strings.Contains(out, `"version": 2`) || !strings.Contains(out, info2.SHA256) {
+		t.Errorf("428 body %s", out)
+	}
+	_, got = e.do("viewer", "GET", "files/servers/web1.example.com/changelog.log", "")
+	if got != body+"[2026-06-14 08:00] x\n" {
+		t.Errorf("428 changed the file: %q", got)
+	}
+	res, out = e.do("op", "PUT", "files/servers/web1.example.com/changelog.log", "forced", "If-Match", "*")
+	e.want(200, res, out, "If-Match: * overwrites")
+	if !strings.Contains(out, `"version": 3`) {
+		t.Errorf("forced put %s", out)
 	}
 	res, out = e.do("op", "PUT", "files/network.md", "new", "If-Match", "abc")
-	e.want(412, res, out, "If-Match on a missing file")
+	e.want(409, res, out, "If-Match on a missing file")
+	if !strings.Contains(out, `"lines_added": 1`) {
+		t.Errorf("409 on a missing file %s", out)
+	}
 
 	res, out = e.do("op", "DELETE", "files/servers/web1.example.com/changelog.log", "")
 	e.want(200, res, out, "delete")
@@ -166,6 +209,88 @@ func TestFilesRoundtrip(t *testing.T) {
 	if out != "[]\n" {
 		t.Errorf("host survives its last file: %s", out)
 	}
+}
+
+func TestFileHistory(t *testing.T) {
+	e := newEnv(t)
+	p := "files/servers/db1.example.com/todo.md"
+	res, out := e.do("op", "PUT", p, "- [ ] one\n")
+	e.want(201, res, out, "v1")
+	var v1 store.FileInfo
+	json.Unmarshal([]byte(out), &v1)
+	e.now = e.now.Add(time.Hour)
+	res, out = e.do("op2", "PUT", p, "- [x] one\n- [ ] two\n", "If-Match", v1.SHA256)
+	e.want(200, res, out, "v2")
+	res, out = e.do("viewer", "GET", p+"/history", "")
+	e.want(200, res, out, "history")
+	var hist []store.FileInfo
+	if err := json.Unmarshal([]byte(out), &hist); err != nil || len(hist) != 2 || hist[0].Version != 2 || hist[0].UpdatedBy != "op2" ||
+		hist[1].Version != 1 || hist[1].UpdatedBy != "op" || hist[1].SHA256 != v1.SHA256 || hist[1].Size != 10 {
+		t.Errorf("history %s", out)
+	}
+	if strings.Contains(out, "one") {
+		t.Error("history carries bodies")
+	}
+	res, out = e.do("viewer", "GET", p+"?version=1", "")
+	e.want(200, res, out, "version 1")
+	if out != "- [ ] one\n" || res.Header.Get("X-Version") != "1" || res.Header.Get("ETag") != `"`+v1.SHA256+`"` {
+		t.Errorf("version 1 body %q headers %v", out, res.Header)
+	}
+	res, out = e.do("viewer", "GET", p, "")
+	if res.Header.Get("X-Version") != "2" {
+		t.Errorf("current X-Version %q", res.Header.Get("X-Version"))
+	}
+	res, out = e.do("viewer", "GET", p+"?version=3", "")
+	e.want(404, res, out, "unknown version")
+	res, out = e.do("viewer", "GET", p+"?version=x", "")
+	e.want(400, res, out, "bad version")
+	res, out = e.do("viewer", "GET", "files/network.md/history", "")
+	e.want(404, res, out, "history of a missing file")
+	res, out = e.do("viewer", "GET", "files/servers/a%3Cb/memory.md/history", "")
+	e.want(400, res, out, "history of a bad path")
+	res, out = e.do("viewer", "GET", "files", "")
+	if !strings.Contains(out, `"version": 2`) {
+		t.Errorf("manifest without version: %s", out)
+	}
+	// The history survives a delete; the next write continues it.
+	e.do("op", "DELETE", p, "")
+	res, out = e.do("viewer", "GET", p+"/history", "")
+	e.want(200, res, out, "history after delete")
+	res, out = e.do("op", "PUT", p, "- [ ] three\n")
+	e.want(201, res, out, "put after delete")
+	if !strings.Contains(out, `"version": 3`) {
+		t.Errorf("version after delete %s", out)
+	}
+	res, out = e.do("", "GET", p+"/history", "")
+	e.want(401, res, out, "history without token")
+}
+
+func TestHandover(t *testing.T) {
+	e := newEnv(t)
+	res, out := e.do("viewer", "GET", "hosts/db1.example.com/handover", "")
+	e.want(404, res, out, "handover of an unknown host")
+	e.do("op", "PUT", "files/servers/db1.example.com/memory.md", "# db1.example.com\n")
+	e.do("op", "PUT", "files/servers/db1.example.com/todo.md", "- [ ] Upgrade PostgreSQL\n- [x] done\n- [ ] dist-upgrade in ~/.jolitz/jobs/20261028-1200-upgrade\n")
+	e.do("op", "PUT", "files/servers/db1.example.com/changelog.log", "[2026-10-01 10:00] [alice as root] one\n  Rollback: undo one\n[2026-10-02 10:00] [alice as root] two\n[2026-10-03 10:00] [alice as root] three\n[2026-10-04 10:00] [bob as root] four\n  Rollback: undo four\n")
+	e.do("op2", "PUT", "claims/db1.example.com", `{"note":"migration until 20:00"}`)
+	e.do("op2", "POST", "sessions", `{"host":"db1.example.com","workstation":"bobs-pc"}`)
+	e.do("op", "POST", "sessions", `{"host":"web1.example.com","workstation":"alices-mbp"}`)
+	res, out = e.do("viewer", "GET", "hosts/db1.example.com/handover", "")
+	e.want(200, res, out, "handover")
+	var h store.Handover
+	if err := json.Unmarshal([]byte(out), &h); err != nil || h.Host != "db1.example.com" || h.Claim == nil || h.Claim.User != "op2" ||
+		len(h.Sessions) != 1 || h.Sessions[0].Workstation != "bobs-pc" || len(h.Todos) != 1 || h.Todos[0] != "Upgrade PostgreSQL" ||
+		len(h.Jobs) != 1 || !strings.Contains(h.Jobs[0], "~/.jolitz/jobs/") || len(h.Changes) != 3 ||
+		h.Changes[0].Headline != "four" || h.Changes[0].Rollback != "undo four" || h.Changes[2].Headline != "two" {
+		t.Errorf("handover %s", out)
+	}
+	if strings.Contains(out, "alices-mbp") || strings.Contains(out, `"one"`) {
+		t.Errorf("handover carries other hosts' data: %s", out)
+	}
+	res, out = e.do("viewer", "GET", "hosts/a%3Cb/handover", "")
+	e.want(400, res, out, "handover of a bad name")
+	res, out = e.do("", "GET", "hosts/db1.example.com/handover", "")
+	e.want(401, res, out, "handover without token")
 }
 
 func TestLint422(t *testing.T) {

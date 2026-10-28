@@ -30,7 +30,7 @@ No line means port 22. Never write `- SSH port: 22`.
   does not copy it into memory — two sources drift.
 
 On a first connection the memory file does not
-exist until step 8 of `rules/first-connection.md`.
+exist until step 9 of `rules/first-connection.md`.
 Use the port for every call of the onboarding and
 write the line when the file is created.
 
