@@ -6,13 +6,17 @@ field in server memory files.
 
 **Canonical name** = the first hostname used for a
 server. Additional DNS names become filesystem
-symlinks to the canonical directory.
+symlinks to the canonical directory. On Windows
+(Git Bash), where `ln -s` copies the directory
+instead of linking it, an alias is a file holding
+the canonical name. Both forms count as an alias
+everywhere.
 
 ## Detection (on every new hostname)
 
 When connecting to a hostname with no
-`memory/servers/<hostname>/` directory (and not a
-symlink):
+`memory/servers/<hostname>/` directory (and no
+alias of that name):
 
 1. **Resolve the IP(s) the way `ssh` does.** First
    apply the SSH client config: a `Host` alias in
@@ -65,13 +69,21 @@ symlink):
 
 2. **Compare against known servers.** Scan existing
    `memory/servers/*/memory.md` files (skip
-   symlinks) for a matching `- IP:` line and the
+   aliases) for a matching `- IP:` line and the
    same SSH port (`rules/ssh-port.md` → NAT and
    aliases).
 
 3. **Match found -> alias.**
-   - Create symlink:
-     `ln -s <canonical> memory/servers/<alias>`
+   - Create the alias:
+
+     ```sh
+     case "$(uname -s)" in
+       MINGW*|MSYS*|CYGWIN*)
+         printf '%s\n' <canonical> > memory/servers/<alias> ;;
+       *) ln -s <canonical> memory/servers/<alias> ;;
+     esac
+     ```
+
    - Add `- DNS alias: <alias>` to canonical
      `memory.md`.
    - Skip OS detection.
@@ -81,7 +93,8 @@ symlink):
 
 ## Subsequent Connections via Alias
 
-Follow the symlink, read canonical `memory.md`. Use
+Follow the symlink, or read the canonical name from
+the alias file, and read canonical `memory.md`. Use
 the **alias hostname** (not canonical) for SSH
 commands and `user.md` lookups. Each alias can have
 its own SSH user.
@@ -101,7 +114,8 @@ alias now points elsewhere (detach it).
 
 ## Removing an Alias
 
-1. Delete the symlink from `memory/servers/`.
+1. Delete the symlink or alias file from
+   `memory/servers/`.
 2. Remove the `- DNS alias:` line from canonical
    `memory.md`.
 3. Remove the alias from `memory/user.md` if present.
