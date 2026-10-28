@@ -47,15 +47,23 @@ var tokens = regexp.MustCompile(
 var assign = regexp.MustCompile(`(?i)(^|[^A-Za-z0-9])(password|passwd|passphrase|secret|token|api[_-]?key)[[:space:]]*=[[:space:]]*[^[:space:]$<{"']`)
 
 // Check returns the first line of body that looks like a secret,
-// or nil. Lines are split with bytes.Split, not a scanner: a
-// scanner gives up on a line over its buffer and would let the
-// rest of the file through unchecked. Memory files are small; a
-// body that is not is still matched to its last byte.
+// or nil. The body is walked line by line in place: a scanner
+// gives up on a line over its buffer and would let the rest of
+// the file through unchecked, and splitting into a slice of lines
+// would let a body of newlines allocate many times its size.
+// Memory files are small; a body that is not is still matched to
+// its last byte without growing.
 func Check(body []byte) *Hit {
-	for i, line := range bytes.Split(body, []byte("\n")) {
+	for n := 1; len(body) > 0; n++ {
+		var line []byte
+		if j := bytes.IndexByte(body, '\n'); j < 0 {
+			line, body = body, nil
+		} else {
+			line, body = body[:j], body[j+1:]
+		}
 		line = bytes.TrimSuffix(line, []byte("\r"))
 		if tokens.Match(line) || assign.Match(line) {
-			return &Hit{Line: i + 1, Reason: Reason}
+			return &Hit{Line: n, Reason: Reason}
 		}
 	}
 	return nil
