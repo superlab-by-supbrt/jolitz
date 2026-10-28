@@ -666,3 +666,30 @@ func TestCookieWriteNeedsSameOrigin(t *testing.T) {
 		t.Errorf("cookie read = %v %v", res, err)
 	}
 }
+
+// An OIDC browser session is the same cookie and gets the same
+// rule: no write from another origin.
+func TestWebSessionWriteNeedsSameOrigin(t *testing.T) {
+	e := newEnv(t)
+	secret, err := e.st.StartWebSession("op", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	put := func(origin string) int {
+		req, _ := http.NewRequest("PUT", e.srv.URL+"/api/v1/claims/web1.example.com", strings.NewReader(`{"note":"x"}`))
+		req.AddCookie(&http.Cookie{Name: CookieName, Value: secret})
+		req.Header.Set("Origin", origin)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+	if c := put("https://wiki.example.com"); c != 401 {
+		t.Errorf("cross-origin web-session write = %d, want 401", c)
+	}
+	if c := put(e.srv.URL); c != 200 && c != 201 {
+		t.Errorf("same-origin web-session write = %d", c)
+	}
+}

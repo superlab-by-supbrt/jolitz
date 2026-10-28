@@ -1,5 +1,30 @@
 # Changelog
 
+## 3.3.3-jolitz.11 — 2026-10-28
+
+- **The hub runs on PostgreSQL too.** `db = "postgres"` with
+  the DSN in a mode-600 file (`db_dsn_file`); the same schema
+  through numbered migrations on both backends, applied on
+  start or with `jolitz-hub migrate`. `jolitz-hub export` and
+  `import` move a hub with every file version, the users and
+  their tokens, and the claims, so a team can start on
+  SQLite and move later. The install skill asks which one.
+- **Browser login through your identity provider.** `[oidc]`
+  adds an OIDC login (authorization code with PKCE, the ID
+  token verified against the provider's keys). It maps to an
+  existing hub user only; the first login binds that user to
+  the provider's issuer and subject, later logins must match,
+  and `jolitz-hub user unbind` resets it. With the email
+  claim, the email must be verified. Tokens for `jolitz-sync`
+  stay as they are.
+- **Fixes in the hub's store.** Parallel writes to one file no
+  longer fail or lose an update; deleting the files of one
+  host can no longer touch a host whose name differs only in
+  case. Relative secret paths follow `--data`.
+- **The login cookie never carries a write from another
+  origin,** whether it came from a token or from OIDC.
+- **CI runs the store tests on PostgreSQL 16** as well.
+
 ## 3.3.3-jolitz.10 — 2026-10-28
 
 - **The hub is the source of memory now.** Every accepted

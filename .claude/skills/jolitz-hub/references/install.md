@@ -59,6 +59,33 @@ values throughout: host `ops.example.com`, URL
    the team's network only, or no change. Recommend the team
    network when the hub is not meant for the internet. Port
    7331 is never opened; it listens on localhost.
+5. **Database.** "SQLite in the data directory, or a PostgreSQL
+   the team already runs?" Recommend SQLite: one file, nothing
+   else to run, enough for a team's memory. PostgreSQL only
+   when one is there and run by someone (backups, upgrades)
+   and the team wants the hub's data with the rest. jolitz
+   does not install a PostgreSQL for the hub. With PostgreSQL
+   ask for the server, the database name and the role; the
+   database must exist and be empty, and the role must own it
+   (PostgreSQL 15 and later give the owner the `public`
+   schema; older ones let every role create there). The DBA
+   creates both; jolitz neither runs nor sees their password.
+6. **Browser login through OIDC** (optional). "Does the team
+   log in to web apps through an identity provider (Keycloak,
+   Authentik, Dex, Entra ID, Google)? Then the hub's web UI can
+   use it; tokens stay for `jolitz-sync`." If yes: the issuer
+   URL, the client id, and which claim holds the names the hub
+   users get (`preferred_username` unless the provider says
+   otherwise). The provider's admin registers a confidential
+   client with the redirect URI
+   `https://hub.example.com/oidc/callback` and the
+   authorization code flow; PKCE is used by the hub either
+   way. OIDC creates no hub user: each person still needs
+   `user add` with the name the claim carries, and the role
+   comes from there. Without a proxy (option c) the redirect
+   URI is `http://127.0.0.1:7331/oidc/callback`; whether the
+   provider takes a plain-HTTP redirect URI is its admin's
+   call.
 
 ## 3. The plan and its way back
 
@@ -68,16 +95,19 @@ Show one list before the first change:
    release `v3.3.3-jolitz.8`, verify the checksum;
 2. system user `jolitz-hub`, `/var/lib/jolitz-hub` mode 750;
 3. `/usr/local/bin/jolitz-hub`;
-4. the unit (or `rc.d` script), enabled and started;
-5. the proxy block (option a or b), with backup and config test;
-6. the firewall rule (if chosen), with a rollback timer;
-7. the first admin token, shown once;
-8. memory, changelog, journal.
+4. with PostgreSQL or OIDC: `hub.toml`, the operator's DSN and
+   secret files, `jolitz-hub migrate` as the connection test;
+5. the unit (or `rc.d` script), enabled and started;
+6. the proxy block (option a or b), with backup and config test;
+7. the firewall rule (if chosen), with a rollback timer;
+8. the first admin token, shown once;
+9. memory, changelog, journal.
 
 `Way back: systemctl disable --now jolitz-hub, the unit and the
 binary removed, the proxy block restored from
 /var/backups/jolitz/, the firewall rule deleted;
-/var/lib/jolitz-hub stays.` The `Rollback:` line of the local
+/var/lib/jolitz-hub stays, the PostgreSQL database too.` The
+`Rollback:` line of the local
 changelog is written now (`rules/changelog.md`).
 
 ## 4. Download and verify
@@ -132,7 +162,143 @@ install -o root -g wheel -m 755 jolitz-hub_freebsd_amd64 /usr/local/bin/jolitz-h
 directory holds `hub.db` and nothing else of value; it is the
 one path the service may write.
 
-## 6. The service
+## 6. Database and OIDC
+
+Only when question 5 chose PostgreSQL or question 6 OIDC; with
+SQLite and token login there is no `hub.toml` and this step is
+skipped. Every key is in `hub/hub.toml` of the jolitz
+repository, and `hub/README.md` → Database, OIDC.
+
+### The secret files, written by the operator
+
+The DSN holds the database password, the client secret is a
+password too. Both go into files the operator writes in their
+own terminal on the hub host, as root, the way the hub token
+goes into `hub-token` (`references/join.md`); jolitz never puts
+them into a command it runs, a file it writes, memory or the
+changelog (`rules/secrets.md`). Show the block that applies and
+wait:
+
+```sh operator
+install -m 600 -o jolitz-hub -g jolitz-hub /dev/null /var/lib/jolitz-hub/db.dsn
+printf '%s\n' 'postgres://jolitz_hub:<password>@db1.example.com:5432/jolitz_hub?sslmode=verify-full' \
+  > /var/lib/jolitz-hub/db.dsn
+```
+
+```sh operator
+install -m 600 -o jolitz-hub -g jolitz-hub /dev/null /var/lib/jolitz-hub/oidc-secret
+printf '%s\n' '<the client secret>' > /var/lib/jolitz-hub/oidc-secret
+```
+
+`>` keeps the mode and owner `install` gave the file. The DSN
+is one line, URL or libpq's `key=value` form;
+`sslmode=verify-full` checks the server's certificate and name,
+and a database behind an internal CA adds
+`&sslrootcert=/etc/ssl/certs/<ca>.pem`. When the user pastes a
+password or secret into the chat anyway, say that it should not
+be there, have them write the file as above, and have the
+secret changed when the chat is not private.
+
+Check the files without reading them: `ls -l
+/var/lib/jolitz-hub/db.dsn /var/lib/jolitz-hub/oidc-secret`
+shows `-rw-------`, owner `jolitz-hub`, a size above zero.
+Never `cat` them. The hub warns in its log when one is readable
+by group or others.
+
+### hub.toml
+
+A new file, no secret in it; `serve`, `user` and `migrate` read
+`<data>/hub.toml` by themselves, at start. A
+relative `db_dsn_file` or `client_secret_file` is taken under
+the data directory. Leave out the `db` lines for SQLite, the
+`[oidc]` section without OIDC; `base_url` is the URL of
+question 1 and the same as `--base-url` in the unit (OIDC needs
+it in the file: the redirect URI is built from it).
+
+```
+tee /var/lib/jolitz-hub/hub.toml <<'EOF'
+base_url = "https://hub.example.com"
+db = "postgres"
+db_dsn_file = "db.dsn"
+
+[oidc]
+issuer = "https://id.example.com/realms/ops"
+client_id = "jolitz-hub"
+client_secret_file = "oidc-secret"
+username_claim = "preferred_username"
+EOF
+chown root:jolitz-hub /var/lib/jolitz-hub/hub.toml
+chmod 640 /var/lib/jolitz-hub/hub.toml
+```
+
+The service may read it, not change it. `Way back: rm
+/var/lib/jolitz-hub/hub.toml`; the hub falls back to SQLite and
+token login.
+
+### Test before the service starts
+
+The issuer answers its discovery document, and its `issuer`
+value is the URL from question 6, character for character:
+
+```
+curl -fsS https://id.example.com/realms/ops/.well-known/openid-configuration
+```
+
+`migrate` opens the database `hub.toml` names, creates the
+tables and prints the schema version; an error here (connection
+refused, password authentication failed, permission denied for
+schema public) is fixed before anything else. It runs as the
+service user, so that a SQLite file or the DSN file is read with
+the service's rights:
+
+```
+runuser -u jolitz-hub -- /usr/local/bin/jolitz-hub migrate
+```
+
+FreeBSD:
+
+```
+su -m jolitz-hub -c '/usr/local/bin/jolitz-hub migrate'
+```
+
+The line reads `postgres (DSN from /var/lib/jolitz-hub/db.dsn):
+schema version 2 of 2` (the numbers are this release's). When
+PostgreSQL runs on the hub host itself, the unit below gets its
+unit name (`systemctl list-units 'postgresql*'`) in `After=`
+and `Wants=`.
+
+### An existing hub moves to PostgreSQL
+
+The same questions, then: stop the hub, export, write the DSN
+file and `hub.toml` (an existing `hub.toml` through
+`rules/backups.md`), import, check, start. `hub.db` stays as it
+is; it is the way back.
+
+```
+systemctl stop jolitz-hub
+runuser -u jolitz-hub -- /usr/local/bin/jolitz-hub export --out /var/lib/jolitz-hub/hub-export.tar
+```
+
+After the DSN file and `hub.toml`:
+
+```
+runuser -u jolitz-hub -- /usr/local/bin/jolitz-hub import /var/lib/jolitz-hub/hub-export.tar
+runuser -u jolitz-hub -- /usr/local/bin/jolitz-hub user list
+systemctl start jolitz-hub
+curl -fsS http://127.0.0.1:7331/api/v1/health
+```
+
+`import` refuses a database that holds users, files or claims,
+and stores everything or nothing. Tokens keep working; sessions
+and guard denials stay behind in `hub.db`. The archive holds
+the token hashes: it is mode 600, and `rm
+/var/lib/jolitz-hub/hub-export.tar` follows once the team has
+pushed and pulled. `Way back: systemctl stop jolitz-hub, hub.toml
+restored from /var/backups/jolitz/ (or removed), systemctl start
+jolitz-hub` — the hub is on `hub.db` again, without what was
+written to PostgreSQL in between.
+
+## 7. The service
 
 ### systemd (Linux)
 
@@ -238,7 +404,7 @@ curl -fsS http://127.0.0.1:7331/api/v1/health
 writes to it. The service name is `jolitz_hub` with an
 underscore; the account and the binary keep the hyphen.
 
-## 7. Reverse proxy
+## 8. Reverse proxy
 
 ### (a) Caddy
 
@@ -350,7 +516,7 @@ Nothing to do. The join URL is `http://127.0.0.1:7331` through
 the tunnel each member opens; `references/join.md` names the
 tunnel.
 
-## 8. Firewall
+## 9. Firewall
 
 Only with a proxy and only after the user chose in question 4.
 Every firewall change arms a rollback timer first
@@ -399,7 +565,7 @@ Afterwards, from the workstation:
 `curl -fsS https://hub.example.com/api/v1/health`. That answer
 is the proof the rollback timer waits for.
 
-## 9. The first admin
+## 10. The first admin
 
 On the host, as the service user, so that `hub.db` and its
 journal files keep their owner:
@@ -424,7 +590,7 @@ recovered. The user puts it into their token file as
 `references/join.md` says; on their own workstation the same
 session continues with `join`.
 
-## 10. Verify from outside
+## 11. Verify from outside
 
 - `curl -fsS https://hub.example.com/api/v1/health` from the
   workstation (option c: through the tunnel).
@@ -435,7 +601,7 @@ session continues with `join`.
   jolitz-hub -n 20 --no-pager` shows the start line and no
   error.
 
-## 11. Record
+## 12. Record
 
 `memory/servers/ops.example.com/memory.md`
 (`rules/server-memory.md`, `rules/port-check.md`,
@@ -446,7 +612,12 @@ session continues with `join`.
 - Hub: https://hub.example.com
 - jolitz-hub: port 7331 (tcp, 127.0.0.1)
 - Web server: caddy
+- jolitz-hub database: PostgreSQL jolitz_hub on db1.example.com (DSN file /var/lib/jolitz-hub/db.dsn)
+- jolitz-hub login: token, OIDC https://id.example.com/realms/ops
 ```
+
+The last two lines only when step 6 ran; without them the hub
+is SQLite (`/var/lib/jolitz-hub/hub.db`) with token login.
 
 `bin/jolitz-memory-lint ops.example.com` afterwards. Local
 changelog with `Rollback:` from step 3 and the journal headline
@@ -459,7 +630,7 @@ logger -t jolitz "[alice as root] ops.example.com now runs the jolitz team hub a
 Offer the daily backup from `references/operate.md` → Backup;
 it is a cron line or timer and asks on its own.
 
-## 12. Tell the team
+## 13. Tell the team
 
 Each member asks their own jolitz to "join the hub"; the admin
 creates one token per person with `user add <name>`
@@ -481,8 +652,10 @@ FreeBSD: `service jolitz_hub stop`, `sysrc -x jolitz_hub_enable
 jolitz_hub_base_url`, remove the script and the binary. The
 proxy block comes back from `/var/backups/jolitz/`, the
 firewall rule is deleted with the same tool that added it.
-`/var/lib/jolitz-hub` stays: it is the team's memory, and
-`GET /api/v1/export` or a copy of `hub.db` is the way to carry
-it elsewhere. The account `jolitz-hub` stays too; deleting an
+`/var/lib/jolitz-hub` stays: it is the team's memory (with
+`hub.toml` and the operator's secret files), and `jolitz-hub
+export` or `GET /api/v1/export` is the way to carry it
+elsewhere. A PostgreSQL database stays too; dropping it is the
+job of whoever runs that server. The account `jolitz-hub` stays too; deleting an
 account is the operator's job, the guard denies it to jolitz
 (`CLAUDE.md` → Critical Safety Rules).

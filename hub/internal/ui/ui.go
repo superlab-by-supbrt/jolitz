@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/superlab-by-supbrt/jolitz/hub/internal/api"
+	"github.com/superlab-by-supbrt/jolitz/hub/internal/auth"
 	"github.com/superlab-by-supbrt/jolitz/hub/internal/config"
 	"github.com/superlab-by-supbrt/jolitz/hub/internal/jobs"
 	"github.com/superlab-by-supbrt/jolitz/hub/internal/parse"
@@ -37,6 +38,9 @@ type Config struct {
 	BaseURL   string
 	Settings  *config.Config
 	Scheduler *jobs.Scheduler
+	// OIDC, when set, adds "log in with OIDC" to /login and
+	// the routes /oidc/login and /oidc/callback.
+	OIDC *auth.Provider
 }
 
 type server struct {
@@ -76,6 +80,10 @@ func New(cfg Config) http.Handler {
 	mux.HandleFunc("GET /login", s.loginForm)
 	mux.HandleFunc("POST /login", s.login)
 	mux.HandleFunc("POST /logout", s.logout)
+	if cfg.OIDC != nil {
+		mux.HandleFunc("GET /oidc/login", s.oidcLogin)
+		mux.HandleFunc("GET /oidc/callback", s.oidcCallback)
+	}
 	mux.HandleFunc("GET /{$}", s.page(s.fleet))
 	mux.HandleFunc("GET /hosts/{name}", s.page(s.host))
 	mux.HandleFunc("POST /hosts/{name}/claim", s.page(s.claim))
@@ -269,6 +277,7 @@ func (s *server) since(t time.Time) string {
 type loginPage struct {
 	base
 	Next string
+	OIDC bool
 }
 
 func (s *server) loginForm(w http.ResponseWriter, r *http.Request) {
@@ -277,7 +286,7 @@ func (s *server) loginForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	b, _ := s.newBase(nil, "Login", "")
-	s.render(w, http.StatusOK, "login", loginPage{base: b})
+	s.render(w, http.StatusOK, "login", loginPage{base: b, OIDC: s.cfg.OIDC != nil})
 }
 
 func (s *server) login(w http.ResponseWriter, r *http.Request) {
@@ -295,7 +304,7 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 	if u == nil {
 		b, _ := s.newBase(nil, "Login", "")
 		b.Err = "That token is not known here."
-		s.render(w, http.StatusUnauthorized, "login", loginPage{base: b})
+		s.render(w, http.StatusUnauthorized, "login", loginPage{base: b, OIDC: s.cfg.OIDC != nil})
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -306,6 +315,13 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) logout(w http.ResponseWriter, r *http.Request) {
+	// A browser session from OIDC ends on the server too; a
+	// pasted token stays valid (jolitz-sync uses it).
+	if c, err := r.Cookie(api.CookieName); err == nil && c.Value != "" {
+		if err := s.cfg.Store.EndWebSession(c.Value); err != nil {
+			log.Printf("ui: logout: %v", err)
+		}
+	}
 	http.SetCookie(w, &http.Cookie{Name: api.CookieName, Value: "", Path: "/", HttpOnly: true, Secure: isTLS(r), SameSite: http.SameSiteLaxMode, MaxAge: -1})
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }

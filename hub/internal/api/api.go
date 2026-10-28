@@ -23,7 +23,8 @@ import (
 )
 
 // CookieName is the login cookie of the UI; it holds the same
-// token a client sends as Bearer.
+// token a client sends as Bearer, or the secret of a browser
+// session opened through OIDC.
 const CookieName = "jolitz_hub"
 
 // MaxBody bounds a request body.
@@ -174,9 +175,28 @@ func SameOrigin(r *http.Request) bool {
 }
 
 // Authenticate resolves the request's user; nil without a valid
-// token.
+// token. A bearer token is only ever a token. The login cookie
+// holds either a token (pasted on /login) or the secret of a
+// browser session opened through OIDC; the API accepts both
+// from the cookie, as the UI's own requests carry it.
 func Authenticate(st *store.Store, r *http.Request) (*store.User, error) {
-	return st.UserByToken(TokenFromRequest(r))
+	if r.Header.Get("Authorization") != "" {
+		return st.UserByToken(TokenFromRequest(r))
+	}
+	c, err := r.Cookie(CookieName)
+	if err != nil || c.Value == "" {
+		return nil, nil
+	}
+	// The cookie, token login and OIDC session alike, never
+	// carries a write a browser sent from another origin.
+	if !SafeMethod(r.Method) && !SameOrigin(r) {
+		return nil, nil
+	}
+	u, err := st.UserByToken(c.Value)
+	if u != nil || err != nil {
+		return u, err
+	}
+	return st.UserByWebSession(c.Value)
 }
 
 type handler func(w http.ResponseWriter, r *http.Request, u *store.User)

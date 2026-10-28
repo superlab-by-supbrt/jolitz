@@ -53,6 +53,14 @@ reads the local `VERSION` file and installs that release of
    4. Firewall: 443 (and 80 for Caddy's certificate) open to
       all, restricted to the team's network, or no change. Port
       7331 is never opened.
+   5. Database: SQLite on the host (recommended), or the
+      team's existing PostgreSQL; then the operator writes the
+      DSN into a mode-600 file in their own terminal.
+   6. Browser login through the team's identity provider
+      (OIDC), optional: issuer, client id, the username claim;
+      the client secret goes into a file the same way. The
+      first login binds each hub user to the provider's
+      identity.
 4. **One plan, one OK.** Download with checksum verification,
    user, directories, binary, unit or `rc.d` script, proxy,
    firewall, start, health check. Shown as a list with the way

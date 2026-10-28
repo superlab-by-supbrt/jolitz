@@ -1,7 +1,8 @@
 # jolitz-hub
 
 The optional team service of jolitz. One static Go binary mirrors
-every member's `memory/` into SQLite, serves it as a JSON API and
+every member's `memory/` into SQLite (or an existing PostgreSQL),
+serves it as a JSON API and
 a dense web UI, and knows who is on which host. It runs no command
 on any server, holds no token in clear text and refuses a file in
 which a value looks like a credential.
@@ -14,13 +15,25 @@ nothing talks to a hub.
 
 ## Build
 
-Go 1.26 or newer, no cgo (the SQLite driver is pure Go).
+Go 1.26 or newer, no cgo (the SQLite driver and the PostgreSQL
+driver `github.com/jackc/pgx/v5` are pure Go).
 
 ```sh
 cd hub
 go build -ldflags "-X main.version=$(cat ../VERSION)" -o jolitz-hub .
 go test ./...
+sh scripts/pg-test.sh
 ```
+
+`go test ./...` runs the store tests against SQLite and skips
+PostgreSQL. With `JOLITZ_HUB_TEST_PG` naming a file that holds a
+DSN, the store tests run against that database as well, each in
+a schema of its own that is dropped afterwards.
+`scripts/pg-test.sh` does it all with a throwaway cluster:
+`initdb` in a temporary directory, `pg_ctl` on a free port on
+127.0.0.1, the DSN in a mode-600 file, `go test ./...`, the
+cluster stopped and removed on exit. It needs `initdb`, `pg_ctl`
+and `psql` in `PATH` (or `PG_BIN`); arguments go to `go test`.
 
 Cross-compile the same way with `GOOS`/`GOARCH`; the release
 workflow attaches `jolitz-hub_<os>_<arch>` binaries and a
@@ -56,6 +69,8 @@ listen = "127.0.0.1:7331"
 base_url = ""
 data_dir = "/var/lib/jolitz-hub"
 metrics_public = false
+db = "sqlite"
+db_dsn_file = ""
 
 [retention]
 sessions_days = 90
@@ -81,6 +96,12 @@ header_file = ""
 
 [notify.webhook]
 curlrc_file = ""
+
+[oidc]
+issuer = ""
+client_id = ""
+client_secret_file = ""
+username_claim = "preferred_username"
 ```
 
 The format is a subset of TOML: `key = "string"` (escapes `"`,
@@ -93,11 +114,128 @@ switch a job off unnoticed.
 
 Secrets never stand in this file. The notify sections name the
 files that hold the token (`header_file`) or the webhook URL
-(`curlrc_file`); a relative path is taken under `data_dir`.
+(`curlrc_file`), `db_dsn_file` the PostgreSQL DSN,
+`oidc.client_secret_file` the OIDC client secret; a relative
+path is taken under the data directory (`--data` when given).
 Create them with mode 600, owned by the service user; the hub
 logs a warning when a secret file is readable by group or
-others. It reads them at send time and keeps nothing in the
-database.
+others. It reads the notify files at send time, the DSN and the
+client secret at start, and keeps none of them in the database
+or a log line.
+
+## Database
+
+`db = "sqlite"`, the default, keeps everything in
+`<data>/hub.db`. `db = "postgres"` connects to a PostgreSQL
+database the team already runs; the DSN is one line in the file
+`db_dsn_file` names, never in `hub.toml`, on the command line or
+in the environment:
+
+```
+postgres://jolitz_hub:<password>@db1.example.com:5432/jolitz_hub?sslmode=verify-full
+```
+
+The URL form and libpq's `key=value` form both work; the driver
+is pgx, which also reads `~/.pgpass` and the `PG*` variables of
+the service user for what the DSN leaves out. The role needs to
+create tables in the database: the owner of an empty database
+does (PostgreSQL 15 and later give the `public` schema to the
+database owner). Every command (`serve`, `user`, `migrate`,
+`export`, `import`) opens the database `hub.toml` names.
+
+Both backends hold the same tables. The schema is versioned:
+`schema_migrations` records each step, `serve` and every other
+command apply the missing ones at open, each in a transaction;
+`jolitz-hub migrate` does only that and prints the version.
+Migrations ship inside the binary (`internal/store/migrations/
+sqlite|postgres/NNNN_name.sql`). A SQLite `hub.db` from before
+the numbering is carried forward on first open, a phase-1 file
+without file versions included. On PostgreSQL text columns use
+`COLLATE "C"`, so lists sort byte-wise as on SQLite; times are
+RFC 3339 text in UTC on both.
+
+### Moving between backends
+
+```sh
+jolitz-hub export --out /var/backups/jolitz/hub-export.tar
+# stop the hub, set db and db_dsn_file in hub.toml
+jolitz-hub import /var/backups/jolitz/hub-export.tar
+jolitz-hub user list
+```
+
+`export` writes a new file (mode 600; an existing file is never
+overwritten): every file with every version, deleted paths'
+histories included, the users with their token hashes and the
+claims. `import` reads it into an empty database in one
+transaction, checks every body against its sha256 and every
+path and user against the rules a push follows, and rebuilds the
+derived tables; a database with users, files or claims is
+refused. Tokens keep working: their hashes moved. Sessions,
+guard denials, OIDC browser sessions, the endoflife.date cache
+and the job runs stay behind.
+
+The archive, format 1:
+
+| Entry | What |
+|---|---|
+| `manifest.json` | `format`, `schema`, `backend`, `hub_version`, `exported_at`, `files` (path, version, sha256 of every current file), `counts` |
+| `users.json` | name, role, token_sha256, created_at; oidc_issuer and oidc_subject for a user bound through OIDC |
+| `claims.json` | host, user, note, since |
+| `history.json` | every version: path, version, sha256, size, updated_at, updated_by |
+| `bodies/<sha256>` | each distinct body once |
+| `memory/<path>` | the current files, as `GET export` gives them; import ignores them |
+
+## OIDC
+
+Optional browser login through an OpenID Connect issuer
+(Keycloak, Authentik, Dex, an Entra ID or Google app). Token
+login stays; `jolitz-sync` keeps its bearer tokens.
+
+```toml
+base_url = "https://hub.example.com"
+
+[oidc]
+issuer = "https://id.example.com/realms/ops"
+client_id = "jolitz-hub"
+client_secret_file = "oidc-secret"
+username_claim = "preferred_username"
+```
+
+Register `<base_url>/oidc/callback` as the redirect URI of the
+client at the issuer. `base_url` is required; the issuer must be
+`https://` (plain `http` only on 127.0.0.1 or localhost).
+`client_secret_file` holds the secret of a confidential client,
+sent with HTTP Basic; leave it empty for a public client.
+
+`/login` then offers "log in with the team's identity provider".
+The flow: authorization code with PKCE (S256), a random `state`
+and `nonce` in a ten-minute HttpOnly cookie on `/oidc/`, the
+code exchanged at the token endpoint from
+`/.well-known/openid-configuration`, the ID token verified with
+the standard library only: the issuer's JWKS (fetched once,
+again when a token names an unknown `kid`, at most once a
+minute), RS256 (RSA, 2048 bits or more) or ES256 (P-256),
+nothing else; `iss`, `aud` (and `azp` when there are several
+audiences), `exp`, `iat`, `nbf` with one minute of clock skew,
+and the nonce of this login. The `username_claim` must name an
+existing hub user exactly; OIDC creates nobody, an unknown name
+gets a 403 page that says how an admin adds it. The role comes
+from the users table.
+
+The name claim only finds the user: many providers let a user
+change `preferred_username`. The first OIDC login of a hub user
+binds it to the provider's issuer and subject (`iss`, `sub`);
+every later login must bring the same pair, and a pair bound to
+one hub user cannot log in as another. Both get a 403 page. A
+token without `sub` is refused. `user unbind NAME` clears the
+binding and ends the user's browser sessions; the next OIDC login
+binds it again. `user list` marks bound users `oidc: bound`. With
+`username_claim = "email"` the token must also carry
+`email_verified: true`. A good login sets the same `jolitz_hub`
+cookie as the token login, holding a random browser session the
+hub stores as SHA-256 for twelve hours; logout and `user rm` end
+it. The session works for the UI and for the API calls the
+browser makes with the cookie, never as a bearer token.
 
 ## Jobs
 
@@ -183,12 +321,16 @@ channel once.
 jolitz-hub user add alice --role admin --data /var/lib/jolitz-hub
 ```
 
+`user` reads `<data>/hub.toml` like `serve` (or `--config FILE`),
+so on a PostgreSQL hub it writes there.
+
 The token is printed once (stdout); the hub stores its SHA-256.
 The user puts it into a mode-600 file as one line
 `Authorization: Bearer <token>` (`~/.config/jolitz/hub-token`),
 which `curl -H @file` and `jolitz-sync` read, so it never reaches
 argv. Further users: `user add NAME --role viewer|operator|admin`,
-`user list`, `user rm NAME`, `user rotate NAME`.
+`user list`, `user rm NAME`, `user rotate NAME`,
+`user unbind NAME` (clears the OIDC binding, see OIDC).
 
 Roles: `viewer` reads, `operator` also writes files, sessions,
 claims and guard denials, `admin` also releases other people's
@@ -253,6 +395,10 @@ while the service runs:
 ```sh
 sqlite3 /var/lib/jolitz-hub/hub.db ".backup /var/backups/jolitz/hub-$(date +%F).db"
 ```
+
+On PostgreSQL the database is backed up like the team's other
+databases (`pg_dump -Fc`). `jolitz-hub export` works on both and
+is the backend-neutral copy.
 
 `GET /api/v1/export` (or `/export` in the UI) returns every memory
 file as a tar archive with paths relative to `memory/`; unpack it
@@ -326,7 +472,8 @@ todo.md|rules.md)`, `servers/<alias>`, `network.md`,
 ## UI
 
 `/login` (paste the token once; HttpOnly cookie, `Secure` behind
-TLS, SameSite=Lax), `/` fleet with filter bar, presence strip
+TLS, SameSite=Lax; with `[oidc]` also the issuer's login through
+`/oidc/login` and `/oidc/callback`), `/` fleet with filter bar, presence strip
 and the network links to add or remove, `/hosts/<name>`
 handover sheet: claim and release, who is on it, open to-dos
 with check and add, running jobs, the last changes with their
@@ -347,10 +494,15 @@ Every value from memory is escaped by `html/template`.
 ## Layout
 
 ```
-main.go                   CLI: serve, user add|list|rm|rotate, version
+main.go                   CLI: serve, user add|list|rm|rotate, migrate,
+                          export, import, version
 hub.toml                  the annotated example config (= the defaults)
+scripts/pg-test.sh        go test against a throwaway PostgreSQL
 internal/config           hub.toml: the TOML subset, defaults, validation
-internal/store            SQLite schema, derivation, queries
+internal/store            schema and migrations (SQLite, PostgreSQL),
+                          derivation, queries, export/import
+internal/auth             OIDC: discovery, PKCE, JWKS, ID token checks
+internal/auth/authtest    a test issuer that signs with generated keys
 internal/parse            memory.md, changelog.log, todo.md, network.md, audits
 internal/lint             the TOKENS/ASSIGN regexes of bin/jolitz-memory-lint
 internal/overview         Go port of lib/overview.awk: text, json, prom

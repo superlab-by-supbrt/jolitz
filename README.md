@@ -106,8 +106,8 @@ system, the application stays with its admin
 
 For several admins: one small service on a host of yours
 holds everyone's memory and shows it live, with who is
-working where. Go, one binary, SQLite, behind your reverse
-proxy. Without `~/.config/jolitz/hub.conf` nothing of it is
+working where. Go, one binary, SQLite or your PostgreSQL,
+behind your reverse proxy. Without `~/.config/jolitz/hub.conf` nothing of it is
 active.
 
 You set it up by asking:
@@ -140,6 +140,8 @@ the token never passes through jolitz.
 - **On its own:** weekly fleet summary to ntfy, Matrix or a
   webhook, daily end-of-life dates, `/metrics` for
   Prometheus, a JSON API with a token per person.
+- **Login:** a token per person, or your identity provider
+  (OIDC, e.g. Keycloak or Entra ID) for the browser.
 
 The hub runs no command, holds no token in clear and never
 reaches a server; servers are reached from the workstations
