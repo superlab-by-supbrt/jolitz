@@ -929,6 +929,42 @@ check deny "jq '.env.HEINZEL_GUARD_DISABLE=\"1\"' s.json"
 check pass 'cat .claude/settings.json'
 check pass 'grep -n deny .claude/hooks/guard-taboos.sh'
 check pass 'sh .claude/hooks/guard-taboos-test.sh'
+# Relative targets: a cd into .claude, a bare settings.local.json,
+# and a session whose cwd is already inside .claude.
+check deny 'cd .claude && echo x > settings.json'
+check deny 'cd ~/proj/.claude/ && rm hooks/guard-taboos.sh'
+check deny 'cd .claude/hooks; sed -i s/deny/pass/ guard-taboos.sh'
+check deny 'echo "{}" > settings.local.json'
+check deny 'chflags nouchg .claude/hooks/guard-taboos.sh'
+check deny 'ls .claude; tee settings.json < /tmp/s'
+check pass 'ls .claude 2>/dev/null'
+check pass 'ls -la .claude/hooks/ 2>&1'
+check pass 'python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py orphans > scan.json'
+check_cwd() {
+  # $1 expected, $2 cwd, $3 command
+  OUT=$(jq -n --arg c "$2" --arg x "$3" \
+    '{cwd:$c,tool_name:"Bash",tool_input:{command:$x}}' \
+    | env -u HEINZEL_GUARD_DISABLE sh "$HOOK")
+  if printf '%s' "$OUT" \
+    | grep -q '"permissionDecision":"deny"'; then
+    GOT=deny
+  else
+    GOT=pass
+  fi
+  if [ "$GOT" = "$1" ]; then
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1))
+    echo "FAIL [cwd $2, $1, got $GOT]: $3"
+  fi
+}
+if command -v jq >/dev/null 2>&1; then
+  check_cwd deny /p/.claude 'echo "{}" > settings.json'
+  check_cwd deny /p/.claude/hooks 'rm guard-taboos.sh'
+  check_cwd pass /p/.claude 'cat settings.json'
+  check_cwd pass /p/.claude/skills/x 'python3 scan.py > out.json'
+  check_cwd pass /p 'echo "{}" > settings.json'
+fi
 
 # --- degraded awk must fail CLOSED -----------------------------
 # hit_without() decides the read-only exemptions via awk. If awk

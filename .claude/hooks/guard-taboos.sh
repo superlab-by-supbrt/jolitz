@@ -389,6 +389,13 @@ LOCKFILE='[Hh][Ee][Ii][Nn][Zz][Ee][Ll]\.[Cc][Oo][Nn][Ff]'
 # whichever one the session started in.
 SELF='\.claude/(settings(\.local)?\.json|hooks/)'
 
+# The same files as a command reaches them: .claude on its own
+# (cd .claude && echo x > settings.json), .claude/hooks and
+# .claude/settings*, and settings.local.json, a name only Claude
+# Code uses. .claude/skills stays out: the macOS cleanup skill
+# runs its scanner from there and redirects the result.
+SELF_ANY='(^|[^[:alnum:]_.-])\.claude(/+(hooks|settings)|/*(["'\''[:space:];|&)]|$))|(^|[^[:alnum:]_.-])settings\.local\.json'
+
 # An assignment of the override, in shell (VAR=1), JSON
 # ("VAR": "1") or jq (.env.VAR="1") form. A bare mention, as in
 # this file's documentation, stays allowed. The backslash is for
@@ -721,22 +728,42 @@ fi
 
 # --- The guard's own files ------------------------------------
 # Rewriting the hook, or giving a settings file an env block,
-# disarms everything below. Same write set as the lock above.
-if hit "$SELF"; then
-  if hit '>>?[[:space:]]*["'\'']?[^[:space:];|&]*'"$SELF" \
+# disarms everything below. A command is judged when it names a
+# .claude path component or settings.local.json, or when the
+# session's cwd is inside a .claude directory: a relative target
+# there names no path at all. Then any write form counts, not
+# only one aimed at a spelled-out path: a redirect (except onto
+# /dev/null or a descriptor), sed or perl -i, an editor, a
+# delete, move, copy or re-permission, tee, find -delete, or an
+# interpreter. Accepted false positive: a read chained to an
+# unrelated write in the same command. Read the files in a call
+# of their own.
+SELF_CWD=""
+if command -v jq >/dev/null 2>&1; then
+  SELF_CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null) \
+    || SELF_CWD=""
+fi
+IN_CLAUDE=0
+case "$SELF_CWD" in
+  */.claude|*/.claude/|*/.claude/hooks|*/.claude/hooks/*) IN_CLAUDE=1 ;;
+esac
+if [ "$IN_CLAUDE" -eq 1 ] || hit "$SELF_ANY"; then
+  REDIR=$(printf '%s\n' "$CMD" \
+    | sed -E -e 's#[0-9]*>>?[[:space:]]*/dev/null##g' -e 's#[0-9]*>&[0-9-]##g')
+  if printf '%s\n' "$REDIR" | grep -q '>' \
     || { hit '(^|[^[:alnum:]_-])(sed|perl)([^[:alnum:]_-]|$)' \
          && hit '(^|[[:space:]])-i'; } \
     || hit "(^|[^[:alnum:]_-])$EDITOR([^[:alnum:]_-]|\$)" \
-    || hit "(^|[^[:alnum:]_-])($CLOBBER|cp)([^[:alnum:]_-]|\$)" \
-    || hit '(^|[[:space:]])-delete([[:space:]]|$)' \
-    || writes_to "$SELF"
+    || hit "(^|[^[:alnum:]_-])($CLOBBER|cp|tee|sponge|chflags)([^[:alnum:]_-]|\$)" \
+    || hit '(^|[[:space:]])-delete([[:space:]]|$)'
   then
-    deny "this file registers or implements the guard; the \
-operator edits it by hand (cat and grep read it)"
+    deny "this command writes where the guard lives (.claude/hooks, \
+.claude/settings*.json); the operator edits those by hand - \
+read them with cat or grep in a call of their own"
   fi
   if hit "$INTERP"; then
-    deny "an interpreter with the guard's own files on its \
-command line can rewrite them - read them with cat or grep"
+    deny "an interpreter next to the guard's own files can rewrite \
+them - read them with cat or grep"
   fi
 fi
 

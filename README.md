@@ -1,11 +1,11 @@
-# Heinzel — System Administration with Safety Guardrails
+# jolitz — System Administration with Safety Guardrails
 
-Heinzel is a set of rules that turns an AI coding assistant
+jolitz is a set of rules that turns an AI coding assistant
 into a cautious, methodical sysadmin. Describe what you need
-in plain English. Heinzel works out the right commands for
-your OS, explains each one, and waits for your approval. It
-backs up configs, tests before applying, and remembers every
-server it has worked on.
+in plain English. It works out the right commands for your
+OS, explains each one, and waits for your approval. It backs
+up configs, tests before applying, and remembers every server
+it has worked on.
 
 It manages Linux, FreeBSD, NetBSD and macOS, remote over SSH or on
 the local machine, and runs in
@@ -13,19 +13,12 @@ the local machine, and runs in
 [OpenCode](https://opencode.ai) or any terminal AI tool that
 reads project files and runs shell commands.
 
-![Trailer: Heinzel at work](assets/heinzel-trailer.gif)
-
-The trailer is scripted, not recorded. To change it, see
-[`assets/trailer/`](assets/trailer/README.md).
-
-Screencasts on YouTube:
-
-- [Debug and fix a misconfigured nginx and firewall](https://www.youtube.com/watch?v=_uenftahbJI) (1 min)
-- [Install the latest stable Ruby and Ruby on Rails](https://www.youtube.com/watch?v=QVvm29eABKY) (1 min)
-- [Install a firewall, upgrade the distribution, set up daily security updates](https://www.youtube.com/watch?v=ve_TFyJy_uU) (2 min)
-
-Press:
-[German article about Heinzel on heise.de](https://www.heise.de/ratgeber/KI-Assistent-Heinzel-fuer-die-Server-Administration-im-Ueberblick-11244463.html)
+jolitz is a fork of
+[heinzel](https://github.com/wintermeyer/heinzel) by Stefan
+Wintermeyer; see [Origin](#origin). Inside, the rules, skills
+and journal entries still call the agent "heinzel", which
+keeps merges from upstream simple. Throughout this README,
+"Heinzel" means the agent as it runs.
 
 ## Install
 
@@ -47,8 +40,8 @@ You need:
 Then:
 
 ```
-git clone https://github.com/wintermeyer/heinzel.git
-cd heinzel
+git clone https://github.com/superlab-by-supbrt/jolitz.git
+cd jolitz
 claude        # or: opencode
 ```
 
@@ -452,22 +445,29 @@ assets/trailer/  script that renders the README trailer
 
 ## Why the name?
 
-The
-[Heinzelmännchen](https://en.wikipedia.org/wiki/Heinzelm%C3%A4nnchen)
-are the helpful gnomes of Cologne. At night, while the city
-slept, they did the work that was left undone.
+A homage to Bill and Lynne Jolitz, who wrote 386BSD and put
+BSD on ordinary PCs in 1992. FreeBSD and NetBSD grew out of
+it, and with them a good part of the servers this tool looks
+after. The project is named in their honour only; it is not
+affiliated with or endorsed by them.
 
-## Professional support
-
-[Wintermeyer Consulting](https://wintermeyer-consulting.de)
-offers consulting and hands-on support for Heinzel, from
-setup to ongoing system management. Contact Stefan
-Wintermeyer: **sw@wintermeyer-consulting.de**
+The upstream name comes from the
+[Heinzelmännchen](https://en.wikipedia.org/wiki/Heinzelm%C3%A4nnchen),
+the helpful gnomes of Cologne who did the work left undone
+while the city slept.
 
 ## Contributing
 
-Bug reports, feature requests and pull requests are welcome.
+Bug reports, feature requests and pull requests are welcome;
+see [CONTRIBUTING.md](CONTRIBUTING.md). Changes that are not
+specific to this fork are better sent to
+[heinzel](https://github.com/wintermeyer/heinzel) upstream.
 
 ## License
 
-MIT
+MIT, see [LICENSE](LICENSE). The original copyright notice of
+heinzel by Stefan Wintermeyer is kept, as the license
+requires; changes in this fork are covered by the second
+notice. The software comes without warranty: it runs commands
+on production servers, so read every command before you
+approve it.

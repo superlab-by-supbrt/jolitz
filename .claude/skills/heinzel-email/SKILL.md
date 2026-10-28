@@ -312,8 +312,8 @@ the only root-privileged operation in the workflow.
 
    ```
    -- 
-   Sent by Heinzel on behalf of <Operator name>
-   https://github.com/wintermeyer/heinzel
+   Sent by jolitz on behalf of <Operator name>
+   https://github.com/superlab-by-supbrt/jolitz
    ```
 
    Keep it to these three lines. No timestamp, no hostname,

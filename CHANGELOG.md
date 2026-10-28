@@ -1,5 +1,28 @@
 # Changelog
 
+## 3.3.3-jolitz.1 — 2026-10-28
+
+- **jolitz forks heinzel 3.3.3.** The work heinzel
+  3.0 moved to Heinzel Pro is back: OS replacement,
+  EFI and dual boot, partition staging, cloud
+  images, accounts, SSH keys, sudo and deploy users,
+  secret rotation, the fleet audit skill and
+  scheduled housekeeping. Every request for it asks
+  first, as any other change does.
+- **The guard keeps every 3.x block and gets its
+  override back.** The operator exports
+  `HEINZEL_GUARD_DISABLE` set to 1 before the
+  session to lift the taboos. Attack tools, the
+  server lock and an assignment of the variable by
+  the agent stay blocked even then. With the guard
+  on, `.claude/hooks/` and `.claude/settings*.json`
+  are protected, also through a relative path or a
+  session cwd inside `.claude`.
+- The ethics rule is unchanged. README, license
+  notice, email signature and CONTRIBUTING name the
+  fork; internal names stay "heinzel" so upstream
+  merges stay simple.
+
 ## 3.3.3 — 2026-10-22
 
 - **A blocked write points to `/auto-mode-setup`.**
