@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -35,10 +36,40 @@ type Config struct {
 	DataDir       string
 	MetricsPublic bool
 
+	// DB is "sqlite" (hub.db in DataDir) or "postgres", whose
+	// DSN stands in DBDSNFile, never here.
+	DB        string
+	DBDSNFile string
+
 	Retention Retention
 	EOL       EOL
 	Summary   Summary
 	Notify    Notify
+	OIDC      OIDC
+
+	// written holds the secret file paths as the file wrote
+	// them, before resolve; an array keeps Config comparable.
+	written [5]string
+}
+
+// OIDC is the optional browser login through an OpenID Connect
+// issuer. The claim UsernameClaim of the ID token names an
+// existing hub user; roles stay in the users table. Tokens for
+// jolitz-sync are unaffected.
+type OIDC struct {
+	Issuer           string
+	ClientID         string
+	ClientSecretFile string
+	UsernameClaim    string
+}
+
+// Enabled reports whether an issuer is configured.
+func (o OIDC) Enabled() bool { return o.Issuer != "" }
+
+// OIDCRedirectURL is the redirect URI to register at the issuer:
+// <base_url>/oidc/callback.
+func (c *Config) OIDCRedirectURL() string {
+	return strings.TrimRight(c.BaseURL, "/") + "/oidc/callback"
 }
 
 // Retention: how long the hub keeps what only it knows. File
@@ -106,10 +137,12 @@ func Default() *Config {
 	return &Config{
 		Listen:    "127.0.0.1:7331",
 		DataDir:   "/var/lib/jolitz-hub",
+		DB:        "sqlite",
 		Retention: Retention{SessionsDays: 90, GuardDays: 30, VersionsYears: 2},
 		EOL:       EOL{Enabled: true},
 		Summary:   Summary{Weekday: "mon", Hour: 7},
 		Notify:    Notify{Ntfy: Ntfy{Server: "https://ntfy.sh"}},
+		OIDC:      OIDC{UsernameClaim: "preferred_username"},
 	}
 }
 
@@ -170,13 +203,16 @@ func Parse(r io.Reader) (*Config, error) {
 	if err := c.validate(); err != nil {
 		return nil, err
 	}
+	for i, p := range c.secretPaths() {
+		c.written[i] = *p
+	}
 	c.resolve()
 	return c, nil
 }
 
 func knownSection(s string) bool {
 	switch s {
-	case "retention", "eol", "summary", "notify.ntfy", "notify.matrix", "notify.webhook":
+	case "retention", "eol", "summary", "notify.ntfy", "notify.matrix", "notify.webhook", "oidc":
 		return true
 	}
 	return false
@@ -290,6 +326,18 @@ func (c *Config) set(section, key string, v value) error {
 		return str(&c.DataDir)
 	case "metrics_public":
 		return boolean(&c.MetricsPublic)
+	case "db":
+		return str(&c.DB)
+	case "db_dsn_file":
+		return str(&c.DBDSNFile)
+	case "oidc.issuer":
+		return str(&c.OIDC.Issuer)
+	case "oidc.client_id":
+		return str(&c.OIDC.ClientID)
+	case "oidc.client_secret_file":
+		return str(&c.OIDC.ClientSecretFile)
+	case "oidc.username_claim":
+		return str(&c.OIDC.UsernameClaim)
 	case "retention.sessions_days":
 		return num(&c.Retention.SessionsDays)
 	case "retention.guard_days":
@@ -375,17 +423,71 @@ func (c *Config) validate() error {
 	if (m.Server != "" || m.Room != "" || m.HeaderFile != "") && (m.Server == "" || m.Room == "" || m.HeaderFile == "") {
 		return errors.New("notify.matrix needs server, room and header_file")
 	}
+	switch {
+	case strings.Contains(c.DB, "://") || strings.Contains(c.DB, "="):
+		return errors.New("db: the DSN belongs in the file db_dsn_file names, mode 600; db is sqlite or postgres")
+	case c.DB != "sqlite" && c.DB != "postgres":
+		return fmt.Errorf("db: sqlite or postgres, not %q", c.DB)
+	case c.DB == "postgres" && c.DBDSNFile == "":
+		return errors.New(`db = "postgres" needs db_dsn_file, the file holding the DSN`)
+	case c.DB == "sqlite" && c.DBDSNFile != "":
+		return errors.New(`db_dsn_file needs db = "postgres"`)
+	}
+	o := &c.OIDC
+	o.Issuer = strings.TrimRight(o.Issuer, "/")
+	if o.Issuer != "" || o.ClientID != "" || o.ClientSecretFile != "" {
+		if o.Issuer == "" || o.ClientID == "" {
+			return errors.New("oidc needs issuer and client_id (client_secret_file for a confidential client)")
+		}
+		if !secureURL(o.Issuer) {
+			return errors.New("oidc.issuer must be https:// (plain http only on 127.0.0.1 or localhost)")
+		}
+		if c.BaseURL == "" {
+			return errors.New("oidc needs base_url: the redirect URI is <base_url>/oidc/callback")
+		}
+		if o.UsernameClaim == "" {
+			return errors.New("oidc.username_claim must not be empty (default preferred_username)")
+		}
+	}
 	return nil
 }
 
+// secureURL accepts https URLs, and http ones on the loopback.
+func secureURL(s string) bool {
+	u, err := url.Parse(s)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	if u.Scheme == "https" {
+		return true
+	}
+	h := u.Hostname()
+	return u.Scheme == "http" && (h == "127.0.0.1" || h == "localhost" || h == "::1")
+}
+
+func (c *Config) secretPaths() []*string {
+	return []*string{&c.Notify.Ntfy.HeaderFile, &c.Notify.Matrix.HeaderFile, &c.Notify.Webhook.CurlrcFile,
+		&c.DBDSNFile, &c.OIDC.ClientSecretFile}
+}
+
 // resolve makes the secret file paths absolute: relative ones
-// live in the data dir.
+// live in the data dir. The paths as written are kept, so that
+// SetDataDir can resolve them again.
 func (c *Config) resolve() {
-	for _, p := range []*string{&c.Notify.Ntfy.HeaderFile, &c.Notify.Matrix.HeaderFile, &c.Notify.Webhook.CurlrcFile} {
+	for i, p := range c.secretPaths() {
+		*p = c.written[i]
 		if *p != "" && !filepath.IsAbs(*p) {
 			*p = filepath.Join(c.DataDir, *p)
 		}
 	}
+}
+
+// SetDataDir replaces the data dir (the --data flag wins over
+// the file) and resolves the relative secret file paths against
+// the new one.
+func (c *Config) SetDataDir(dir string) {
+	c.DataDir = dir
+	c.resolve()
 }
 
 // Channels names the enabled notify channels in a fixed order.
@@ -413,6 +515,10 @@ type KV struct {
 // shows it: every key, no file contents. The paths of the
 // secret files appear; what is in them never does.
 func (c *Config) Public() []KV {
+	redirect := ""
+	if c.OIDC.Enabled() {
+		redirect = c.OIDCRedirectURL()
+	}
 	b := strconv.FormatBool
 	i := strconv.Itoa
 	return []KV{
@@ -420,6 +526,8 @@ func (c *Config) Public() []KV {
 		{"base_url", c.BaseURL},
 		{"data_dir", c.DataDir},
 		{"metrics_public", b(c.MetricsPublic)},
+		{"db", c.DB},
+		{"db_dsn_file", c.DBDSNFile},
 		{"retention.sessions_days", i(c.Retention.SessionsDays)},
 		{"retention.guard_days", i(c.Retention.GuardDays)},
 		{"retention.versions_years", i(c.Retention.VersionsYears) + " (old file versions; the current one is kept)"},
@@ -433,5 +541,34 @@ func (c *Config) Public() []KV {
 		{"notify.matrix.room", c.Notify.Matrix.Room},
 		{"notify.matrix.header_file", c.Notify.Matrix.HeaderFile},
 		{"notify.webhook.curlrc_file", c.Notify.Webhook.CurlrcFile},
+		{"oidc.issuer", c.OIDC.Issuer},
+		{"oidc.client_id", c.OIDC.ClientID},
+		{"oidc.client_secret_file", c.OIDC.ClientSecretFile},
+		{"oidc.username_claim", c.OIDC.UsernameClaim},
+		{"oidc.redirect_url", redirect},
 	}
+}
+
+// ReadSecretFile reads a secret from a file: the database DSN,
+// the OIDC client secret. Surrounding white space goes; an
+// empty file is an error. A file readable by group or others is
+// logged, never refused, as the notify secret files are. The
+// value is never part of an error or a log line.
+func ReadSecretFile(path string, logf func(string, ...any)) (string, error) {
+	st, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("secret file %s: %w", path, errors.Unwrap(err))
+	}
+	if m := st.Mode().Perm(); m&0o077 != 0 && logf != nil {
+		logf("%s has mode %04o; a secret file should be 0600", path, m)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("secret file %s: %w", path, errors.Unwrap(err))
+	}
+	v := strings.TrimSpace(string(b))
+	if v == "" {
+		return "", fmt.Errorf("secret file %s is empty", path)
+	}
+	return v, nil
 }

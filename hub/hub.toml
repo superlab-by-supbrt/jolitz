@@ -10,15 +10,25 @@
 # An unknown key or section is an error, so a typo cannot
 # silently switch a job off.
 #
-# No secret belongs in this file. The notify sections name the
-# files that hold the token or the webhook URL; a relative path
-# is taken under data_dir. Create them with mode 600, owned by
-# the service user.
+# No secret belongs in this file. The notify sections, the
+# database and OIDC name the files that hold the token, the
+# webhook URL, the DSN or the client secret; a relative path is
+# taken under data_dir. Create them with mode 600, owned by the
+# service user.
 
 listen = "127.0.0.1:7331"       # TLS belongs to the reverse proxy
 base_url = ""                   # public URL, shown on the /api page
 data_dir = "/var/lib/jolitz-hub"
 metrics_public = false          # true: GET /metrics needs no token
+
+# The database: "sqlite" keeps hub.db in data_dir; "postgres"
+# connects to the database whose DSN stands in db_dsn_file
+# (postgres://user:password@host:5432/db?sslmode=verify-full or
+# key=value pairs), one line, mode 600, owned by the service
+# user. The DSN is never written here, never taken from the
+# command line or the environment, never logged.
+db = "sqlite"
+db_dsn_file = ""                # e.g. "db.dsn"
 
 [retention]
 sessions_days = 90              # closed sessions older than this go
@@ -53,3 +63,17 @@ header_file = ""                # e.g. "matrix-auth"
 [notify.webhook]
 curlrc_file = ""                # e.g. "webhook.curlrc" holding
                                 # url = "https://hooks.slack.com/…"
+
+# OIDC: browser login through an OpenID Connect issuer
+# (authorization code flow with PKCE). The username_claim of the
+# ID token must name an existing hub user (jolitz-hub user add);
+# nobody is created on the fly, and the role still comes from
+# the users table. Token login and jolitz-sync's bearer tokens
+# stay as they are. Register <base_url>/oidc/callback as the
+# redirect URI at the issuer; base_url is required.
+[oidc]
+issuer = ""                     # e.g. "https://id.example.com/realms/ops"
+client_id = ""                  # e.g. "jolitz-hub"
+client_secret_file = ""         # e.g. "oidc-secret"; empty for a
+                                # public client (PKCE only)
+username_claim = "preferred_username"

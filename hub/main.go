@@ -1,5 +1,6 @@
 // jolitz-hub is the optional team service of jolitz: one static
-// binary that mirrors every member's memory/ into SQLite, serves
+// binary that mirrors every member's memory/ into SQLite (or
+// PostgreSQL), serves
 // it over HTTP (JSON API and a web UI) and knows who is on which
 // host. It runs no command on any server and holds no secret:
 // tokens are stored as SHA-256, memory files are refused when a
@@ -12,6 +13,9 @@
 //	jolitz-hub user list
 //	jolitz-hub user rm NAME
 //	jolitz-hub user rotate NAME
+//	jolitz-hub migrate
+//	jolitz-hub export --out FILE.tar
+//	jolitz-hub import FILE.tar
 //	jolitz-hub version
 package main
 
@@ -30,6 +34,7 @@ import (
 	"time"
 
 	"github.com/superlab-by-supbrt/jolitz/hub/internal/api"
+	"github.com/superlab-by-supbrt/jolitz/hub/internal/auth"
 	"github.com/superlab-by-supbrt/jolitz/hub/internal/config"
 	"github.com/superlab-by-supbrt/jolitz/hub/internal/jobs"
 	"github.com/superlab-by-supbrt/jolitz/hub/internal/store"
@@ -49,7 +54,12 @@ Usage:
   jolitz-hub user list
   jolitz-hub user rm NAME
   jolitz-hub user rotate NAME
+  jolitz-hub migrate
+  jolitz-hub export --out FILE.tar
+  jolitz-hub import FILE.tar
   jolitz-hub version
+
+Every command but version takes --config FILE and --data DIR.
 
 serve      Run the API, the web UI, /metrics and the jobs
            (retention, endoflife.date fetch, weekly summary).
@@ -63,9 +73,24 @@ serve      Run the API, the web UI, /metrics and the jobs
 user add   Create a user and print its token once. The hub
            stores only the token's SHA-256.
 user list  Names, roles and creation dates.
-user rm    Delete a user; its sessions end, its claims stay.
+user rm    Delete a user; its sessions and browser logins end,
+           its claims stay.
 user rotate
            Replace a user's token and print the new one once.
+migrate    Apply the schema migrations the database lacks and
+           exit. serve does the same at start.
+export     Write every file with every version, the users with
+           their token hashes and the claims to a new tar file
+           (mode 600), the way to move a hub to another
+           database. Sessions, guard denials and caches stay.
+import     Read such a tar file into an empty database, in one
+           transaction; a database with users, files or claims
+           is refused. The derived tables are rebuilt.
+
+The database is hub.toml's db: "sqlite" (hub.db in --data, the
+default) or "postgres" with the DSN in the file db_dsn_file
+names. Moving: export on the old hub, set db and db_dsn_file,
+import, start.
 
 Roles: viewer reads, operator also writes files, sessions,
 claims and guard denials, admin also releases other people's
@@ -87,6 +112,12 @@ func main() {
 		err = serve(os.Args[2:])
 	case "user":
 		err = user(os.Args[2:])
+	case "migrate":
+		err = migrate(os.Args[2:])
+	case "export":
+		err = export(os.Args[2:])
+	case "import":
+		err = importTar(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Println("jolitz-hub " + version)
 	case "help", "--help", "-h":
@@ -113,7 +144,23 @@ func defaultData() string {
 	return "/var/lib/jolitz-hub"
 }
 
-func openStore(dir string) (*store.Store, error) {
+// openStore opens the database the configuration names:
+// SQLite in the data dir, or PostgreSQL with the DSN read from
+// db_dsn_file. The DSN is never logged and never part of an
+// error.
+func openStore(cfg *config.Config) (*store.Store, error) {
+	if cfg.DB == "postgres" {
+		dsn, err := config.ReadSecretFile(cfg.DBDSNFile, log.Printf)
+		if err != nil {
+			return nil, fmt.Errorf("db_dsn_file: %w", err)
+		}
+		st, err := store.OpenPostgres(dsn)
+		if err != nil {
+			return nil, fmt.Errorf("open the database of %s: %w", cfg.DBDSNFile, err)
+		}
+		return st, nil
+	}
+	dir := cfg.DataDir
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, fmt.Errorf("data dir: %w", err)
 	}
@@ -122,6 +169,32 @@ func openStore(dir string) (*store.Store, error) {
 		return nil, fmt.Errorf("open %s: %w", filepath.Join(dir, "hub.db"), err)
 	}
 	return st, nil
+}
+
+// dbName says which database a store is, for log lines: the
+// SQLite path, or the file holding the PostgreSQL DSN.
+func dbName(cfg *config.Config) string {
+	if cfg.DB == "postgres" {
+		return "postgres (DSN from " + cfg.DBDSNFile + ")"
+	}
+	return "sqlite " + filepath.Join(cfg.DataDir, "hub.db")
+}
+
+// oidcProvider builds the OIDC login when hub.toml has an
+// [oidc] issuer; nil otherwise.
+func oidcProvider(cfg *config.Config) (*auth.Provider, error) {
+	o := cfg.OIDC
+	if !o.Enabled() {
+		return nil, nil
+	}
+	secret := ""
+	if o.ClientSecretFile != "" {
+		var err error
+		if secret, err = config.ReadSecretFile(o.ClientSecretFile, log.Printf); err != nil {
+			return nil, fmt.Errorf("oidc.client_secret_file: %w", err)
+		}
+	}
+	return auth.New(o.Issuer, o.ClientID, secret, cfg.OIDCRedirectURL(), o.UsernameClaim), nil
 }
 
 func serve(args []string) error {
@@ -137,7 +210,11 @@ func serve(args []string) error {
 	if err != nil {
 		return err
 	}
-	st, err := openStore(cfg.DataDir)
+	provider, err := oidcProvider(cfg)
+	if err != nil {
+		return err
+	}
+	st, err := openStore(cfg)
 	if err != nil {
 		return err
 	}
@@ -157,7 +234,7 @@ func serve(args []string) error {
 	mux := http.NewServeMux()
 	mux.Handle("/api/v1/", api.New(apiCfg))
 	mux.Handle(api.MetricsPath, api.Metrics(apiCfg))
-	mux.Handle("/", ui.New(ui.Config{Store: st, Version: version, BaseURL: cfg.BaseURL, Settings: cfg, Scheduler: sched}))
+	mux.Handle("/", ui.New(ui.Config{Store: st, Version: version, BaseURL: cfg.BaseURL, Settings: cfg, Scheduler: sched, OIDC: provider}))
 	srv := &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           logRequests(mux),
@@ -177,7 +254,12 @@ func serve(args []string) error {
 		for _, j := range sched.Jobs {
 			names = append(names, j.Name)
 		}
-		log.Printf("version %s, data %s, config %s, jobs %s, listening on http://%s", version, cfg.DataDir, src, strings.Join(names, " "), cfg.Listen)
+		login := "token"
+		if provider != nil {
+			login = "token, oidc " + provider.Issuer
+		}
+		log.Printf("version %s, db %s, config %s, jobs %s, login %s, listening on http://%s",
+			version, dbName(cfg), src, strings.Join(names, " "), login, cfg.Listen)
 		errc <- srv.ListenAndServe()
 	}()
 	select {
@@ -214,7 +296,7 @@ func loadConfig(fs *flag.FlagSet, path, data, listen, baseURL string) (*config.C
 		}
 	}
 	if set["data"] || path == "" {
-		cfg.DataDir = data
+		cfg.SetDataDir(data)
 	}
 	if set["listen"] {
 		cfg.Listen = listen
@@ -259,6 +341,7 @@ func user(args []string) error {
 	sub, rest := args[0], args[1:]
 	fs := flag.NewFlagSet("user "+sub, flag.ContinueOnError)
 	data := fs.String("data", defaultData(), "data directory holding hub.db")
+	cfgPath := fs.String("config", "", "hub.toml (default <data>/hub.toml when it exists)")
 	role := fs.String("role", "", "viewer, operator or admin")
 	// Flags may follow the name: "user add alice --role admin".
 	var names []string
@@ -272,7 +355,11 @@ func user(args []string) error {
 			rest = rest[1:]
 		}
 	}
-	st, err := openStore(*data)
+	cfg, err := loadConfig(fs, *cfgPath, *data, "", "")
+	if err != nil {
+		return err
+	}
+	st, err := openStore(cfg)
 	if err != nil {
 		return err
 	}
@@ -321,5 +408,110 @@ func user(args []string) error {
 	default:
 		return errUsage
 	}
+	return nil
+}
+
+// dbFlags parses --config, --data and the arguments after them
+// for migrate, export and import, and opens the database.
+func dbFlags(name string, args []string, extra func(*flag.FlagSet)) (*config.Config, *store.Store, []string, error) {
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	data := fs.String("data", defaultData(), "data directory holding hub.db")
+	cfgPath := fs.String("config", "", "hub.toml (default <data>/hub.toml when it exists)")
+	if extra != nil {
+		extra(fs)
+	}
+	// Flags may follow the positional argument.
+	var pos []string
+	for len(args) > 0 {
+		if err := fs.Parse(args); err != nil {
+			return nil, nil, nil, errUsage
+		}
+		args = fs.Args()
+		if len(args) > 0 {
+			pos = append(pos, args[0])
+			args = args[1:]
+		}
+	}
+	cfg, err := loadConfig(fs, *cfgPath, *data, "", "")
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	st, err := openStore(cfg)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return cfg, st, pos, nil
+}
+
+func migrate(args []string) error {
+	cfg, st, pos, err := dbFlags("migrate", args, nil)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	if len(pos) != 0 {
+		return errUsage
+	}
+	v, err := st.Version()
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "%s: schema version %d of %d\n", dbName(cfg), v, store.SchemaVersion())
+	return nil
+}
+
+func export(args []string) error {
+	var out *string
+	_, st, pos, err := dbFlags("export", args, func(fs *flag.FlagSet) {
+		out = fs.String("out", "", "the tar file to create")
+	})
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	if len(pos) != 0 || *out == "" {
+		return errUsage
+	}
+	// A new file only: the archive holds token hashes, and an
+	// existing file is somebody's.
+	f, err := os.OpenFile(*out, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	if err := st.Export(f, version); err != nil {
+		f.Close()
+		os.Remove(*out)
+		return fmt.Errorf("export: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(*out)
+		return err
+	}
+	files, _ := st.ListFiles()
+	users, _ := st.ListUsers()
+	fmt.Fprintf(os.Stderr, "%s: %d files, %d users written; mode 600, it holds token hashes\n", *out, len(files), len(users))
+	return nil
+}
+
+func importTar(args []string) error {
+	cfg, st, pos, err := dbFlags("import", args, nil)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	if len(pos) != 1 {
+		return errUsage
+	}
+	f, err := os.Open(pos[0])
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	n, err := st.Import(f)
+	if err != nil {
+		return fmt.Errorf("import into %s: %w", dbName(cfg), err)
+	}
+	fmt.Fprintf(os.Stderr, "%s: %d files, %d versions, %d users, %d claims imported\n",
+		dbName(cfg), n.Files, n.Versions, n.Users, n.Claims)
 	return nil
 }

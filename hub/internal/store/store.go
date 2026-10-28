@@ -1,4 +1,5 @@
-// Package store is the hub's SQLite database: users, the raw
+// Package store is the hub's database, SQLite or PostgreSQL
+// behind one API: users, the raw
 // memory files, the tables derived from them on every write
 // (hosts, changes, todos, links, audits, aliases), what only
 // the hub knows (sessions, claims, guard denials) and what its
@@ -20,6 +21,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 
 	"github.com/superlab-by-supbrt/jolitz/hub/internal/parse"
@@ -71,27 +74,61 @@ const (
 
 // Store wraps the database. Now is the clock; tests replace it.
 type Store struct {
-	db  *sql.DB
+	db  *db
 	Now func() time.Time
 }
 
-// Open opens or creates the database at path. ":memory:" gives a
-// private in-memory database for tests.
+// Open opens or creates the SQLite database at path and applies
+// the migrations it lacks. ":memory:" gives a private in-memory
+// database for tests.
 func Open(path string) (*Store, error) {
 	dsn := path
 	if path != ":memory:" {
-		dsn = "file:" + path + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)"
+		// _txlock=immediate: a transaction takes the write lock
+		// when it begins, so two writers queue on busy_timeout
+		// instead of one failing when it upgrades its read lock.
+		dsn = "file:" + path + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_txlock=immediate"
 	}
-	db, err := sql.Open("sqlite", dsn)
+	sqldb, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
 	if path == ":memory:" {
-		db.SetMaxOpenConns(1)
+		sqldb.SetMaxOpenConns(1)
 	}
-	s := &Store{db: db, Now: func() time.Time { return time.Now().UTC() }}
+	return open(&db{DB: sqldb})
+}
+
+// OpenPostgres connects to the PostgreSQL database a DSN names
+// (a URL postgres://… or key=value pairs, as libpq takes them)
+// and applies the migrations it lacks. The DSN holds the
+// password: it never appears in an error from here.
+func OpenPostgres(dsn string) (*Store, error) {
+	return openPostgres(dsn, "")
+}
+
+// openPostgres is OpenPostgres with a search_path; the tests
+// give every test its own schema.
+func openPostgres(dsn, schema string) (*Store, error) {
+	cfg, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		return nil, errors.New("postgres: the DSN does not parse (URL postgres://… or key=value pairs)")
+	}
+	if schema != "" {
+		cfg.RuntimeParams["search_path"] = schema
+	}
+	sqldb := stdlib.OpenDB(*cfg)
+	if err := sqldb.Ping(); err != nil {
+		sqldb.Close()
+		return nil, fmt.Errorf("postgres: %w", err)
+	}
+	return open(&db{DB: sqldb, pg: true})
+}
+
+func open(d *db) (*Store, error) {
+	s := &Store{db: d, Now: func() time.Time { return time.Now().UTC() }}
 	if err := s.migrate(); err != nil {
-		db.Close()
+		d.Close()
 		return nil, err
 	}
 	return s, nil
@@ -99,80 +136,6 @@ func Open(path string) (*Store, error) {
 
 // Close closes the database.
 func (s *Store) Close() error { return s.db.Close() }
-
-const schema = `
-CREATE TABLE IF NOT EXISTS users(
-  name TEXT PRIMARY KEY, token_sha256 TEXT NOT NULL UNIQUE,
-  role TEXT NOT NULL, created_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS files(
-  path TEXT PRIMARY KEY, body BLOB NOT NULL, sha256 TEXT NOT NULL,
-  size INTEGER NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL,
-  version INTEGER NOT NULL DEFAULT 1);
-CREATE TABLE IF NOT EXISTS file_versions(
-  path TEXT NOT NULL, version INTEGER NOT NULL, body BLOB NOT NULL,
-  sha256 TEXT NOT NULL, size INTEGER NOT NULL, updated_at TEXT NOT NULL,
-  updated_by TEXT NOT NULL, PRIMARY KEY(path, version));
-CREATE TABLE IF NOT EXISTS hosts(
-  name TEXT PRIMARY KEY, os TEXT NOT NULL DEFAULT '', ip TEXT NOT NULL DEFAULT '',
-  distro TEXT NOT NULL DEFAULT '', tags TEXT NOT NULL DEFAULT '',
-  owner TEXT NOT NULL DEFAULT '', services TEXT NOT NULL DEFAULT '',
-  guest TEXT NOT NULL DEFAULT '', ssh_port TEXT NOT NULL DEFAULT '',
-  mode TEXT NOT NULL DEFAULT '', last_connected TEXT NOT NULL DEFAULT '',
-  product TEXT NOT NULL DEFAULT '', version TEXT NOT NULL DEFAULT '',
-  updated_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS aliases(alias TEXT PRIMARY KEY, host TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS changes(
-  id INTEGER PRIMARY KEY AUTOINCREMENT, host TEXT NOT NULL, date TEXT NOT NULL,
-  time TEXT NOT NULL, who TEXT NOT NULL, headline TEXT NOT NULL,
-  detail TEXT NOT NULL, rollback TEXT NOT NULL, flags TEXT NOT NULL);
-CREATE INDEX IF NOT EXISTS changes_host ON changes(host);
-CREATE INDEX IF NOT EXISTS changes_date ON changes(date, time);
-CREATE TABLE IF NOT EXISTS todos(host TEXT NOT NULL, text TEXT NOT NULL, open INTEGER NOT NULL);
-CREATE TABLE IF NOT EXISTS links(src TEXT NOT NULL, dst TEXT NOT NULL, label TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS audits(snapshot TEXT NOT NULL, host TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL);
-CREATE INDEX IF NOT EXISTS audits_snapshot ON audits(snapshot);
-CREATE TABLE IF NOT EXISTS sessions(
-  id TEXT PRIMARY KEY, user TEXT NOT NULL, host TEXT NOT NULL,
-  workstation TEXT NOT NULL, started_at TEXT NOT NULL,
-  last_beat TEXT NOT NULL, ended_at TEXT);
-CREATE TABLE IF NOT EXISTS claims(host TEXT PRIMARY KEY, user TEXT NOT NULL, note TEXT NOT NULL, since TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS guard(id INTEGER PRIMARY KEY AUTOINCREMENT, user TEXT NOT NULL, at TEXT NOT NULL, reason TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS eol(product TEXT PRIMARY KEY, fetched TEXT NOT NULL, body BLOB NOT NULL);
-CREATE TABLE IF NOT EXISTS jobs(name TEXT PRIMARY KEY, last_run TEXT NOT NULL, ok INTEGER NOT NULL, result TEXT NOT NULL);
-`
-
-func (s *Store) migrate() error {
-	if _, err := s.db.Exec(schema); err != nil {
-		return err
-	}
-	// A phase-1 database has files without a version column.
-	// Every stored file becomes version 1, its row the first
-	// entry of its history.
-	has := false
-	if err := s.each(`PRAGMA table_info(files)`, func(sc scanner) error {
-		var cid int
-		var name, typ string
-		var notnull, pk int
-		var dflt sql.NullString
-		if err := sc.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
-			return err
-		}
-		if name == "version" {
-			has = true
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-	if !has {
-		if _, err := s.db.Exec(`ALTER TABLE files ADD COLUMN version INTEGER NOT NULL DEFAULT 1`); err != nil {
-			return err
-		}
-	}
-	_, err := s.db.Exec(`INSERT OR IGNORE INTO file_versions(path, version, body, sha256, size, updated_at, updated_by)
-		SELECT path, version, body, sha256, size, updated_at, updated_by FROM files`)
-	return err
-}
 
 func (s *Store) now() string { return s.Now().UTC().Format(time.RFC3339) }
 
@@ -219,7 +182,7 @@ func (s *Store) AddUser(name, role string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	res, err := s.db.Exec(`INSERT OR IGNORE INTO users(name, token_sha256, role, created_at) VALUES(?,?,?,?)`,
+	res, err := s.db.Exec(`INSERT INTO users(name, token_sha256, role, created_at) VALUES(?,?,?,?) ON CONFLICT DO NOTHING`,
 		name, hash, role, s.now())
 	if err != nil {
 		return "", err
@@ -246,7 +209,8 @@ func (s *Store) RotateToken(name string) (string, error) {
 	return token, nil
 }
 
-// RemoveUser deletes a user; its sessions end, its claims stay.
+// RemoveUser deletes a user; its sessions and browser logins
+// end, its claims stay.
 func (s *Store) RemoveUser(name string) error {
 	res, err := s.db.Exec(`DELETE FROM users WHERE name = ?`, name)
 	if err != nil {
@@ -255,7 +219,10 @@ func (s *Store) RemoveUser(name string) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	_, err = s.db.Exec(`UPDATE sessions SET ended_at = ? WHERE user = ? AND ended_at IS NULL`, s.now(), name)
+	if _, err := s.db.Exec(`DELETE FROM web_sessions WHERE "user" = ?`, name); err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`UPDATE sessions SET ended_at = ? WHERE "user" = ? AND ended_at IS NULL`, s.now(), name)
 	return err
 }
 
@@ -490,6 +457,9 @@ func (s *Store) PutFile(path string, body []byte, by, ifMatch string) (*FileInfo
 		return nil, err
 	}
 	defer tx.Rollback()
+	if err := tx.lockPath(path); err != nil {
+		return nil, err
+	}
 	f, err := s.putFile(tx, kind, host, path, body, by, ifMatch)
 	if err != nil {
 		return nil, err
@@ -510,6 +480,9 @@ func (s *Store) UpdateFile(path, by string, edit func(old []byte) ([]byte, error
 		return nil, err
 	}
 	defer tx.Rollback()
+	if err := tx.lockPath(path); err != nil {
+		return nil, err
+	}
 	old, cur, err := getFile(tx, path)
 	ifMatch := "-"
 	switch {
@@ -535,7 +508,10 @@ func (s *Store) UpdateFile(path, by string, edit func(old []byte) ([]byte, error
 	return f, tx.Commit()
 }
 
-func (s *Store) putFile(tx *sql.Tx, kind Kind, host, path string, body []byte, by, ifMatch string) (*FileInfo, error) {
+func (s *Store) putFile(tx *txn, kind Kind, host, path string, body []byte, by, ifMatch string) (*FileInfo, error) {
+	if body == nil {
+		body = []byte{} // an empty file, not a deleted one
+	}
 	var cur string
 	err := tx.QueryRow(`SELECT sha256 FROM files WHERE path = ?`, path).Scan(&cur)
 	exists := err == nil
@@ -592,6 +568,9 @@ func (s *Store) DeleteFile(path string) error {
 		return err
 	}
 	defer tx.Rollback()
+	if err := tx.lockPath(path); err != nil {
+		return err
+	}
 	res, err := tx.Exec(`DELETE FROM files WHERE path = ?`, path)
 	if err != nil {
 		return err
@@ -607,10 +586,10 @@ func (s *Store) DeleteFile(path string) error {
 
 // derive rebuilds the rows one file feeds. A nil body means the
 // file is gone.
-func derive(tx *sql.Tx, kind Kind, host string, body []byte, now string) error {
+func derive(tx *txn, kind Kind, host string, body []byte, now string) error {
 	hostFile := kind == KindMemory || kind == KindChangelog || kind == KindTodo || kind == KindRules
 	if hostFile && body != nil {
-		if _, err := tx.Exec(`INSERT OR IGNORE INTO hosts(name, updated_at) VALUES(?,?)`, host, now); err != nil {
+		if _, err := tx.Exec(`INSERT INTO hosts(name, updated_at) VALUES(?,?) ON CONFLICT DO NOTHING`, host, now); err != nil {
 			return err
 		}
 	}
@@ -684,7 +663,10 @@ func derive(tx *sql.Tx, kind Kind, host string, body []byte, now string) error {
 	if hostFile && body == nil {
 		// Without files left the host disappears from the fleet.
 		var n int
-		if err := tx.QueryRow(`SELECT count(*) FROM files WHERE path LIKE ?`, "servers/"+host+"/%").Scan(&n); err != nil {
+		// substr, not LIKE: SQLite's LIKE ignores case, and
+		// Web1 and web1 are two hosts.
+		prefix := "servers/" + host + "/"
+		if err := tx.QueryRow(`SELECT count(*) FROM files WHERE substr(path, 1, ?) = ?`, len(prefix), prefix).Scan(&n); err != nil {
 			return err
 		}
 		if n == 0 {
@@ -933,7 +915,7 @@ func (s *Store) Host(name string) (*HostDetail, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := s.each(`SELECT text, open FROM todos WHERE host = ? ORDER BY rowid`, func(sc scanner) error {
+	if err := s.each(`SELECT text, open FROM todos WHERE host = ? ORDER BY id`, func(sc scanner) error {
 		var t parse.Todo
 		var open int
 		if err := sc.Scan(&t.Text, &open); err != nil {
@@ -1091,7 +1073,7 @@ func (s *Store) Todos(host string) ([]TodoRow, error) {
 		q += ` WHERE host = ?`
 		args = append(args, host)
 	}
-	q += ` ORDER BY host, rowid`
+	q += ` ORDER BY host, id`
 	out := []TodoRow{}
 	err := s.each(q, func(sc scanner) error {
 		var t TodoRow
@@ -1109,7 +1091,7 @@ func (s *Store) Todos(host string) ([]TodoRow, error) {
 // Links lists the network links.
 func (s *Store) Links() ([]parse.Link, error) {
 	out := []parse.Link{}
-	err := s.each(`SELECT src, dst, label FROM links ORDER BY rowid`, func(sc scanner) error {
+	err := s.each(`SELECT src, dst, label FROM links ORDER BY id`, func(sc scanner) error {
 		var l parse.Link
 		if err := sc.Scan(&l.Src, &l.Dst, &l.Label); err != nil {
 			return err
@@ -1224,7 +1206,7 @@ func (s *Store) StartSession(user, host, workstation string) (string, error) {
 	}
 	id := hex.EncodeToString(raw)
 	now := s.now()
-	_, err := s.db.Exec(`INSERT INTO sessions(id, user, host, workstation, started_at, last_beat) VALUES(?,?,?,?,?,?)`,
+	_, err := s.db.Exec(`INSERT INTO sessions(id, "user", host, workstation, started_at, last_beat) VALUES(?,?,?,?,?,?)`,
 		id, user, host, workstation, now, now)
 	return id, err
 }
@@ -1234,7 +1216,7 @@ func (s *Store) Session(id string) (*Session, bool, error) {
 	var se Session
 	var started, beat string
 	var ended sql.NullString
-	err := s.db.QueryRow(`SELECT id, user, host, workstation, started_at, last_beat, ended_at FROM sessions WHERE id = ?`, id).
+	err := s.db.QueryRow(`SELECT id, "user", host, workstation, started_at, last_beat, ended_at FROM sessions WHERE id = ?`, id).
 		Scan(&se.ID, &se.User, &se.Host, &se.Workstation, &started, &beat, &ended)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, false, ErrNotFound
@@ -1290,7 +1272,7 @@ func (s *Store) OpenSessions() ([]Session, error) {
 	}
 	now := s.Now().UTC()
 	out := []Session{}
-	err := s.each(`SELECT id, user, host, workstation, started_at, last_beat FROM sessions WHERE ended_at IS NULL ORDER BY started_at`,
+	err := s.each(`SELECT id, "user", host, workstation, started_at, last_beat FROM sessions WHERE ended_at IS NULL ORDER BY started_at`,
 		func(sc scanner) error {
 			var se Session
 			var started, beat string
@@ -1320,7 +1302,7 @@ type Claim struct {
 // Claims lists every claim, by host.
 func (s *Store) Claims() ([]Claim, error) {
 	out := []Claim{}
-	err := s.each(`SELECT host, user, note, since FROM claims ORDER BY host`, func(sc scanner) error {
+	err := s.each(`SELECT host, "user", note, since FROM claims ORDER BY host`, func(sc scanner) error {
 		var c Claim
 		var since string
 		if err := sc.Scan(&c.Host, &c.User, &c.Note, &since); err != nil {
@@ -1337,7 +1319,7 @@ func (s *Store) Claims() ([]Claim, error) {
 func (s *Store) Claim(host string) (*Claim, error) {
 	var c Claim
 	var since string
-	err := s.db.QueryRow(`SELECT host, user, note, since FROM claims WHERE host = ?`, host).Scan(&c.Host, &c.User, &c.Note, &since)
+	err := s.db.QueryRow(`SELECT host, "user", note, since FROM claims WHERE host = ?`, host).Scan(&c.Host, &c.User, &c.Note, &since)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -1357,11 +1339,11 @@ func (s *Store) SetClaim(host, user, note string, takeover bool) (*Claim, error)
 		return nil, fmt.Errorf("%w: host %q", ErrInvalid, host)
 	}
 	now := s.now()
-	q := `INSERT INTO claims(host, user, note, since) VALUES(?,?,?,?)
-		ON CONFLICT(host) DO UPDATE SET note = excluded.note WHERE claims.user = excluded.user`
+	q := `INSERT INTO claims(host, "user", note, since) VALUES(?,?,?,?)
+		ON CONFLICT(host) DO UPDATE SET note = excluded.note WHERE claims."user" = excluded."user"`
 	if takeover {
-		q = `INSERT INTO claims(host, user, note, since) VALUES(?,?,?,?)
-		ON CONFLICT(host) DO UPDATE SET user = excluded.user, note = excluded.note, since = excluded.since`
+		q = `INSERT INTO claims(host, "user", note, since) VALUES(?,?,?,?)
+		ON CONFLICT(host) DO UPDATE SET "user" = excluded."user", note = excluded.note, since = excluded.since`
 	}
 	res, err := s.db.Exec(q, host, user, note, now)
 	if err != nil {
@@ -1390,7 +1372,7 @@ func (s *Store) DeleteClaim(host string) error {
 // AddGuard records one guard denial: when, who, why. Never the
 // command.
 func (s *Store) AddGuard(user string, at time.Time, reason string) error {
-	_, err := s.db.Exec(`INSERT INTO guard(user, at, reason) VALUES(?,?,?)`, user, at.UTC().Format(time.RFC3339), reason)
+	_, err := s.db.Exec(`INSERT INTO guard("user", at, reason) VALUES(?,?,?)`, user, at.UTC().Format(time.RFC3339), reason)
 	return err
 }
 

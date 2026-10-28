@@ -7,5 +7,6 @@
 <input id="token" name="token" type="password" autocomplete="off" autofocus required>
 <button type="submit">enter</button>
 </form>
+{{if .OIDC}}<p><a href="/oidc/login">log in with the team's identity provider</a> (OIDC)</p>{{end}}
 <p class="sub">From the terminal: <code>jolitz-sync status</code>; the API is documented at <a href="/api">/api</a> once logged in.</p>
 {{end}}
