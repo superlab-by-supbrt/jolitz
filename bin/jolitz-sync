@@ -1,0 +1,775 @@
+#!/bin/sh
+# jolitz-sync — mirror memory/ to a jolitz hub and back.
+# Talks HTTP to the hub named in ~/.config/jolitz/hub.conf;
+# never connects to a server. Without that file pull,
+# push, status, claim and release exit 2; session exits 0
+# silently, so hooks call it unguarded.
+#
+# Usage:
+#   jolitz-sync pull [--prune] [--quiet]  Hub -> memory/
+#   jolitz-sync push [<path> ...]         memory/ -> hub
+#   jolitz-sync status [--short]          Hub, user, what differs
+#   jolitz-sync session start|beat|end [<host>]
+#   jolitz-sync claim <host> [<note>]
+#   jolitz-sync release <host>
+#   jolitz-sync -d <dir> <command> ...    Use <dir> as memory/
+#   jolitz-sync --help                    Show this help
+#
+# hub.conf (mode 600, read with sed, never sourced):
+#   url=https://hub.example.com
+#   token_file=/home/alice/.config/jolitz/hub-token
+#   workstation=alices-mbp      (optional; hostname -s)
+# The token file holds one line, "Authorization: Bearer
+# <token>", read by curl with -H @file (rules/notify.md);
+# the token never reaches argv.
+#
+# Synced: servers/<host>/{memory.md,changelog.log,todo.md,
+# rules.md}, aliases servers/<alias> (a symlink here, on
+# the hub a file naming the canonical host), network.md,
+# audits/*.json. Never synced: user.md, blacklist.md,
+# readonly.md, protected-paths.md, opencode.json,
+# overview/, eol/, anything else.
+#
+# Conflicts: <memory>/.hub-sync.tsv keeps the sha256 of
+# every file as last synced. A file changed on both sides
+# since then is never overwritten: pull keeps the local
+# file and writes the hub version as <file>.hub next to
+# it, push skips it; a 412 from the hub is handled the
+# same way. Both list the conflicts at the end; merge,
+# then delete the .hub file. On the first pull after a
+# join every file that differs is a conflict. A path
+# argument to push limits it to those files. pull --prune
+# removes local files the hub no longer has, synced set
+# only; push deletes on the hub what was deleted locally
+# after a sync. push runs bin/jolitz-memory-lint first
+# and stops on ERROR.
+#
+# Exit status: 0 ok, 1 conflicts written, lint errors or
+# a file the hub refused, 2 usage or configuration
+# (hub.conf, token file, jq, curl, 401/403), 3 hub
+# unreachable. session exits 0 or 1 only: a Stop hook
+# that exits 2 would block the session from ending.
+set -e
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+REPO_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
+SELF="$SCRIPT_DIR/$(basename "$0")"
+
+usage() {
+  awk '/^# jolitz-sync/{in_help=1} in_help{if(/^[^#]/)exit; sub(/^# ?/,""); print}' "$SELF"
+}
+
+MEM="$REPO_DIR/memory"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -d) [ $# -ge 2 ] || { usage >&2; exit 2; }
+        MEM=$2; shift ;;
+    -h|--help) usage; exit 0 ;;
+    -*) echo "error: unknown option $1" >&2; usage >&2; exit 2 ;;
+    *) break ;;
+  esac
+  shift
+done
+[ $# -ge 1 ] || { usage >&2; exit 2; }
+CMD=$1
+shift
+
+CONF="$HOME/.config/jolitz/hub.conf"
+CACHE="$HOME/.cache/jolitz"
+SESSION_FILE="$CACHE/hub-session"
+STATE="$MEM/.hub-sync.tsv"
+
+case "$CMD" in
+  pull|push|status|session|claim|release) ;;
+  *) echo "error: unknown command $CMD" >&2; usage >&2; exit 2 ;;
+esac
+
+# The hooks run "session" without checking for hub.conf.
+if [ ! -r "$CONF" ]; then
+  [ "$CMD" = session ] && exit 0
+  echo "error: $CONF missing; the jolitz-hub skill (join) writes it" >&2
+  exit 2
+fi
+
+# session never exits 2 (see the header).
+CFG_RC=2
+[ "$CMD" = session ] && CFG_RC=1
+
+die_cfg() {
+  echo "error: $1" >&2
+  exit "$CFG_RC"
+}
+
+for t in curl jq; do
+  command -v "$t" >/dev/null 2>&1 || die_cfg "$t not in PATH"
+done
+
+# conf_get <key>: the value of "key=value", first match.
+conf_get() {
+  sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$CONF" \
+    | head -n 1 | sed 's/[[:space:]]*$//'
+}
+
+# mode_warn <file>: group or world may read it.
+mode_warn() {
+  m=$(ls -ld "$1" 2>/dev/null | cut -c5-10) || m=""
+  case "$m" in
+    ------|"") ;;
+    *) echo "warning: $1 is not mode 600 (chmod 600 $1)" >&2 ;;
+  esac
+}
+
+URL=$(conf_get url)
+URL=${URL%/}
+TOKEN_FILE=$(conf_get token_file)
+WORKSTATION=$(conf_get workstation)
+case "$TOKEN_FILE" in
+  "~/"*) TOKEN_FILE="$HOME/${TOKEN_FILE#"~/"}" ;;
+esac
+printf '%s\n' "$URL" | grep -Eq '^https?://[^/[:space:]]+' \
+  || die_cfg "$CONF: url is \"$URL\", want http(s)://host"
+[ -n "$TOKEN_FILE" ] || die_cfg "$CONF: no token_file= line"
+[ -r "$TOKEN_FILE" ] || die_cfg "token file $TOKEN_FILE is not readable"
+grep -q '^Authorization: Bearer ' "$TOKEN_FILE" \
+  || die_cfg "$TOKEN_FILE: want one line \"Authorization: Bearer <token>\""
+mode_warn "$CONF"
+mode_warn "$TOKEN_FILE"
+if [ -z "$WORKSTATION" ]; then
+  WORKSTATION=$(hostname -s 2>/dev/null || uname -n 2>/dev/null) || true
+  WORKSTATION=${WORKSTATION%%.*}
+  [ -n "$WORKSTATION" ] || WORKSTATION=unknown
+fi
+
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/jolitz-sync.XXXXXX")
+trap 'rm -rf "$WORK"' EXIT
+
+# sha256 <file>: lowercase hex digest.
+sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d' ' -f1
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | cut -d' ' -f1
+  else
+    openssl dgst -sha256 "$1" | sed 's/.*= *//'
+  fi | tr 'A-F' 'a-f'
+}
+
+# api <path> <bodyfile> [curl options]: one request to
+# /api/v1/<path>, the answer body in <bodyfile>, the HTTP
+# code in CODE. Returns 0 on 2xx, 1 on an HTTP error, 3
+# when the hub did not answer. The token travels in the
+# header file only (-H @file).
+CODE=""
+api() {
+  api_path=$1
+  api_out=$2
+  shift 2
+  CODE=$(curl -sS --fail-with-body --connect-timeout 5 \
+      --max-time "${MAX_TIME:-60}" -H @"$TOKEN_FILE" \
+      -o "$api_out" -w '%{http_code}' "$@" "$URL/api/v1/$api_path" \
+      2>"$WORK/curl.err" </dev/null) && return 0
+  api_rc=$?
+  [ "$api_rc" -eq 22 ] && return 1
+  CODE=""
+  return 3
+}
+
+# Text for an error answer: the hub's {error} or {reason},
+# or the first line of the body.
+api_error() {
+  e=$(jq -r 'if type == "object" then
+      ((.error // .reason // "") | tostring)
+      + (if .line then " (line \(.line))" else "" end)
+      else "" end' "$1" 2>/dev/null) || e=""
+  [ -n "$e" ] || e=$(head -n 1 "$1" | cut -c1-200)
+  printf '%s' "$e"
+}
+
+unreachable() {
+  why=$(head -n 1 "$WORK/curl.err" | sed 's/^curl: ([0-9]*) //')
+  echo "error: hub $URL unreachable: $why" >&2
+  exit "$1"
+}
+
+# A 401 or 403 is configuration, not a sync result.
+auth_check() {
+  case "$CODE" in
+    401) die_cfg "hub rejected the token (401)" ;;
+    403) die_cfg "hub: not allowed for this token's role (403)" ;;
+  esac
+}
+
+HOST_RE='^[A-Za-z0-9][A-Za-z0-9.-]*$'
+# The paths the hub accepts (Task A's allowed set); a
+# manifest entry outside it never touches the disk.
+PATH_RE='^(network\.md'
+PATH_RE="$PATH_RE|audits/[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{4}\.json"
+PATH_RE="$PATH_RE|servers/[A-Za-z0-9][A-Za-z0-9.-]*"
+PATH_RE="$PATH_RE(/(memory\.md|changelog\.log|todo\.md|rules\.md))?)\$"
+
+# list_local: the synced set as it exists in memory/.
+list_local() {
+  {
+  [ -f "$MEM/network.md" ] && printf 'network.md\n'
+  for f in "$MEM"/audits/*.json; do
+    [ -f "$f" ] || continue
+    printf 'audits/%s\n' "${f##*/}"
+  done
+  for d in "$MEM"/servers/*; do
+    [ -e "$d" ] || [ -L "$d" ] || continue
+    n=${d##*/}
+    if ! printf '%s\n' "$n" | grep -Eq "$HOST_RE"; then
+      echo "skip: servers/$n: name outside the hub's character set" >&2
+      continue
+    fi
+    if [ -L "$d" ] || [ -f "$d" ]; then
+      printf 'servers/%s\n' "$n"
+    elif [ -d "$d" ]; then
+      for b in memory.md changelog.log todo.md rules.md; do
+        [ -f "$d/$b" ] && printf 'servers/%s/%s\n' "$n" "$b"
+      done
+    fi
+  done
+  } | grep -E "$PATH_RE" || true
+}
+
+# local_body <path> <out>: the bytes the hub would hold.
+# An alias is sent as one line, the canonical name.
+local_body() {
+  case "$1" in
+    servers/*/*|network.md|audits/*) cat "$MEM/$1" > "$2" ;;
+    servers/*)
+      if [ -L "$MEM/$1" ]; then
+        t=$(readlink "$MEM/$1")
+      else
+        t=$(head -n 1 "$MEM/$1" | tr -d '\r')
+      fi
+      printf '%s\n' "${t##*/}" > "$2" ;;
+  esac
+}
+
+# install_body <path> <file>: write a pulled file into
+# memory/. An alias becomes a symlink, or a file on Git
+# Bash (rules/dns-aliases.md). Returns 1 when the alias
+# name is taken by a directory.
+install_body() {
+  dst="$MEM/$1"
+  case "$1" in
+    servers/*/*|network.md|audits/*)
+      mkdir -p "$(dirname "$dst")"
+      cp "$2" "$dst.tmp" && mv -f "$dst.tmp" "$dst" ;;
+    servers/*)
+      canon=$(head -n 1 "$2" | tr -d '\r')
+      if [ -d "$dst" ] && [ ! -L "$dst" ]; then
+        echo "error: $1 is a directory here and an alias of $canon on the hub" >&2
+        return 1
+      fi
+      rm -f "$dst"
+      case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*) printf '%s\n' "$canon" > "$dst" ;;
+        *) ln -s "$canon" "$dst" ;;
+      esac ;;
+  esac
+}
+
+# plan: join local files, the hub manifest and the sync
+# state into $WORK/plan.tsv: path, local sha, hub sha,
+# synced sha, action. "-" stands for absent.
+#   same      equal on both sides
+#   pull      hub changed, local did not (or is absent)
+#   push      local changed, hub did not (or lacks it)
+#   conflict  both changed since the last sync
+#   hubgone   deleted on the hub, unchanged here
+#   localgone deleted here, unchanged on the hub
+plan() {
+  : > "$WORK/local.tsv"
+  for p in $(list_local); do
+    local_body "$p" "$WORK/body"
+    printf '%s\t%s\n' "$p" "$(sha256 "$WORK/body")" >> "$WORK/local.tsv"
+  done
+  rc=0
+  api files "$WORK/manifest.json" || rc=$?
+  case "${rc:-0}" in
+    0) ;;
+    3) unreachable 3 ;;
+    *) auth_check
+       echo "error: GET files: $CODE $(api_error "$WORK/manifest.json")" >&2
+       exit 1 ;;
+  esac
+  jq -r 'if type == "array" then .[] else empty end
+    | select(.path and .sha256)
+    | [.path, (.sha256 | ascii_downcase)] | @tsv' \
+    "$WORK/manifest.json" > "$WORK/hub.all" 2>/dev/null \
+    || { echo "error: GET files did not return a manifest" >&2; exit 1; }
+  # A path outside the allowed set never touches the disk.
+  : > "$WORK/hub.tsv"
+  while IFS="$(printf '\t')" read -r p s; do
+    if printf '%s\n' "$p" | grep -Eq "$PATH_RE"; then
+      printf '%s\t%s\n' "$p" "$s" >> "$WORK/hub.tsv"
+    else
+      echo "skip: hub path \"$p\" is outside the synced set" >&2
+    fi
+  done < "$WORK/hub.all"
+  if [ -f "$STATE" ]; then
+    cp "$STATE" "$WORK/state.tsv"
+  else
+    : > "$WORK/state.tsv"
+  fi
+  awk 'BEGIN { FS = OFS = "\t" }
+    FILENAME == ARGV[1] { L[$1] = $2; seen[$1] = 1; next }
+    FILENAME == ARGV[2] { H[$1] = $2; seen[$1] = 1; next }
+    FILENAME == ARGV[3] { S[$1] = $2; seen[$1] = 1; next }
+    END {
+      for (p in seen) {
+        l = (p in L) ? L[p] : "-"
+        h = (p in H) ? H[p] : "-"
+        s = (p in S) ? S[p] : "-"
+        if (l == h) a = (l == "-") ? "gone" : "same"
+        else if (h == "-") a = (l == s) ? "hubgone" : "push"
+        else if (l == "-") a = (h == s) ? "localgone" : "pull"
+        else if (l == s) a = "pull"
+        else if (h == s) a = "push"
+        else a = "conflict"
+        print p, l, h, s, a
+      }
+    }' "$WORK/local.tsv" "$WORK/hub.tsv" "$WORK/state.tsv" \
+    | sort > "$WORK/plan.tsv"
+}
+
+# count <action>: lines of the plan with that action.
+count() {
+  awk -F'\t' -v a="$1" '$5 == a { n++ } END { print n + 0 }' "$WORK/plan.tsv"
+}
+
+# state_set <path> <sha|->: the sync state after this run.
+state_set() {
+  [ "$2" = "-" ] || printf '%s\t%s\n' "$1" "$2" >> "$WORK/state.new"
+}
+state_save() {
+  mkdir -p "$MEM"
+  sort -o "$WORK/state.new" "$WORK/state.new"
+  mv -f "$WORK/state.new" "$STATE"
+}
+
+# fetch <path> <out>: GET one file. Exits on auth errors
+# and unreachable; returns 1 on other HTTP errors.
+fetch() {
+  rc=0
+  api "files/$1" "$2" || rc=$?
+  case "${rc:-0}" in
+    0) return 0 ;;
+    3) unreachable 3 ;;
+    *) auth_check
+       echo "error: GET files/$1: $CODE $(api_error "$2")" >&2
+       return 1 ;;
+  esac
+}
+
+# conflict <path> <hub sha>: keep the local file, put the
+# hub version next to it. An alias has no .hub file; both
+# targets are named instead.
+CONFLICTS=""
+conflict() {
+  case "$1" in
+    servers/*/*|network.md|audits/*)
+      if fetch "$1" "$WORK/hubver"; then
+        cp "$WORK/hubver" "$MEM/$1.hub"
+        CONFLICTS="$CONFLICTS
+conflict: $1 (kept; hub version in $1.hub)"
+      else
+        CONFLICTS="$CONFLICTS
+conflict: $1 (kept; hub version not fetched)"
+      fi ;;
+    servers/*)
+      local_body "$1" "$WORK/body"
+      if fetch "$1" "$WORK/hubver"; then
+        mine=$(head -n 1 "$WORK/body")
+        theirs=$(head -n 1 "$WORK/hubver" | tr -d '\r')
+        CONFLICTS="$CONFLICTS
+conflict: $1 (alias of $mine here, of $theirs on the hub)"
+      else
+        CONFLICTS="$CONFLICTS
+conflict: $1 (alias; hub version not fetched)"
+      fi ;;
+  esac
+}
+
+say() {
+  [ "${QUIET:-0}" -eq 1 ] || echo "$*"
+}
+
+plural() {
+  case "$1" in
+    1) printf '%s %s' "$1" "$2" ;;
+    *) printf '%s %ss' "$1" "$2" ;;
+  esac
+}
+
+# finish <verb> <n files> <n deleted>: summary and exit.
+finish() {
+  n=$(printf '%s' "$CONFLICTS" | grep -c '^conflict:') || true
+  if [ -n "$CONFLICTS" ]; then
+    printf '%s\n' "${CONFLICTS#?}"
+  fi
+  extra=""
+  [ "$3" -eq 0 ] || extra=", $(plural "$3" "deleted")"
+  [ "${REFUSED:-0}" -eq 0 ] || extra="$extra, $(plural "$REFUSED" "refused")"
+  if [ -n "$CONFLICTS" ] || [ "${REFUSED:-0}" -ne 0 ]; then
+    echo "$1: $(plural "$2" "file")$extra, $(plural "$n" "conflict")"
+    exit 1
+  fi
+  say "$1: $(plural "$2" "file")$extra"
+  exit 0
+}
+
+# --- pull ----------------------------------------------------
+do_pull() {
+  PRUNE=0
+  QUIET=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --prune) PRUNE=1 ;;
+      --quiet|-q) QUIET=1 ;;
+      *) echo "error: pull: unknown argument $1" >&2; usage >&2; exit 2 ;;
+    esac
+    shift
+  done
+  plan
+  : > "$WORK/state.new"
+  N=0
+  D=0
+  while IFS="$(printf '\t')" read -r p l h s a; do
+    case "$a" in
+      same) state_set "$p" "$l" ;;
+      pull)
+        if fetch "$p" "$WORK/dl" && install_body "$p" "$WORK/dl"; then
+          state_set "$p" "$h"
+          N=$((N + 1))
+          say "pull: $p"
+        else
+          state_set "$p" "$s"
+        fi ;;
+      conflict) conflict "$p" "$h"; state_set "$p" "$s" ;;
+      hubgone)
+        if [ "$PRUNE" -eq 1 ]; then
+          rm -f "$MEM/$p"
+          case "$p" in
+            servers/*/*) rmdir "$(dirname "$MEM/$p")" 2>/dev/null || true ;;
+          esac
+          D=$((D + 1))
+          say "prune: $p (deleted on the hub)"
+        else
+          say "hub deleted: $p (pull --prune removes it here)"
+          state_set "$p" "$s"
+        fi ;;
+      localgone) say "deleted here: $p (push deletes it on the hub)"
+        state_set "$p" "$s" ;;
+      push) say "local ahead: $p (push)"; state_set "$p" "$s" ;;
+      gone) ;;
+    esac
+  done < "$WORK/plan.tsv"
+  state_save
+  finish pull "$N" "$D"
+}
+
+# --- push ----------------------------------------------------
+do_push() {
+  QUIET=0
+  REFUSED=0
+  : > "$WORK/only"
+  for arg in "$@"; do
+    case "$arg" in
+      -*) echo "error: push: unknown option $arg" >&2; usage >&2; exit 2 ;;
+    esac
+    p=${arg#"$MEM"/}
+    p=${p#memory/}
+    p=${p#./}
+    printf '%s\n' "$p" | grep -Eq "$PATH_RE" \
+      || { echo "error: $arg is not in the synced set" >&2; exit 2; }
+    printf '%s\n' "$p" >> "$WORK/only"
+  done
+  # Nothing leaves the workstation with a secret in it.
+  if [ -d "$MEM/servers" ] && [ -f "$SCRIPT_DIR/jolitz-memory-lint" ]; then
+    if ! sh "$SCRIPT_DIR/jolitz-memory-lint" -d "$MEM" > "$WORK/lint" 2>&1; then
+      if grep -q '^ERROR' "$WORK/lint"; then
+        grep '^ERROR' "$WORK/lint"
+        n=$(grep -c '^ERROR' "$WORK/lint")
+        echo "push: stopped, memory lint found $n errors; nothing sent"
+        exit 1
+      fi
+    fi
+  fi
+  plan
+  : > "$WORK/state.new"
+  N=0
+  D=0
+  while IFS="$(printf '\t')" read -r p l h s a; do
+    if [ -s "$WORK/only" ] && ! grep -qxF -- "$p" "$WORK/only"; then
+      state_set "$p" "$s"
+      continue
+    fi
+    case "$a" in
+      same) state_set "$p" "$l" ;;
+      push)
+        local_body "$p" "$WORK/body"
+        if [ "$h" = "-" ]; then
+          rc=0
+          api "files/$p" "$WORK/resp" -T "$WORK/body" || rc=$?
+        else
+          rc=0
+          api "files/$p" "$WORK/resp" -T "$WORK/body" -H "If-Match: $h" || rc=$?
+        fi
+        case "${rc:-0}" in
+          0) state_set "$p" "$l"; N=$((N + 1)); say "push: $p" ;;
+          3) unreachable 3 ;;
+          *) auth_check
+             if [ "$CODE" = 412 ]; then
+               conflict "$p" "$h"
+             else
+               echo "refused: $p: $CODE $(api_error "$WORK/resp")"
+               REFUSED=$((REFUSED + 1))
+             fi
+             state_set "$p" "$s" ;;
+        esac
+        rc=0 ;;
+      localgone)
+        rc=0
+        api "files/$p" "$WORK/resp" -X DELETE || rc=$?
+        case "${rc:-0}" in
+          0) D=$((D + 1)); say "delete: $p" ;;
+          3) unreachable 3 ;;
+          *) auth_check
+             if [ "$CODE" = 404 ]; then
+               D=$((D + 1))
+             else
+               echo "refused: DELETE $p: $CODE $(api_error "$WORK/resp")"
+               REFUSED=$((REFUSED + 1))
+               state_set "$p" "$s"
+             fi ;;
+        esac
+        rc=0 ;;
+      conflict) conflict "$p" "$h"; state_set "$p" "$s" ;;
+      pull) say "hub ahead: $p (pull)"; state_set "$p" "$s" ;;
+      hubgone) say "hub deleted: $p (pull --prune removes it here)"
+        state_set "$p" "$s" ;;
+      gone) ;;
+    esac
+  done < "$WORK/plan.tsv"
+  state_save
+  finish push "$N" "$D"
+}
+
+# --- status --------------------------------------------------
+do_status() {
+  SHORT=0
+  case "${1:-}" in
+    --short) SHORT=1 ;;
+    "") ;;
+    *) echo "error: status: unknown argument $1" >&2; usage >&2; exit 2 ;;
+  esac
+  MAX_TIME=20
+  rc=0
+  api health "$WORK/health" || rc=$?
+  case "${rc:-0}" in
+    0) ver=$(jq -r '.version // "?"' "$WORK/health" 2>/dev/null) || ver="?" ;;
+    3) unreachable 3 ;;
+    *) ver="?" ;;
+  esac
+  rc=0
+  plan
+  npush=$(( $(count push) + $(count localgone) ))
+  npull=$(( $(count pull) + $(count hubgone) ))
+  ncon=$(count conflict)
+  # GET whoami names user and role; without it, our own
+  # open session still names the user behind the token.
+  user=""
+  role=""
+  if api whoami "$WORK/whoami" 2>/dev/null; then
+    user=$(jq -r '.user // .name // ""' "$WORK/whoami" 2>/dev/null) || user=""
+    role=$(jq -r '.role // ""' "$WORK/whoami" 2>/dev/null) || role=""
+  fi
+  nsess="?"
+  sessions=""
+  if api sessions "$WORK/sessions" 2>/dev/null; then
+    own=""
+    [ -r "$SESSION_FILE" ] && own=$(head -n 1 "$SESSION_FILE")
+    nsess=$(jq -r 'if type == "array" then length else 0 end' \
+      "$WORK/sessions" 2>/dev/null) || nsess="?"
+    [ -n "$user" ] || user=$(jq -r --arg id "$own" 'if type == "array" then
+        (.[] | select((.id | tostring) == $id) | .user // "")
+        else "" end' "$WORK/sessions" 2>/dev/null | head -n 1) || user=""
+    sessions=$(jq -r 'if type == "array" then .[] |
+        "  \(.user // "?")@\(.host // "-") from \(.workstation // "?")"
+        + (if .age_seconds then " (\((.age_seconds / 60) | floor)m)"
+           elif .age then " (\(.age))" else "" end)
+        + (if .stale then " stale" else "" end)
+        else empty end' "$WORK/sessions" 2>/dev/null) || sessions=""
+  fi
+  who=""
+  if [ -n "$user" ]; then
+    who="$user"
+    [ -z "$role" ] || who="$user, $role"
+  fi
+  nclaims="?"
+  claims=""
+  if api claims "$WORK/claims" 2>/dev/null; then
+    nclaims=$(jq -r 'if type == "array" then length else 0 end' \
+      "$WORK/claims" 2>/dev/null) || nclaims="?"
+    claims=$(jq -r 'if type == "array" then .[] |
+        "  \(.host // "?"): \(.user // "?")"
+        + (if .since then " since \(.since)" else "" end)
+        + (if (.note // "") != "" then " (\(.note))" else "" end)
+        else empty end' "$WORK/claims" 2>/dev/null) || claims=""
+  fi
+  if [ "$SHORT" -eq 1 ]; then
+    echo "$URL: hub $ver${who:+, $who}, $npush to push, $npull to pull," \
+      "$(plural "$ncon" conflict), $(plural "$nclaims" claim)," \
+      "$(plural "$nsess" session)"
+    exit 0
+  fi
+  echo "hub: $URL (jolitz-hub $ver)"
+  echo "token: accepted${who:+ ($who)}"
+  echo "workstation: $WORKSTATION"
+  echo "push: $(plural "$npush" file)"
+  awk -F'\t' '$5 == "push" || $5 == "localgone" { print "  " $1 }' "$WORK/plan.tsv"
+  echo "pull: $(plural "$npull" file)"
+  awk -F'\t' '$5 == "pull" || $5 == "hubgone" { print "  " $1 }' "$WORK/plan.tsv"
+  echo "conflicts: $ncon"
+  awk -F'\t' '$5 == "conflict" { print "  " $1 }' "$WORK/plan.tsv"
+  echo "claims: $nclaims"
+  [ -z "$claims" ] || printf '%s\n' "$claims"
+  echo "sessions: $nsess"
+  [ -z "$sessions" ] || printf '%s\n' "$sessions"
+  exit 0
+}
+
+# --- session -------------------------------------------------
+# Failures print one line and exit 1, never 2: the Stop
+# hook runs "session end" and a 2 would block it.
+session_fail() {
+  echo "hub: $1" >&2
+  exit 1
+}
+
+# session_start: close a session this workstation left
+# open, open a new one, keep its id.
+session_start() {
+  if [ -n "$id" ]; then
+    api "sessions/$id" "$WORK/resp" -X DELETE >/dev/null 2>&1 || true
+    rm -f "$SESSION_FILE"
+  fi
+  jq -n --arg h "$host" --arg w "$WORKSTATION" \
+    '{workstation: $w} + (if $h != "" then {host: $h} else {} end)' \
+    > "$WORK/req"
+  rc=0
+  api sessions "$WORK/resp" -X POST -H 'Content-Type: application/json' \
+    --data-binary @"$WORK/req" || rc=$?
+  case "$rc" in
+    0) id=$(jq -r '.id // empty | tostring' "$WORK/resp" 2>/dev/null) || id=""
+       [ -n "$id" ] || session_fail "POST sessions returned no id"
+       umask 077
+       printf '%s\n' "$id" > "$SESSION_FILE" ;;
+    3) session_fail "unreachable, session not registered" ;;
+    *) session_fail "POST sessions: $CODE $(api_error "$WORK/resp")" ;;
+  esac
+}
+
+do_session() {
+  MAX_TIME=8
+  sub=${1:-}
+  host=${2:-}
+  [ $# -le 2 ] || { usage >&2; exit 1; }
+  if [ -n "$host" ] && ! printf '%s\n' "$host" | grep -Eq "$HOST_RE"; then
+    session_fail "host \"$host\" is outside the hub's character set"
+  fi
+  mkdir -p -m 700 "$CACHE" 2>/dev/null || true
+  id=""
+  [ -r "$SESSION_FILE" ] && id=$(head -n 1 "$SESSION_FILE" | tr -cd 'A-Za-z0-9_.:-')
+  case "$sub" in
+    start) session_start ;;
+    beat)
+      if [ -z "$id" ]; then session_start; exit 0; fi
+      if [ -n "$host" ]; then
+        jq -n --arg h "$host" '{host: $h}' > "$WORK/req"
+        rc=0
+        api "sessions/$id/heartbeat" "$WORK/resp" -X POST \
+          -H 'Content-Type: application/json' --data-binary @"$WORK/req" || rc=$?
+      else
+        rc=0
+        api "sessions/$id/heartbeat" "$WORK/resp" -X POST || rc=$?
+      fi
+      case "${rc:-0}" in
+        0) ;;
+        3) session_fail "unreachable, heartbeat lost" ;;
+        *) if [ "$CODE" = 404 ]; then
+             rm -f "$SESSION_FILE"
+             id=""
+             session_start
+             exit 0
+           fi
+           session_fail "heartbeat: $CODE $(api_error "$WORK/resp")" ;;
+      esac ;;
+    end)
+      [ -n "$id" ] || exit 0
+      rc=0
+      api "sessions/$id" "$WORK/resp" -X DELETE || rc=$?
+      case "${rc:-0}" in
+        0) rm -f "$SESSION_FILE" ;;
+        3) session_fail "unreachable, session $id left open (closed after 60 minutes)" ;;
+        *) rm -f "$SESSION_FILE"
+           [ "$CODE" = 404 ] || session_fail "DELETE sessions/$id: $CODE $(api_error "$WORK/resp")" ;;
+      esac ;;
+    *) usage >&2; exit 1 ;;
+  esac
+  exit 0
+}
+
+# --- claims --------------------------------------------------
+check_host() {
+  printf '%s\n' "$1" | grep -Eq "$HOST_RE" && return 0
+  echo "error: host \"$1\" is outside the hub's character set" >&2
+  exit 2
+}
+
+do_claim() {
+  [ $# -ge 1 ] && [ $# -le 2 ] || { usage >&2; exit 2; }
+  check_host "$1"
+  MAX_TIME=20
+  jq -n --arg n "${2:-}" '{note: $n}' > "$WORK/req"
+  rc=0
+  api "claims/$1" "$WORK/resp" -X PUT -H 'Content-Type: application/json' \
+    --data-binary @"$WORK/req" || rc=$?
+  case "${rc:-0}" in
+    0) echo "claimed $1${2:+: $2}" ;;
+    3) unreachable 3 ;;
+    *) auth_check
+       echo "error: claim $1: $CODE $(api_error "$WORK/resp")" >&2
+       exit 1 ;;
+  esac
+  exit 0
+}
+
+do_release() {
+  [ $# -eq 1 ] || { usage >&2; exit 2; }
+  check_host "$1"
+  MAX_TIME=20
+  rc=0
+  api "claims/$1" "$WORK/resp" -X DELETE || rc=$?
+  case "${rc:-0}" in
+    0) echo "released $1" ;;
+    3) unreachable 3 ;;
+    *) auth_check
+       echo "error: release $1: $CODE $(api_error "$WORK/resp")" >&2
+       exit 1 ;;
+  esac
+  exit 0
+}
+
+case "$CMD" in
+  pull) do_pull "$@" ;;
+  push) do_push "$@" ;;
+  status) do_status "$@" ;;
+  session) do_session "$@" ;;
+  claim) do_claim "$@" ;;
+  release) do_release "$@" ;;
+esac
