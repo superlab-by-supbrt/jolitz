@@ -14,6 +14,13 @@
   `~/.claude`; scanned raw, it put every command next to the
   guard's own files, even `ls`. The fallback now leaves that
   one field out. Taboos stay blocked.
+- **DNS aliases on Windows.** Git Bash copies a directory
+  where `ln -s` should link it, so an alias got its own
+  memory that drifted from the server's. On Windows an
+  alias is now a file holding the canonical name
+  (`rules/dns-aliases.md`); `bin/jolitz-overview` and
+  `bin/jolitz-memory-lint` read both forms, also a symlink
+  that git checked out as a file.
 - **The README says what a workstation needs:** `jq`, and on
   Windows Git for Windows or WSL 2.
 - **CI on Windows.** Every pull request runs a guard smoke

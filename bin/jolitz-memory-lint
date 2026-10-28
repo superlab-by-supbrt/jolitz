@@ -108,7 +108,9 @@ count_secrets() {
 lint_host() {
   dir="$MEM/servers/$1"
   h=$1
-  if [ -L "$dir" ]; then
+  # An alias: a symlink, or on Windows a file naming the
+  # canonical directory (rules/dns-aliases.md).
+  if [ -L "$dir" ] || [ -f "$dir" ]; then
     return 0
   fi
   if [ ! -d "$dir" ]; then
