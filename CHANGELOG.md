@@ -51,10 +51,6 @@
   CLAUDE.md prescribes. Quotes, backslashes, globs
   and braces that the shell turns into `.claude`
   put a command in scope too.
-- **The README speaks of jolitz.** Technical names
-  (skills, `bin/heinzel-*`, `HEINZEL_*`, the journal
-  tag, the server lock file) keep the upstream
-  spelling.
 
 ## 3.3.3-jolitz.1 — 2026-10-28
 
