@@ -1375,7 +1375,7 @@ log_ok() {
 json_for 'halt' | log_run "$LOGHOME" 1 ""; log_ok $? "halt still denied"
 grep -q "	bash	.*	halt\$" "$GLOG" 2>/dev/null
 log_ok $? "a denial is logged with mode and command"
-[ "$(stat -f %Lp "$GLOG" 2>/dev/null || stat -c %a "$GLOG")" = 600 ]
+[ "$(stat -c %a "$GLOG" 2>/dev/null || stat -f %Lp "$GLOG")" = 600 ]
 log_ok $? "the log is mode 0600"
 json_for 'ls /tmp' | log_run "$LOGHOME" 1 ""
 [ "$(wc -l < "$GLOG" | tr -d ' ')" = 1 ]
