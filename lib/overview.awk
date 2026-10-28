@@ -861,7 +861,11 @@ function json_out(f,   i, k, n, h, d, m, v, any, c) {
       jlist(hf[i, 6], " "), jstr(hf[i, 7]), jstr(hf[i, 8]), (hf[i, 9] == 1 ? "true" : "false") > f
     printf "     \"todos\": %d, \"last_change\": %s, \"product\": %s, \"version\": %s,\n", \
       hf[i, 10], jstr(hf[i, 11]), jstr(hf[i, 12]), jstr(hf[i, 13]) > f
-    printf "     \"owner\": %s, \"aliases\": %s,\n", jstr(hf[i, 14]), jlist(al[hf[i, 1]], " ") > f
+    # An alias element that does not exist yet must not reach a
+    # function as an argument: gawk 5.2.1 (Ubuntu 24.04) leaves it
+    # with an illegal type and dies on the next al[] read with
+    # "internal error ... Node_illegal". Test for the key first.
+    printf "     \"owner\": %s, \"aliases\": %s,\n", jstr(hf[i, 14]), jlist(((hf[i, 1]) in al) ? al[hf[i, 1]] : "", " ") > f
     printf "     \"services\": [" > f
     for (n = 1; n <= svn[i]; n++)
       printf "%s{\"name\": %s, \"version\": %s}", (n > 1 ? ", " : ""), \

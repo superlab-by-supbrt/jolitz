@@ -24,7 +24,9 @@ jobs:
         run: sh .claude/hooks/guard-taboos-test.sh
 
       # Lint and overview against a throwaway memory/ tree,
-      # under the mawk that Ubuntu ships as awk.
+      # under the gawk the runner image installs as awk (5.2.1
+      # on Ubuntu 24.04). The busybox job below covers the
+      # other awk; mawk and BWK awk are run by hand.
       - name: Memory lint and overview tests
         run: sh tests/memory-tools-test.sh
 
