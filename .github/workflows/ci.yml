@@ -5,11 +5,16 @@ on:
     branches: [main]
   pull_request:
 
+# The tests read the checkout and nothing else.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      # Pinned to the commit behind v6.1.0, not the moving tag.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       # Full fixture matrix for the taboo guard, including the
       # check that every hook in settings.json is registered via
@@ -45,7 +50,7 @@ jobs:
     # This job uses that same /usr/bin/python3.
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Scanner unit tests
         run: >-
