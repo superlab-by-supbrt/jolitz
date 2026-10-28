@@ -126,6 +126,7 @@ has "$T/lint.out" 'WARN  mac.local: memory.md: Last connected "yesterday"' \
   "lint flags a date that is not YYYY-MM-DD"
 hasnt "$T/lint.out" 'www.example.com' "lint skips an alias symlink"
 hasnt "$T/lint.out" 'ERROR' "a password location is not a secret"
+hasnt "$T/lint.out" 'password value' "a password location is not a password word"
 has "$T/lint.out" 'memory lint: 3 hosts, 0 errors, 3 warnings' \
   "lint summary counts hosts and warnings"
 "$LINT" -d "$M" --strict > /dev/null; rc=$?
@@ -146,8 +147,18 @@ printf -- '- Deploy token: %s\n' "$TOK" \
 printf '  Detail: %s\n' "$KEY" >> "$S/servers/db1.example.com/changelog.log"
 printf 'DB_PASSWORD=hunter2\n' > "$S/servers/db1.example.com/notes.txt"
 printf 'mysql://app:s3cret@db1/app\n' >> "$S/network.md"
+printf -- '- Password: hunter2x\n- Token: expires 2027-01-01\n' \
+  >> "$S/servers/web1.example.com/memory.md"
+printf '2026-10-28 alice: asked for the root password=abc123\n' \
+  >> "$S/refusals.log"
 "$LINT" -d "$S" > "$T/sec.out"; rc=$?
 ok $(( rc != 1 )) "lint exits 1 on a secret (got $rc)"
+has "$T/sec.out" 'WARN  web1.example.com: servers/web1.example.com/memory.md:10: looks like a password value' \
+  "lint warns about a bare word after Password:"
+hasnt "$T/sec.out" 'memory.md:11:' "an expiry note after Token: is not a value"
+has "$T/sec.out" 'ERROR memory: refusals.log:1:' \
+  "lint scans refusals.log"
+hasnt "$T/sec.out" 'hunter2x' "lint never prints the password word"
 has "$T/sec.out" 'ERROR web1.example.com: servers/web1.example.com/memory.md:9: looks like a secret' \
   "lint names file and line of a token"
 has "$T/sec.out" 'ERROR db1.example.com: servers/db1.example.com/changelog.log:3:' \
@@ -213,6 +224,16 @@ hasnt "$T/tag.out" 'db1.example.com:' "tag filter drops other hosts"
 has "$T/tag.out" 'Memory lint: 0 warnings' "an empty count prints 0"
 has "$T/tag.out" 'Fleet audit 2026-10-28 09:00: 0 settings differ' \
   "tag filter narrows the audit"
+
+# --- a host directory with an odd name -----------------------
+B="$T/badhost"
+cp -R "$M" "$B"
+mkdir "$B/servers/bad name"
+"$OVERVIEW" -d "$B" > "$T/bad.out" 2>&1; rc=$?
+ok $(( rc != 0 )) "overview still builds next to an odd directory name (got $rc)"
+has "$T/bad.out" 'skipping' "overview warns about the odd directory name"
+[ ! -e "$B/overview/hosts/bad name.html" ]; ok $? "no page for the odd name"
+[ -f "$B/overview/hosts/web1.example.com.html" ]; ok $? "other host pages still built"
 
 # --- guard log -----------------------------------------------
 mkdir -p "$HOME/.cache/jolitz"

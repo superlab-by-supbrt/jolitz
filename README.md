@@ -12,8 +12,12 @@ files and runs shell commands). It manages Linux, FreeBSD,
 NetBSD and macOS, over SSH or on the local machine.
 
 Free and open source under the MIT license, every feature
-included. There is no paid edition, and there will not be
-one.
+included. There is no paid edition and no plan for one.
+
+jolitz runs commands, often as root, on production servers.
+It comes without warranty (MIT, see [LICENSE](LICENSE)); you
+read every command before it runs, and the rules below reduce
+the damage a mistake can do, they do not rule it out.
 
 | You type | jolitz | Changes |
 |---|---|---|
@@ -53,7 +57,9 @@ workstation:
 
 Without `jq` the guard still blocks the taboos but cannot
 read file paths reliably, and denies every file edit it
-cannot prove harmless.
+cannot prove harmless. `curl` is needed for `--eol` only. For
+the guard to block when it times out, Claude Code must be
+2.1.295 or newer (`claude --version`).
 
 ```
 git clone https://github.com/superlab-by-supbrt/jolitz.git
@@ -219,7 +225,8 @@ Every Monday by cron:
 
 ```
 23 7 * * 1 cd /path/to/jolitz && flock -n \
-  /tmp/jolitz-cron-fleet.lock timeout 10m \
+  ~/.cache/jolitz/cron-fleet.lock timeout 10m \
+  env JOLITZ_NO_UPDATE=1 \
   /abs/path/to/claude --permission-mode auto \
   -p "Email me the weekly fleet summary" \
   >> ~/jolitz-cron.log 2>&1
@@ -268,12 +275,14 @@ not know passes.
   first (`sysctl -w` before `sysctl.d`, `mount` before
   `fstab`), the old kernel stays until the new one boots
   (`rules/way-back.md`).
-- **It cannot lock you out for long.** Before a change to an
-  address, route, firewall, VPN or PAM it arms a timer on the
-  server that restores the old state after 120 seconds. Only
-  a fresh SSH login disarms it (`rules/rollback-timer.md`).
+- **It limits a lockout.** Before a change to an address,
+  route, firewall, VPN or PAM it arms a timer on the server
+  that restores the old state after 120 seconds. Only a
+  fresh SSH login disarms it (`rules/rollback-timer.md`).
   Longer window per server: `- Rollback window: 300` in its
-  `memory.md`.
+  `memory.md`. A reboot inside the window boots the new
+  config without the timer; the rule says so before such a
+  change.
 - **It backs up.** Every config file goes to
   `/var/backups/jolitz/` before an edit, kept 30 days.
 - **It logs.** One plain line per change in the system
@@ -337,7 +346,18 @@ then. The agent cannot lift the guard itself: next to
 `.claude` only reads pass, and an assignment of the variable
 is always denied.
 
-The guard is a backstop against mistakes, not a sandbox.
+The guard is a backstop against mistakes, not a sandbox. It
+recognises a write by the way it is spelled; a target built
+at run time or an archive unpacked into place are outside
+what a string matcher can see. A second `claude -p` or
+`opencode run` started by the agent is denied, because a
+session from another directory runs without this hook. The
+hook is registered with
+`"onFailure": "block"` and a 15-second timeout: a hook that
+fails or times out then denies instead of letting the call
+through, which is what Claude Code does by default. The
+guard itself takes well under a second.
+
 **Guard log, opt-in.** With `JOLITZ_GUARD_LOG=1` at session
 start every denial goes to `~/.cache/jolitz/guard.log` (mode
 0600): time, reason, the first 200 characters of the command,
@@ -375,14 +395,18 @@ A nightly check from cron:
 
 ```
 17 6 * * * cd /path/to/jolitz && flock -n \
-  /tmp/jolitz-cron-server1.lock timeout 30m \
+  ~/.cache/jolitz/cron-server1.lock timeout 30m \
+  env JOLITZ_NO_UPDATE=1 \
   /abs/path/to/claude --permission-mode auto \
   -p "Run housekeeping on server1.example.com and \
 email me the report" >> ~/jolitz-cron.log 2>&1
 ```
 
 Run the prompt once interactively first, so its one-time
-questions are answered. A systemd timer variant is in
+questions are answered. `JOLITZ_NO_UPDATE=1` keeps an
+unattended run from pulling and running new code from
+`main` with nobody reading the changelog; update by hand
+or pin a release. A systemd timer variant is in
 `rules/scheduled-housekeeping.md`.
 
 ## Your data: `memory/`
@@ -409,15 +433,37 @@ bin/jolitz-backup --list                 # dry run
 bin/jolitz-backup --restore <file.tar.gz>
 ```
 
-Restore validates the archive and does not overwrite without
-`--force`.
+Restore validates the archive and refuses when `memory/`
+holds user data; `--force` copies the archive over it and
+removes nothing that is not in the archive.
+
+**What leaves your machine.** Every command output jolitz
+reads goes to the AI provider behind your terminal tool, as
+part of the conversation: logs, configs, user lists, the
+addresses in them. `--eol` sends product names such as
+`debian` to endoflife.date, nothing else. Mails go where you
+send them, with the report inside. Nothing else is sent
+anywhere.
+
+**What stays, and for how long.** `memory/` holds operator
+names (also in every `journalctl -t jolitz` line on every
+server), user names, IPs and host names. The changelog and
+the audit snapshots keep two years, config backups on the
+servers 30 days; the guard log, the cron log and
+`memory/refusals.log` are never trimmed by jolitz. If you
+administer servers for an employer or a client, their rules
+for personal data and for sending data to a processor apply
+to all of this.
 
 **Team use.** Everyone keeps a personal `memory/user.md`.
 To share server state, edit `.gitignore` as its comments say,
 keep each member's own machine out (e.g.
 `memory/servers/alices-mbp/`) and commit server memory after
 sessions. `user.md`, `blacklist.md`, `readonly.md` and
-`opencode.json` are never shared; back them up.
+`opencode.json` are never shared; back them up. Shared
+memory is read by jolitz as settings: `rules.md` overrides,
+mail recipients, send and install policies. Review it like
+code before you pull it.
 
 ## Your own rules
 
@@ -451,7 +497,11 @@ rollback timer take `Add:` only.
 Claude Code pulls `main` at session start, unless the
 checkout is pinned, on another branch, or
 `JOLITZ_NO_UPDATE=1` is set. The version is in `VERSION`, the
-changes in `CHANGELOG.md`.
+changes in `CHANGELOG.md`. Every pull that brings commits
+prints them, with or without a version bump, because what
+arrives is the agent's instructions, its hooks and the
+scripts the hook runs next. For a checkout that works on
+production servers, pin a release and move it yourself:
 
 ```bash
 bin/jolitz-update                       # pull latest
@@ -532,10 +582,10 @@ assets/trailer/  script that renders the trailer
 
 jolitz started as a fork of
 [heinzel](https://github.com/wintermeyer/heinzel) by Stefan
-Wintermeyer, whose work it builds on. When heinzel 3.0 moved
-OS replacement, accounts, deploy users, secret rotation,
-fleet audits and scheduled runs into a paid edition, jolitz
-kept them in the open. Every feature is free and stays free.
+Wintermeyer, whose work it builds on. heinzel 3.0 moved OS
+replacement, accounts, deploy users, secret rotation, fleet
+audits and scheduled runs to a separate commercial product;
+jolitz carries them on under MIT, with every other feature.
 jolitz is not affiliated with or endorsed by the heinzel
 author.
 

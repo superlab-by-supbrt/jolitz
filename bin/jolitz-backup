@@ -10,9 +10,11 @@
 #   jolitz-backup --list         Dry run: list what would
 #                                 be archived
 #   jolitz-backup --restore <f>  Extract <f> into repo root
-#                                 (refuses to overwrite
-#                                 existing memory/ content
-#                                 unless --force is also set)
+#                                 (refuses when memory/ holds
+#                                 user data unless --force is
+#                                 set; --force copies the
+#                                 archive over memory/ and
+#                                 removes nothing)
 #   jolitz-backup --help         Show this help
 set -e
 

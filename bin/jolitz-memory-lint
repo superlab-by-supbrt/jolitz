@@ -17,7 +17,9 @@
 # WARN: shape problems — no OS or Last connected line, a
 # date that is not YYYY-MM-DD, a tag that is not
 # lowercase, memory.md over 40 lines, a todo.md without
-# open items, a changelog entry without a timestamp.
+# open items, a changelog entry without a timestamp; and
+# a "password:" line whose value is a bare word rather
+# than a location ("in /root/.my.cnf").
 #
 # Exit status: 0 clean, 1 errors (or warnings with
 # --strict), 2 usage. The pattern list is a backstop,
@@ -83,6 +85,14 @@ TOKENS="$TOKENS|\\\$y\\\$[./A-Za-z0-9]+\\\$[./A-Za-z0-9]+\\\$[./A-Za-z0-9]{20,}"
 # records "Password: in /root/.my.cnf (0600)", with a
 # colon; that stays allowed.
 ASSIGN="(^|[^A-Za-z0-9])(password|passwd|passphrase|secret|token|api[_-]?key)[[:space:]]*=[[:space:]]*[^[:space:]\$<{\"']"
+# The same names with a colon and one bare word of six
+# or more characters as the value. A location ("in
+# /root/.my.cnf", "/etc/app/.env", "(0600)") and the
+# usual states ("none", "unset", "rotated 2026-10-01",
+# "set", "see memory") are not values. A WARN, not an
+# ERROR: the word may be a note; the operator decides.
+COLON="(^|[^A-Za-z0-9])(password|passwd|passphrase|secret|token|api[_-]?key)[[:space:]]*:[[:space:]]*[^[:space:]/(\$<{\"'][^[:space:]]{5,}([[:space:]]|$)"
+COLON_OK="[[:space:]]*:[[:space:]]*(in|set|none|unset|rotated|see|stored|managed|via|from|by|expires|required|disabled|enabled|empty)([[:space:]]|$)"
 
 # secrets <file> <label>: one ERROR per matching line.
 secrets() {
@@ -96,13 +106,31 @@ secrets() {
   done
 }
 
-# The secret check above runs in a pipeline, so its
-# count is taken from its output.
+# password_words <file> <label>: one WARN per line with a
+# bare word after "password:" and friends.
+password_words() {
+  [ -f "$1" ] || return 0
+  rel=${1#"$MEM"/}
+  LC_ALL=C grep -niE -- "$COLON" "$1" 2>/dev/null \
+    | LC_ALL=C grep -viE -- "$COLON_OK" \
+    | cut -d: -f1 | sort -un | while read -r n; do
+    echo "WARN  $2: $rel:$n: looks like a password value;" \
+      "write where it is kept, not what it is (rules/secrets.md)"
+  done
+}
+
+# The checks above run in a pipeline, so their counts
+# are taken from their output.
 count_secrets() {
   out=$(secrets "$@")
+  if [ -n "$out" ]; then
+    printf '%s\n' "$out"
+    ERRORS=$((ERRORS + $(printf '%s\n' "$out" | wc -l)))
+  fi
+  out=$(password_words "$@")
   [ -n "$out" ] || return 0
   printf '%s\n' "$out"
-  ERRORS=$((ERRORS + $(printf '%s\n' "$out" | wc -l)))
+  WARNINGS=$((WARNINGS + $(printf '%s\n' "$out" | wc -l)))
 }
 
 lint_host() {
@@ -176,9 +204,12 @@ else
     [ -d "$d" ] || continue
     lint_host "${d##*/}"
   done
-  # State outside the server folders. opencode.json is
-  # tool config that may carry a provider key by design.
-  for f in "$MEM"/*.md "$MEM"/custom-rules/* "$MEM"/audits/*; do
+  # State outside the server folders, refusals.log
+  # included (rules/ethics.md writes the request there).
+  # opencode.json is tool config that may carry a
+  # provider key by design.
+  for f in "$MEM"/*.md "$MEM"/*.log "$MEM"/custom-rules/* \
+      "$MEM"/audits/*; do
     [ -f "$f" ] && count_secrets "$f" memory
   done
 fi

@@ -15,7 +15,7 @@ needs no jolitz installation.
 
 ## The Command
 
-```
+```sh operator
 cd /path/to/jolitz && claude --permission-mode auto \
   -p "Run housekeeping on server1.example.com and \
 email me the report"
@@ -24,6 +24,10 @@ email me the report"
 - Verify the flags with `claude --help` on the
   installed CLI before writing the crontab — flag
   names have changed across releases.
+- The operator installs the crontab line. jolitz
+  never starts a second `claude -p` itself: the
+  guard denies it, because a session started from
+  another directory runs without this hook.
 - The `-p` prompt counts as the explicit user
   request that the `jolitz-email` skill requires;
   "never run automatically" means never
@@ -76,9 +80,10 @@ nothing left to ask.
 
 ## Crontab Template
 
-```
+```sh operator
 17 6 * * * cd /path/to/jolitz && flock -n \
-  /tmp/jolitz-cron-server1.lock timeout 30m \
+  ~/.cache/jolitz/cron-server1.lock timeout 30m \
+  env JOLITZ_NO_UPDATE=1 \
   /abs/path/to/claude --permission-mode auto \
   -p "Run housekeeping on server1.example.com and \
 email me the report" >> ~/jolitz-cron.log 2>&1
@@ -88,18 +93,29 @@ email me the report" >> ~/jolitz-cron.log 2>&1
   still going — never two jolitz sessions on the
   same host at once. (`flock` is Linux; on macOS,
   prefer the launchd alternative below, which
-  serializes runs by itself.)
+  serializes runs by itself.) The lock lives in
+  `~/.cache/jolitz` (mode 0700), not in `/tmp`,
+  where any local user could plant the file.
+- `JOLITZ_NO_UPDATE=1`: an unattended run must not
+  pull new rules, hooks and scripts from `main` and
+  run them with nobody reading the changelog.
+  Update interactively, or pin a release
+  (`bin/jolitz-update --pin`).
 - `timeout 30m` caps a stuck run.
 - Pick an off-peak minute that is not :00.
+- `~/jolitz-cron.log` grows without bound and holds
+  host names and report text. Rotate it (logrotate,
+  newsyslog) or truncate it from the same crontab.
 
 A weekly summary of all servers needs no SSH at
 all: it is built from `memory/` by
 `bin/jolitz-overview --text` and mailed from the
 workstation (`jolitz-email` → Fleet summary):
 
-```
+```sh operator
 23 7 * * 1 cd /path/to/jolitz && flock -n \
-  /tmp/jolitz-cron-fleet.lock timeout 10m \
+  ~/.cache/jolitz/cron-fleet.lock timeout 10m \
+  env JOLITZ_NO_UPDATE=1 \
   /abs/path/to/claude --permission-mode auto \
   -p "Email me the weekly fleet summary" \
   >> ~/jolitz-cron.log 2>&1

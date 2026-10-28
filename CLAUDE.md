@@ -169,8 +169,9 @@ list. Never write, move or delete that file.
   `rules/service-reload.md` for the full policy and
   the opt-out / opt-in config in
   `memory/service-policy.md`.
-- **Absolute taboos (never run without explicit user
-  request):** any command that modifies the partition
+- **Absolute taboos (never; a user request does not
+  lift them, only the operator's override below
+  does):** any command that modifies the partition
   table, whichever tool it uses (`fdisk`, `cfdisk`,
   `sfdisk`, `gdisk`, `sgdisk`, `parted`, `gpart`,
   `gpt`, `diskutil`, `growpart`). Also any command
@@ -186,7 +187,14 @@ list. Never write, move or delete that file.
   them (`/etc/ssh`, `/usr/local/etc/ssh`, …). Never
   delete or overwrite SSH keys, and that includes
   moving, truncating or re-permissioning them.
-  Never halt or power off a server.
+  Never halt or power off a server, and never put
+  it to sleep or hibernate it: unreachable is
+  unreachable. Never change the default boot entry,
+  write firmware to a drive or a NVRAM variable, or
+  format a device with a tool outside the `mkfs`
+  family (`cryptsetup luksFormat`, `zpool
+  labelclear`, `mdadm --zero-superblock`): same
+  effects, other names.
   Inspect `sshd_config`, SSH keys and disk devices
   with `cat`, `grep`, `stat`, `ls` or `sshd -T` —
   never through a language runtime (`python3 -c`,
@@ -238,6 +246,10 @@ list. Never write, move or delete that file.
   any other port sshd listens on. If the user
   asks, explain the risk and refuse. Offer
   alternatives (e.g. restricting to specific IPs).
+  The guard denies stopping, disabling or masking
+  sshd mechanically; a restart or reload that
+  follows a passed config test stays ordinary work
+  (`rules/service-reload.md`).
 - **Verify the default incoming policy is
   deny/drop.** See `rules/<family>.md`.
 - **Use the appropriate non-interactive package

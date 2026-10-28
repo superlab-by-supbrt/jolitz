@@ -37,7 +37,8 @@
           {
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-taboos.sh\"",
-            "timeout": 5
+            "timeout": 15,
+            "onFailure": "block"
           }
         ]
       },
@@ -47,7 +48,8 @@
           {
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-taboos.sh\" file",
-            "timeout": 5
+            "timeout": 15,
+            "onFailure": "block"
           }
         ]
       }

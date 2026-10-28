@@ -48,11 +48,17 @@ if [ "$BRANCH" != "main" ]; then
   exit 0
 fi
 
-# Remember current version before pulling.
+# Remember current version and commit before pulling.
+# The commit is what decides whether anything changed:
+# a pull that leaves VERSION alone still brings new
+# rules, hooks and scripts, and this hook runs
+# bin/jolitz-migrate from the new tree right away. The
+# operator must see that, every time.
 OLD_VERSION=""
 if [ -f VERSION ]; then
   OLD_VERSION=$(cat VERSION)
 fi
+OLD_HEAD=$(git rev-parse HEAD 2>/dev/null)
 
 # Pull latest changes. --ff-only: a diverged local
 # main should fail loudly here, never produce a
@@ -77,11 +83,22 @@ NEW_VERSION=""
 if [ -f VERSION ]; then
   NEW_VERSION=$(cat VERSION)
 fi
+NEW_HEAD=$(git rev-parse HEAD 2>/dev/null)
 
 # Report what happened.
-if [ -z "$OUTPUT" ] && [ "$OLD_VERSION" = "$NEW_VERSION" ]; then
+if [ -z "$OUTPUT" ] && [ "$OLD_HEAD" = "$NEW_HEAD" ] \
+   && [ "$OLD_VERSION" = "$NEW_VERSION" ]; then
   # Nothing changed — stay quiet.
   exit 0
+fi
+
+# New commits: name them, whatever VERSION says. The
+# pull was quiet, so this is the only trace.
+if [ -n "$OLD_HEAD" ] && [ -n "$NEW_HEAD" ] \
+   && [ "$OLD_HEAD" != "$NEW_HEAD" ]; then
+  echo "jolitz repo updated: $(git rev-parse --short "$OLD_HEAD")..$(git rev-parse --short "$NEW_HEAD")"
+  git log --oneline "$OLD_HEAD..$NEW_HEAD" 2>/dev/null | sed 's/^/  /'
+  echo "Pin a release to stop this: bin/jolitz-update --pin v$NEW_VERSION"
 fi
 
 if [ "$OLD_VERSION" != "$NEW_VERSION" ] \
@@ -109,5 +126,5 @@ if [ "$OLD_VERSION" != "$NEW_VERSION" ] \
     echo "BREAKING CHANGES — read CHANGELOG.md"
   fi
 elif [ -n "$OUTPUT" ]; then
-  echo "jolitz repo updated: $OUTPUT"
+  echo "jolitz pull said: $OUTPUT"
 fi

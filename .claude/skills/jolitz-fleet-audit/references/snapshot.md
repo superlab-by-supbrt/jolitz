@@ -40,7 +40,8 @@ it is shared like server memory.
   matching the sections of `references/probes.md`.
   Settings are the row labels of the report table;
   sshd keys in lower case, as `sshd -T` printed them
-  before OpenSSH 10.4, so snapshots stay comparable.
+  before OpenSSH 10.4 (10.5 for every key), so snapshots
+  stay comparable.
 - Values are strings, exactly as rendered in the
   table. `(unset)` for a setting that is not set,
   `unknown(needs-root)` for a probe that lacked

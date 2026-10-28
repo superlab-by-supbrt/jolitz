@@ -15,7 +15,8 @@ Use `sshd -T` to query the effective compiled configuration.
 This resolves Include directives, Match blocks, and defaults —
 much more reliable than parsing config files manually. Since
 OpenSSH 10.4 it prints keywords in mixed case
-(`PasswordAuthentication`), so always filter with `grep -i`.
+(`PasswordAuthentication`; all of them from 10.5), so always
+filter with `grep -i`.
 
 ```bash
 sshd -T 2>/dev/null | grep -i passwordauthentication

@@ -139,10 +139,72 @@ check deny 'cat disk.img > /dev/sda'
 check deny 'tee /dev/sda < disk.img'
 check deny 'dd if=disk.img > /dev/nvme0n1'
 check deny 'ssh root@h "xzcat img.xz > /dev/vda"'
+# The third POSIX output operator: >| clobbers like >.
+check deny 'cat disk.img >| /dev/sda'
 
 # --- power off under another name ------------------------------
 check deny 'telinit 0'
 check deny 'echo o > /proc/sysrq-trigger'
+
+# --- sleep: unreachable is unreachable -------------------------
+check deny 'systemctl suspend'
+check deny 'systemctl hibernate'
+check deny 'systemctl hybrid-sleep'
+check deny 'systemctl suspend-then-hibernate'
+check deny 'systemctl --no-block suspend'
+check deny 'systemctl start suspend.target'
+check deny 'systemctl isolate hibernate.target'
+check deny 'ssh root@h "systemctl suspend"'
+check deny 'acpiconf -s 3'
+check deny 'acpiconf -s 5'
+check deny 'ssh root@h "acpiconf -s 4"'
+check deny 'zzz'
+check deny 'pmset sleepnow'
+check deny 'rtcwake -m mem -s 600'
+check deny 'rtcwake --mode disk --seconds 600'
+check deny 'echo mem > /sys/power/state'
+check deny 'echo disk | tee /sys/power/state'
+check pass 'systemctl status nginx'
+check pass 'systemctl status suspend.target'
+check pass 'systemctl list-units --type=target'
+check pass 'acpiconf -i 0'
+check pass 'pmset -g'
+check pass 'rtcwake -m show'
+check pass 'rtcwake --list-modes'
+check pass 'cat /sys/power/state'
+check pass 'sleep 5; uptime'
+
+# --- formatted by a tool outside the mkfs family ----------------
+check deny 'cryptsetup luksFormat /dev/sdb'
+check deny 'cryptsetup --type luks2 luksFormat /dev/sdb1'
+check deny 'cryptsetup erase /dev/sdb1'
+check deny 'cryptsetup luksErase /dev/sdb1'
+check deny 'cryptsetup reencrypt /dev/sdb1'
+check deny 'cryptsetup-reencrypt /dev/sdb1'
+check deny 'ssh root@h "cryptsetup luksFormat /dev/sdb"'
+check deny 'zpool labelclear -f /dev/sdb'
+check deny 'ssh root@h "zpool labelclear da1"'
+check deny 'mdadm --zero-superblock /dev/sdb1'
+check deny 'ssh root@h "mdadm --zero-superblock /dev/sdb1"'
+check pass 'cryptsetup status x'
+check pass 'cryptsetup luksDump /dev/sdb1'
+check pass 'cryptsetup open /dev/sdb1 data'
+check pass 'zpool status'
+check pass 'zpool list'
+check pass 'mdadm --detail /dev/md0'
+
+# --- partition attributes, firmware -----------------------------
+check deny 'sgdisk -A 1:set:2 /dev/sda'
+check deny 'sgdisk --attributes=1:set:2 /dev/sda'
+check deny 'gpart unset -a active -i 1 ada0'
+check deny 'hdparm --fwdownload fw.bin /dev/sda'
+check deny 'hdparm --fwdownload-mode3 fw.bin /dev/sda'
+check deny 'ssh root@h "hdparm --fwdownload fw.bin /dev/sda"'
+check deny 'nvme fw-download /dev/nvme0 -f fw.bin'
+check deny 'nvme fw-commit /dev/nvme0 -s 1 -a 1'
+check deny 'nvme fw-activate /dev/nvme0'
+check deny 'ssh root@h "nvme fw-commit /dev/nvme0 -s 1 -a 1"'
+check pass 'nvme fw-log /dev/nvme0'
 
 # --- SSH keys destroyed without rm/shred/unlink ----------------
 check deny 'echo "" > /root/.ssh/authorized_keys'
@@ -152,6 +214,7 @@ check deny 'mv /root/.ssh/authorized_keys /tmp/'
 check deny 'chmod 000 /root/.ssh/authorized_keys'
 check deny 'chown nobody /etc/ssh/ssh_host_rsa_key'
 check deny 'ssh-keygen -q -N "" -f /etc/ssh/ssh_host_rsa_key'
+check deny ': >| /root/.ssh/authorized_keys'
 
 # --- writes INTO a protected path (writes_to) ------------------
 # A copy is judged by its destination: a key, ~/.ssh or a disk as
@@ -173,6 +236,9 @@ check deny 'ssh root@h "cp /tmp/new /root/.ssh/authorized_keys && echo ok"'
 check deny 'dd if=/dev/zero of=/etc/ssh/ssh_host_ed25519_key count=1'
 check deny 'curl -fsS https://example.com/u.keys -o /root/.ssh/authorized_keys'
 check deny 'wget -O ~/.ssh/authorized_keys https://example.com/u.keys'
+# The output flag at the end of a short-flag cluster.
+check deny 'wget -qO /root/.ssh/authorized_keys https://example.com/k'
+check deny 'curl -fsSLo /etc/ssh/sshd_config https://example.com/c'
 check deny "sed -i '/old/d' /root/.ssh/authorized_keys"
 check deny "sed -ni '1p' /root/.ssh/authorized_keys"
 check deny 'vi /root/.ssh/authorized_keys'
@@ -236,6 +302,8 @@ check pass 'ssh -i ~/.ssh/id_ed25519 root@h "vim --version"'
 check pass 'rsync -a --delete /root/.ssh/ /backup/root-ssh/'
 check pass 'cp /dev/sda /root/disk.img'
 check pass 'curl -o /tmp/sshd_config.new https://example.com/c'
+check pass 'curl -fsSLo /tmp/c https://example.com/c'
+check pass 'wget -qO /tmp/k https://example.com/k'
 
 # --- SSH keys reached through their directory (issue #7) -------
 # The protected paths were key FILENAMES, so any operation on the
@@ -294,6 +362,79 @@ check deny 'command fdisk /dev/sda'
 check deny 'ssh root@h "command rm /etc/ssh/ssh_host_ed25519_key"'
 check pass 'command cp -p /etc/nginx/nginx.conf /var/backups/jolitz/'
 check pass 'command rm /var/tmp/old.log'
+
+# --- every disk writer once inside ssh host "..." ---------------
+# The quote split in segments() is what finds these; one line per
+# tool keeps it honest.
+check deny 'ssh root@h "wipefs -a /dev/sdb"'
+check deny 'ssh root@h "parted /dev/sda mklabel gpt"'
+check deny 'ssh root@h "sgdisk --zap-all /dev/sda"'
+check deny 'ssh root@h "gpart destroy -F ada0"'
+check deny 'ssh root@mac "diskutil eraseDisk JHFS+ Foo disk2"'
+check deny 'ssh root@h "growpart /dev/sda 1"'
+check deny 'ssh root@h "blkdiscard /dev/sda"'
+check deny 'ssh root@h "nvme format /dev/nvme0n1"'
+check deny 'ssh root@h "hdparm --security-erase p /dev/sda"'
+check deny 'ssh root@h "badblocks -w /dev/sda"'
+check deny 'ssh root@h "shred /dev/sda"'
+check deny 'ssh root@h "cfdisk /dev/sda"'
+check deny 'ssh root@mac "bless --mount /Volumes/X --setBoot"'
+
+# --- a second agent session ------------------------------------
+# claude -p and friends start another session; one started from
+# another cwd runs without this hook, and --settings,
+# --permission-mode and --dangerously-skip-permissions set its
+# permissions outright. --version and --help pass.
+check deny 'claude -p "run housekeeping on h"'
+check deny 'claude --print "x"'
+check deny 'claude --settings /tmp/s.json'
+check deny 'claude --permission-mode bypassPermissions'
+check deny 'claude --dangerously-skip-permissions'
+check deny 'cd /tmp && claude -p "x"'
+check deny 'opencode -p "x"'
+check deny 'opencode --permission-mode x'
+check deny 'ssh root@h "claude -p x"'
+check deny 'ssh root@h "opencode --dangerously-skip-permissions"'
+check pass 'claude --version'
+check pass 'opencode --help'
+check pass 'which claude'
+check pass 'ssh root@h "claude --version"'
+
+# --- the SSH service -------------------------------------------
+# Stopping, disabling or masking sshd closes the door the next
+# session comes in through. status, restart and reload pass; a
+# restart asks first (rules/service-reload.md).
+check deny 'systemctl stop ssh'
+check deny 'systemctl stop sshd'
+check deny 'systemctl stop sshd.service'
+check deny 'systemctl stop ssh.socket'
+check deny 'systemctl disable --now sshd'
+check deny 'systemctl mask ssh'
+check deny 'systemctl stop nginx sshd'
+check deny 'service ssh stop'
+check deny 'service sshd stop'
+check deny 'service sshd onestop'
+check deny 'rc-service sshd stop'
+check deny '/etc/init.d/ssh stop'
+check deny 'launchctl unload /System/Library/LaunchDaemons/ssh.plist'
+check deny 'launchctl disable system/com.openssh.sshd'
+check deny 'ssh root@h "systemctl stop sshd"'
+check deny 'ssh root@h "service sshd stop"'
+check pass 'systemctl status ssh'
+check pass 'systemctl status sshd'
+check pass 'systemctl restart sshd'
+check pass 'systemctl reload ssh'
+check pass 'systemctl is-enabled sshd'
+check pass 'service sshd restart'
+check pass 'service sshd status'
+check pass 'rc-service sshd restart'
+check pass 'systemctl stop nginx'
+check pass 'systemctl disable --now cloud-init.service'
+check pass 'systemctl mask systemd-networkd-wait-online.service'
+check pass 'ssh root@h "systemctl restart sshd"'
+check pass 'ssh root@h "systemctl stop jolitz-rollback-20261018-0930.timer"'
+check pass 'systemctl stop nginx; systemctl status sshd'
+check pass 'launchctl list | grep ssh'
 
 # --- must pass -------------------------------------------------
 check pass 'fdisk -l'
@@ -360,7 +501,27 @@ check deny 'chattr -i /sys/firmware/efi/efivars/Boot0001-x'
 check deny 'ssh root@h "rm /sys/firmware/efi/efivars/x"'
 check deny 'python3 -c "open(\"/sys/firmware/efi/efivars/x\",\"wb\").write(b\"\")"'
 check deny 'ssh root@h "python3 -c \"open(\\\"/sys/firmware/efi/efivars/x\\\",\\\"wb\\\")\""'
+# The boot default without touching the loader, and a NVRAM
+# variable.
+check deny 'grub-set-default 2'
+check deny 'grub2-set-default saved'
+check deny 'grub-reboot 1'
+check deny 'grub-editenv /boot/grub/grubenv set next_entry=1'
+check deny 'grub-editenv - unset next_entry'
+check deny 'grub2-editenv create'
+check deny 'ssh root@h "grub-set-default 2"'
+check deny 'nvram boot-args="-v"'
+check deny 'nvram -d boot-args'
+check deny 'nvram -c'
+check deny 'ssh root@mac "nvram boot-args=-v"'
+check deny 'systemsetup -setstartupdisk /System/Library/CoreServices'
 check pass 'efibootmgr'
+check pass 'grub-editenv list'
+check pass 'grub-editenv /boot/grub/grubenv list'
+check pass 'nvram -p'
+check pass 'nvram -xp'
+check pass 'nvram boot-args'
+check pass 'systemsetup -getstartupdisk'
 check pass 'efibootmgr -v'
 check pass 'ssh root@h "efibootmgr -v"'
 check pass 'bootctl status'
@@ -424,6 +585,13 @@ check deny 'tee /etc/gshadow < x'
 check deny 'python3 -c "open(\"/etc/shadow\",\"a\").write(\"x\")"'
 check deny 'node -e "require(\"fs\").appendFileSync(\"/etc/passwd\",\"x\")"'
 check deny 'ssh root@h "perl -pi -e s/x/y/ /etc/passwd"'
+# sed's in-place flag in a cluster, and a drop-in written under a
+# bare name after cd into the directory.
+check deny "sed -Ei 's/^#//' /etc/sudoers"
+check deny 'cd /etc/sudoers.d && echo "deploy ALL=(ALL) NOPASSWD: ALL" > deploy'
+check deny 'find /etc/sudoers.d -name "*.bak" -delete'
+check pass 'cd /etc/sudoers.d && cat deploy'
+check pass 'cd /etc/sudoers.d && ls -l > /tmp/list'
 check pass 'useradd --system --shell /bin/sh --create-home deploy'
 check pass 'adduser --system --home /home/deploy deploy'
 check pass 'pw useradd deploy -d /home/deploy -s /bin/sh -m'
@@ -477,6 +645,11 @@ check deny 'cd /etc && rm jolitz.conf'
 check deny 'cd /etc; echo allow_changes=true > jolitz.conf'
 check deny 'find /etc -name jolitz.conf -delete'
 check deny 'ln -sf /dev/null /etc/jolitz.conf'
+# The third POSIX output operator, and sed's in-place flag in a
+# cluster or spelled out.
+check deny 'echo "allow_changes = true" >| /etc/jolitz.conf'
+check deny "sed -Ei 's/false/true/' /etc/jolitz.conf"
+check deny "sed --in-place 's/false/true/' /etc/jolitz.conf"
 check pass 'cat /etc/jolitz.conf'
 check pass 'ssh root@h "cat /etc/jolitz.conf"'
 check pass 'ssh root@h "if [ -e /etc/jolitz.conf ]; then cat /etc/jolitz.conf || echo JOLITZ_CONF_UNREADABLE; else echo JOLITZ_CONF_ABSENT; fi"'
@@ -489,12 +662,13 @@ check pass 'ls -l /etc/jolitz.conf'
 # security skill once skipped inert login shells by a regex of
 # their names; the deny pins why that shape was retired. A block
 # meant to be denied says so after the language on its fence:
-# `operator` (the user runs it, jolitz never does). The old
-# `guard-off` fence (jolitz ran it after the operator disarmed
-# the guard) left with the OS-replacement rules in 3.0; it is
-# still skipped so a stray one never passes as shipped code. The
-# file name in each block path keeps names unique when find
-# starts awk twice.
+# `operator` (the user runs it, jolitz never does) or `guard-off`
+# (jolitz runs it after the operator lifted the guard with
+# JOLITZ_GUARD_DISABLE; rules/os-replacement.md is built from
+# them). Both are skipped here, and the check below the loop
+# makes sure every file with a guard-off block names the
+# variable. The file name in each block path keeps names unique
+# when find starts awk twice.
 check deny "awk -F: '(\$7 ~ /(nologin|false|sync|shutdown|halt)\$/)' /etc/passwd"
 
 BLOCKS=$(mktemp -d)
@@ -673,6 +847,19 @@ check deny 'rsync -a /backup/sshd/ /conf/sshd/'
 check deny 'echo X >> /opt/homebrew/etc/ssh/sshd_config'
 check deny 'rm /opt/homebrew/etc/ssh/ssh_host_ed25519_key'
 check deny 'echo X >> "/usr/local/etc/ssh/sshd_config"'
+# Other spellings of the same write: the >| operator, sed's
+# in-place flag in a cluster, and a bare name after cd into the
+# directory, where no rule sees a path.
+check deny 'echo "Port 2222" >| /etc/ssh/sshd_config'
+check deny "sed -ri 's/^#Port/Port/' /etc/ssh/sshd_config"
+check deny 'cd /etc/ssh && echo "PermitRootLogin yes" >> sshd_config'
+check deny 'cd /etc/ssh && rm ssh_host_ed25519_key'
+check deny 'cd /etc/ssh/sshd_config.d && echo "Port 2222" > 10-x.conf'
+check deny 'find /etc/ssh -name "ssh_host_*" -delete'
+check deny 'ssh root@h "cd /etc/ssh && sed -i s/no/yes/ sshd_config"'
+check pass 'cd /etc/ssh && ls -l'
+check pass 'cd /etc/ssh && cat sshd_config > /tmp/copy'
+check pass 'cd /etc/nginx && echo x > conf.d/x.conf'
 # pfSense keeps keys and config in /etc/ssh, but appends
 # /etc/sshd_extra to the sshd_config it generates.
 check deny 'echo PermitRootLogin yes >> /etc/sshd_extra'
@@ -710,6 +897,7 @@ check deny 'tee ~/.ssh/authorized_keys</tmp/k'
 check deny 'echo k | tee -a ~/.ssh/authorized_keys>/dev/null'
 check deny 'tee /etc/ssh/ssh_host_ed25519_key</tmp/k'
 check pass 'tee /tmp/report.txt</tmp/in'
+check pass 'echo x >| /tmp/report.txt'
 
 # --- CLOBBER: one list of destructive tools for keys and sshd --
 check deny 'install -m 600 /tmp/new /etc/ssh/sshd_config'
@@ -719,6 +907,12 @@ check deny 'patch /etc/ssh/sshd_config < /tmp/d'
 check deny 'shred -u /etc/ssh/sshd_config'
 check deny 'patch ~/.ssh/authorized_keys < /tmp/d'
 check pass 'ls -ln /etc/ssh/sshd_config'
+# ex is vi's line editor, scriptable from the command line.
+check deny "ex -s +'%s/no/yes/' -cwq /etc/ssh/sshd_config"
+check deny 'ex /etc/sudoers'
+check deny 'ssh root@h "ex -s +%d -cwq /etc/jolitz.conf"'
+check pass 'vim --version'
+check pass 'echo ex > /tmp/x'
 
 # --- heredoc bodies: data vs code (issue #8) -------------------
 # Prose legitimately contains taboo words. A heredoc body is only
@@ -916,6 +1110,9 @@ check_off deny 'apt-get install -y hydra'
 check_off deny 'echo allow_changes = true > /etc/jolitz.conf'
 check_off deny 'rm /etc/jolitz.conf'
 check_off deny 'python3 -c "open(\"/etc/jolitz.conf\",\"w\")"'
+check_off deny 'echo "allow_changes = true" >| /etc/jolitz.conf'
+check_off deny "sed -Ei 's/false/true/' /etc/jolitz.conf"
+check_off deny "sed --in-place 's/false/true/' /etc/jolitz.conf"
 check_off deny 'JOLITZ_GUARD_DISABLE=1 fdisk /dev/sda'
 
 # --- the guard's own files -------------------------------------
@@ -1498,6 +1695,25 @@ for TOOL in Edit Write NotebookEdit; do
       "mode for $TOOL"
   fi
 done
+
+# Every guard entry must block when the hook itself fails: a hook
+# that crashes, times out or finds no jq fails OPEN unless the
+# same hook object says "onFailure": "block". Checked per hook
+# object, so a key on one entry cannot stand in for another.
+if command -v jq >/dev/null 2>&1; then
+  if jq -e '[.hooks[][] | .hooks[]?
+      | select((.command // "") | test("guard-taboos\\.sh"))]
+      | length > 0 and all(.onFailure == "block")' \
+      "$CLAUDE_DIR/settings.json" >/dev/null 2>&1; then
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1))
+    echo "FAIL: settings.json runs guard-taboos.sh without" \
+      '"onFailure": "block" in the same hook object'
+  fi
+else
+  echo "SKIP: the onFailure check needs jq"
+fi
 
 # --- no negated hit() may remain -------------------------------
 # A rule of the form  hit X && ! hit Y  evaluates Y against the
