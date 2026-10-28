@@ -767,8 +767,10 @@ esac
 # they become _, so sed "s/ .*//" stays out of scope while
 # ".cl"* does not. A $ expands inside double quotes too, and an
 # unclosed quote counts as in scope. Accepted false positive:
-# such a command may only read. Not closable: a name built in a
-# variable first (d=.cla; ${d}ude).
+# such a command may only read. Not closable: a name built at run
+# time, in a variable (d=.cla; ${d}ude) or a command substitution
+# ($(printf .cla)ude). Every $( cannot count, or cp f
+# f.bak.$(date +%F) could not run. The guard is a backstop.
 GLOBBED=$(printf '%s\n' "$LC_CMD" | LC_ALL=C awk '
   BEGIN { q = "" }
   {
@@ -796,6 +798,12 @@ GLOBBED=$(printf '%s\n' "$LC_CMD" | LC_ALL=C awk '
 if printf '%s\n' "$GLOBBED" \
   | LC_ALL=C grep -Eq \
     '(^|[[:space:]/=<>:])(\.(c(l(a(u(de?)?)?)?)?)?[][*?{$]|\{[^[:space:]/]*\.)'; then
+  IN_CLAUDE=1
+fi
+# ANSI-C quoting with a hex, octal or Unicode escape spells any
+# name ($'\x2eclaude'). $'\t' and friends stay out of scope.
+if printf '%s\n' "$CMD" \
+  | LC_ALL=C grep -Eq "\\\$'[^']*\\\\([xuU]|[0-7])"; then
   IN_CLAUDE=1
 fi
 if [ "$IN_CLAUDE" -eq 1 ]; then
@@ -844,7 +852,9 @@ ls in a call of their own"
       | while IFS= read -r seg; do
           [ -n "$seg" ] || continue
           # The flags as the shell sees them, quotes removed
-          # (-"delete", --"output").
+          # (-"delete", --"output"). A brace or $ in a find or git
+          # segment can build a flag (-{delete,true}), so it does
+          # not pass.
           uq=$(printf "%s" "$seg" | tr -d "\"'\\\\")
           # git log/diff/show --output writes a file, grep -O and
           # --ext-diff/--textconv run a program. git takes any
@@ -855,13 +865,13 @@ ls in a call of their own"
           if printf '%s\n' "$seg" | grep -Eq "$READONLY" \
             || { printf '%s\n' "$seg" | grep -Eq "$READGIT" \
               && ! printf '%s\n' "$uq" | grep -Eq \
-                '(^| )-[A-Za-z]*O|(^| )--(op|ou|ex|te)[-a-z]*(=| |$)'; }
+                '[{$]|(^| )-[A-Za-z]*O|(^| )--(op|ou|ex|te)[-a-z]*(=| |$)'; }
           then
             continue
           fi
           if printf '%s\n' "$seg" | grep -Eq '^find( |$)' \
             && ! printf '%s\n' "$uq" \
-              | grep -Eq '(^| )-(delete|exec|execdir|ok|okdir|fprint0?|fprintf|fls)( |$)'
+              | grep -Eq '[{$]|(^| )-(delete|exec|execdir|ok|okdir|fprint0?|fprintf|fls)( |$)'
           then
             continue
           fi
