@@ -170,7 +170,7 @@ zypper install -y mise
 
 ## SSH Non-Interactive Shell Setup
 
-**This is critical.** All heinzel work runs via
+**This is critical.** All jolitz work runs via
 `ssh user@host "command"` — a non-interactive,
 non-login shell where `.bashrc` is typically not
 sourced.

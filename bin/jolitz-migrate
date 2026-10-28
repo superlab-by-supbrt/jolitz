@@ -1,15 +1,15 @@
 #!/bin/sh
-# heinzel-migrate — bring local state up to date
-# after a pull: migrate user state from the 1.x
-# layout (rules/custom/ + repo-root opencode.json)
-# to the 2.0 layout (everything under memory/), and
-# create the SSH socket directory (2.20.0).
+# jolitz-migrate — bring local state up to date
+# after a pull: move user state from older layouts
+# (rules/custom/, a repo-root opencode.json, skill
+# overrides under their old names) to the current
+# one, and create the SSH socket directory.
 # Idempotent: re-running on an already-migrated
 # tree is a silent no-op.
 #
 # Called automatically by
 # .claude/hooks/check-updates.sh and by
-# bin/heinzel-update. Safe to run by hand.
+# bin/jolitz-update. Safe to run by hand.
 set -e
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
@@ -45,10 +45,21 @@ if [ -f opencode.json.example ] \
   MOVED="$MOVED\n  opencode.json.example → memory/opencode.json.example"
 fi
 
+# Skill overrides follow the skills' names, which were
+# heinzel-* before 3.3.3-jolitz.3. An existing jolitz-*
+# file wins and the old one stays for the user to merge.
+for f in memory/custom-rules/heinzel-*.md; do
+  [ -e "$f" ] || continue
+  new="memory/custom-rules/jolitz-${f#memory/custom-rules/heinzel-}"
+  [ -e "$new" ] && continue
+  mv "$f" "$new"
+  MOVED="$MOVED\n  $f → $new"
+done
+
 if [ -n "$MOVED" ]; then
-  printf "heinzel 2.0 migration — moved user state under memory/:%b\n" "$MOVED"
+  printf "jolitz migration — moved user state:%b\n" "$MOVED"
   echo "Review any personal scripts or cron jobs that"
-  echo "reference the old paths. See CHANGELOG.md 2.0.0."
+  echo "reference the old paths."
 fi
 
 # SSH connection sharing needs its socket directory
@@ -58,4 +69,4 @@ fi
 # update started with the old settings, and this
 # script runs from the new tree. Last, so a failure
 # here cannot stop the moves above.
-mkdir -p -m 700 "$HOME/.cache/heinzel" || true
+mkdir -p -m 700 "$HOME/.cache/jolitz" || true

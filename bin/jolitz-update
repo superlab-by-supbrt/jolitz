@@ -1,13 +1,13 @@
 #!/bin/sh
-# heinzel-update — update, pin, or check heinzel version.
+# jolitz-update — update, pin, or check jolitz version.
 #
 # Usage:
-#   heinzel-update            Pull latest from main
-#   heinzel-update --check    Show current version and
+#   jolitz-update            Pull latest from main
+#   jolitz-update --check    Show current version and
 #                             check for updates
-#   heinzel-update --pin VER  Pin to a version tag
+#   jolitz-update --pin VER  Pin to a version tag
 #                             (e.g. --pin v0.1.0)
-#   heinzel-update --unpin    Return to main and pull
+#   jolitz-update --unpin    Return to main and pull
 set -e
 
 # Find the repo root (this script lives in bin/).
@@ -38,7 +38,7 @@ show_changelog_section() {
 
 case "${1:-}" in
   --check)
-    echo "heinzel $(current_version)"
+    echo "jolitz $(current_version)"
     BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || true)
     if [ -z "$BRANCH" ]; then
       TAG=$(git describe --tags --exact-match 2>/dev/null || true)
@@ -67,7 +67,7 @@ case "${1:-}" in
     ;;
 
   --pin)
-    VER="${2:?Usage: heinzel-update --pin VERSION (e.g. v2.0.0)}"
+    VER="${2:?Usage: jolitz-update --pin VERSION (e.g. v2.0.0)}"
     # Fresh/shallow clones may not have tags yet.
     # Fetch them before checking so --pin can reach
     # remote-only tags.
@@ -79,19 +79,19 @@ case "${1:-}" in
       exit 1
     fi
     git checkout "$VER"
-    echo "heinzel pinned to $VER ($(current_version))"
+    echo "jolitz pinned to $VER ($(current_version))"
     echo "Auto-update is disabled while pinned."
-    echo "Run 'heinzel-update --unpin' to return to main."
+    echo "Run 'jolitz-update --unpin' to return to main."
     ;;
 
   --unpin)
     git checkout main
     git pull --ff-only --quiet
-    echo "heinzel unpinned — now on main ($(current_version))"
+    echo "jolitz unpinned — now on main ($(current_version))"
     ;;
 
   --help|-h)
-    echo "Usage: heinzel-update [--check|--pin VER|--unpin]"
+    echo "Usage: jolitz-update [--check|--pin VER|--unpin]"
     echo ""
     echo "  (no args)   Pull latest from main"
     echo "  --check     Show version and update status"
@@ -117,7 +117,7 @@ case "${1:-}" in
     # on a diverged main. Capture the failure so
     # set -e doesn't kill us with a raw git error.
     if ! OUTPUT=$(git pull --ff-only --quiet 2>&1); then
-      echo "heinzel update failed: $OUTPUT"
+      echo "jolitz update failed: $OUTPUT"
       echo "Likely causes: local changes (run 'git status',"
       echo "stash them with 'git stash'), local commits on a"
       echo "diverged main, or no network. Fix and re-run."
@@ -128,19 +128,19 @@ case "${1:-}" in
     # Run the 1.x → 2.0 migration if needed.
     # Idempotent and silent when there's nothing
     # to do.
-    [ -f bin/heinzel-migrate ] && sh bin/heinzel-migrate
+    [ -f bin/jolitz-migrate ] && sh bin/jolitz-migrate
 
     if [ "$OLD_VERSION" = "$NEW_VERSION" ]; then
-      echo "heinzel $(current_version) — already up to date."
+      echo "jolitz $(current_version) — already up to date."
     else
-      echo "heinzel updated: $OLD_VERSION -> $NEW_VERSION"
+      echo "jolitz updated: $OLD_VERSION -> $NEW_VERSION"
       show_changelog_section "$NEW_VERSION"
     fi
     ;;
 
   *)
     echo "Unknown option: $1"
-    echo "Run 'heinzel-update --help' for usage."
+    echo "Run 'jolitz-update --help' for usage."
     exit 1
     ;;
 esac

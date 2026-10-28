@@ -1,6 +1,6 @@
 # Trailer
 
-The GIF at the top of the main README is not a recording.
+The trailer is not a recording.
 `make-trailer.py` draws every frame from a storyboard inside
 the script, so the trailer can be changed and rebuilt at any
 time.
@@ -9,7 +9,7 @@ time.
 
     python3 assets/trailer/make-trailer.py
 
-This writes `assets/heinzel-trailer.gif` and prints its length
+This writes `assets/jolitz-trailer.gif` and prints its length
 and size. It needs macOS (for the Menlo font), Python 3 with
 Pillow, and `ffmpeg`. Add `--mp4 trailer.mp4` for a video
 file as well.

@@ -3,5 +3,5 @@
 # shebang line (#!/bin/sh\r) silently breaks the
 # interpreter.
 *.sh             text eol=lf
-bin/heinzel-*    text eol=lf
+bin/jolitz-*    text eol=lf
 .claude/hooks/*  text eol=lf

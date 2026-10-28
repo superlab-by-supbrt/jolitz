@@ -1,19 +1,19 @@
 #!/bin/sh
-# heinzel-backup — back up or restore your memory/
+# jolitz-backup — back up or restore your memory/
 # tree. All user state lives under memory/, so the
 # whole backup is a single tar.gz of that one
 # directory.
 #
 # Usage:
-#   heinzel-backup                Create a backup in CWD
-#   heinzel-backup -o <path>      Write to an explicit path
-#   heinzel-backup --list         Dry run: list what would
+#   jolitz-backup                Create a backup in CWD
+#   jolitz-backup -o <path>      Write to an explicit path
+#   jolitz-backup --list         Dry run: list what would
 #                                 be archived
-#   heinzel-backup --restore <f>  Extract <f> into repo root
+#   jolitz-backup --restore <f>  Extract <f> into repo root
 #                                 (refuses to overwrite
 #                                 existing memory/ content
 #                                 unless --force is also set)
-#   heinzel-backup --help         Show this help
+#   jolitz-backup --help         Show this help
 set -e
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
@@ -23,7 +23,7 @@ ORIG_PWD=$(pwd)
 cd "$REPO_DIR"
 
 usage() {
-  awk '/^# heinzel-backup/{in_help=1} in_help{if(/^[^#]/)exit; sub(/^# ?/,""); print}' "$SELF"
+  awk '/^# jolitz-backup/{in_help=1} in_help{if(/^[^#]/)exit; sub(/^# ?/,""); print}' "$SELF"
 }
 
 # Resolve a user-supplied path against the directory
@@ -59,13 +59,13 @@ do_backup() {
   OUT="$1"
   if [ -z "$OUT" ]; then
     TS=$(date -u +%Y%m%d-%H%M%SZ)
-    OUT="heinzel-backup-$(archive_hostname)-$TS.tar.gz"
+    OUT="jolitz-backup-$(archive_hostname)-$TS.tar.gz"
   fi
   # Write relative to where the user invoked us, not
   # the repo root.
   OUT=$(resolve_path "$OUT")
   # Build a file list and hand it to tar via -T.
-  TMPLIST=$(mktemp "${TMPDIR:-/tmp}/heinzel-backup.XXXXXX")
+  TMPLIST=$(mktemp "${TMPDIR:-/tmp}/jolitz-backup.XXXXXX")
   trap 'rm -f "$TMPLIST"' EXIT
   archive_list > "$TMPLIST"
   if [ ! -s "$TMPLIST" ]; then
@@ -144,7 +144,7 @@ do_restore() {
   # dies mid-extraction can't leave a half-restored
   # memory/ behind. Only after tar succeeds does the
   # content move into place.
-  TMPEX=$(mktemp -d "${TMPDIR:-/tmp}/heinzel-restore.XXXXXX")
+  TMPEX=$(mktemp -d "${TMPDIR:-/tmp}/jolitz-restore.XXXXXX")
   trap 'rm -rf "$TMPEX"' EXIT
   tar xzf "$FILE" -C "$TMPEX"
   if [ ! -d "$TMPEX/memory" ]; then
@@ -201,7 +201,7 @@ case "$1" in
     ;;
   *)
     echo "error: unknown option: $1" >&2
-    echo "run 'heinzel-backup --help' for usage" >&2
+    echo "run 'jolitz-backup --help' for usage" >&2
     exit 2
     ;;
 esac

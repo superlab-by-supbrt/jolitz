@@ -31,7 +31,7 @@ Before starting:
    The shipped guard hook blocks `mkfs`, partition
    writers, and `dd` onto raw devices — exactly
    what this workflow runs by design. Ask the user
-   to relaunch with `HEINZEL_GUARD_DISABLE=1` set
+   to relaunch with `JOLITZ_GUARD_DISABLE=1` set
    in the environment (an inline assignment in a
    command does not work and is itself blocked),
    and to unset it again after the replacement.
@@ -93,10 +93,10 @@ system before it is wiped. Store it in
   you want to avoid host key change warnings
 
 **Never store private key material anywhere
-under the heinzel repo.** `pre-replacement.md`
+under the jolitz repo.** `pre-replacement.md`
 can be git-shared in team mode. Copy keys to a
 location outside the repo (e.g.
-`~/heinzel-keys/<hostname>/`) with `0600` file
+`~/jolitz-keys/<hostname>/`) with `0600` file
 and `0700` directory permissions, and record
 only that path in the inventory file. The
 general secrets-handling rule is in

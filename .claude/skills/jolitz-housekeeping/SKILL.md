@@ -1,7 +1,7 @@
 ---
-name: heinzel-housekeeping
+name: jolitz-housekeeping
 argument-hint: "[hostname]"
-description: Run a heinzel housekeeping (health) inspection on a
+description: Run a jolitz housekeeping (health) inspection on a
   server — disk, memory, load, pending updates, firewall, SSL
   certs, failed systemd units, logs, kernel reboot status, and
   service-specific checks. Use when the user asks to "run
@@ -12,18 +12,18 @@ description: Run a heinzel housekeeping (health) inspection on a
   CentOS, Fedora, SUSE) and macOS.
 ---
 
-# heinzel-housekeeping
+# jolitz-housekeeping
 
 Routine health inspection for a server or the local machine.
 **Never run automatically** — only on explicit user request. The
-whole of the heinzel first-connection onboarding pipeline still
+whole of the jolitz first-connection onboarding pipeline still
 applies before any of this runs.
 
 ## Workflow
 
 1. **Load overrides.** Before running any check, apply the full
-   heinzel rule-override chain (later wins):
-   - `memory/custom-rules/heinzel-housekeeping.md` if present
+   jolitz rule-override chain (later wins):
+   - `memory/custom-rules/jolitz-housekeeping.md` if present
      (global custom overrides for this skill — `## Add:`,
      `## Replace:`, `## Remove:` prefixes per `CLAUDE.md`).
    - `memory/housekeeping.md` if present (additional cross-
@@ -54,7 +54,7 @@ applies before any of this runs.
 7. **Log the summary** to the system journal and mirror to the
    local changelog per `rules/changelog.md`:
 
-       logger -t heinzel "Housekeeping: 1 CRITICAL, 2 WARN, \
+       logger -t jolitz "Housekeeping: 1 CRITICAL, 2 WARN, \
        all services OK"
 
 ## References

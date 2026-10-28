@@ -34,13 +34,13 @@ plugin version.
 
 ## Journal Replacement (Activity Check, Changelog)
 
-There is no journal. `logger -t heinzel` writes to
+There is no journal. `logger -t jolitz` writes to
 `/var/log/syslog`, and `/var/log` is a 128 MB tmpfs:
-**every heinzel line is lost at the next reboot.**
+**every jolitz line is lost at the next reboot.**
 
-- Keep logging with `logger -t heinzel` — it is what
+- Keep logging with `logger -t jolitz` — it is what
   other admins on the box see.
-- Activity check: `grep -h heinzel /var/log/syslog*`.
+- Activity check: `grep -h jolitz /var/log/syslog*`.
   An empty result after a recent reboot means
   nothing; say so instead of reporting "no activity".
 - The local changelog

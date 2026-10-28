@@ -3,7 +3,7 @@
 Before editing any config file, back it up:
 
 ```
-BACKUP_DIR="/var/backups/heinzel"
+BACKUP_DIR="/var/backups/jolitz"
 mkdir -p "$BACKUP_DIR"
 command cp /etc/some/config.conf \
   "$BACKUP_DIR/config.conf.$(date +%Y%m%d-%H%M%S)"
@@ -11,7 +11,7 @@ command cp /etc/some/config.conf \
 find "$BACKUP_DIR" -type f -mtime +30 -delete
 ```
 
-In unprivileged mode, use `~/.heinzel-backups/` for
+In unprivileged mode, use `~/.jolitz-backups/` for
 user-owned files. System config files cannot be
 edited — defer those to the sysadmin report.
 
@@ -36,7 +36,7 @@ Affected paths include (but are not limited to):
 - `/etc/profile.d/`
 
 When editing a file in one of those directories, write
-the backup to `/var/backups/heinzel/` only. Never leave
+the backup to `/var/backups/jolitz/` only. Never leave
 it in the source directory, not even with a `.bak` or
 timestamped suffix:
 
@@ -50,7 +50,7 @@ timestamped suffix:
 
 If a session uncovers an existing in-place backup in
 one of those directories, move it to
-`/var/backups/heinzel/` rather than leaving it where
+`/var/backups/jolitz/` rather than leaving it where
 it is.
 
 ## Verify cross-backups at the receiver, not the source

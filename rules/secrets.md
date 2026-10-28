@@ -1,16 +1,16 @@
 # Secrets Hygiene
 
 Secrets are objects to manage, never content to
-display. Heinzel routinely works next to private
+display. jolitz routinely works next to private
 keys, password files, and tokens — none of their
 values may ever appear in the conversation, in
 reports, in memory files, in changelogs, or in
 emails.
 
-This rule governs how heinzel handles secrets.
+This rule governs how jolitz handles secrets.
 Detecting *misconfigured* secrets (world-readable
 keys, weak permissions) is the job of the
-`heinzel-security` skill.
+`jolitz-security` skill.
 
 ## What Counts as a Secret
 
@@ -87,7 +87,7 @@ this file:
   fine (`ls -l`, `stat`).
 - Tools that read the file on their own (a service,
   `docker compose` loading an `.env`) may still use
-  it. The rule covers what heinzel puts into the
+  it. The rule covers what jolitz puts into the
   conversation, reports, memory and changelogs.
 
 ## Commands That Leak
@@ -173,7 +173,7 @@ before falling back to an inline flag.
 ### When a Secret Has Already Leaked
 
 Sometimes the value is already in the journal,
-shell history, or a live process list: heinzel's
+shell history, or a live process list: jolitz's
 own earlier commands, or an operator who ran, say,
 `cypher-shell -p …` in a loop. Then:
 
@@ -189,16 +189,16 @@ own earlier commands, or an operator who ran, say,
   change the user must approve first. Explain the
   leak, recommend rotating, and get an explicit OK
   before touching the credential.
-  **One exception: a credential heinzel itself
+  **One exception: a credential jolitz itself
   created earlier in the same session, which nothing
   consumes yet.** The approval rule exists because
   rotation breaks every consumer of the old value —
-  when heinzel minted the secret minutes ago and the
-  only copies are the files heinzel just wrote, that
+  when jolitz minted the secret minutes ago and the
+  only copies are the files jolitz just wrote, that
   blast radius is zero and the cost of waiting is a
   live exposed credential. Rotate it immediately,
   then tell the user it happened and why. Do not
-  stretch this to any credential heinzel did not
+  stretch this to any credential jolitz did not
   create in this session, and do not stretch it to
   one that already has consumers.
 - **Rotation has side effects; keep them minimal.**
@@ -258,10 +258,10 @@ So when verifying that a credential works:
 
   ```
   runuser -l app -c '… probe …' \
-    > /root/heinzel-scratch/probe.log 2>&1 || true
+    > /root/jolitz-scratch/probe.log 2>&1 || true
   grep -E '^PROBE_(OK|FAIL)' \
-    /root/heinzel-scratch/probe.log
-  shred -u /root/heinzel-scratch/probe.log
+    /root/jolitz-scratch/probe.log
+  shred -u /root/jolitz-scratch/probe.log
   ```
 
   Have the probe itself catch its own errors and emit
@@ -282,9 +282,9 @@ If a value does escape anyway, treat it as
 compromised and follow *When a Secret Has Already
 Leaked* above.
 
-## Redaction in Heinzel Artifacts
+## Redaction in jolitz Artifacts
 
-Changelog entries (`logger -t heinzel`),
+Changelog entries (`logger -t jolitz`),
 `memory.md`, `todo.md`, pre-replacement
 inventories, and email bodies record that a
 credential exists, its location, and its
@@ -293,20 +293,20 @@ permissions — never its value.
 Good:
 
 ```
-logger -t heinzel "Rotated DB password for app \
+logger -t jolitz "Rotated DB password for app \
 (value in /var/www/app/.env, mode 600)"
 ```
 
 Bad:
 
 ```
-logger -t heinzel "Set DB password to hunter2"
+logger -t jolitz "Set DB password to hunter2"
 ```
 
 ## Email Attachments
 
 Files likely to contain secrets are
-**default-refuse** for the `heinzel-email` skill:
+**default-refuse** for the `jolitz-email` skill:
 `.env`, `id_*`, `*_key`, `*.pem` with private key
 material, `shadow`, `msmtprc`, `.netrc`, cloud
 credential files, anything under
@@ -319,12 +319,12 @@ lines.
 ## Never Into the Repo Tree
 
 Never copy key material or credential files
-anywhere under the heinzel repo. `memory/` (and
+anywhere under the jolitz repo. `memory/` (and
 `memory/servers/` in team mode) can be shared via
 git — a committed key is a published key. This
 generalizes the rule in `rules/os-replacement.md`
 → Certificates: store such material outside the
-repo (e.g. `~/heinzel-keys/<hostname>/` with mode
+repo (e.g. `~/jolitz-keys/<hostname>/` with mode
 `0700` on the directory and `0600` on files) and
 record only the *path* in memory or inventories.
 
@@ -344,7 +344,7 @@ directly. Then:
   install -m 600 /dev/null /etc/app/secret.conf
   ```
 
-- Suggest pointing heinzel at an existing file
+- Suggest pointing jolitz at an existing file
   path next time instead of pasting.
 - If the value transited an untrusted channel,
   recommend rotating it.

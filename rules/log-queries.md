@@ -10,8 +10,8 @@ not in a pipe behind it.**
 ## journald
 
 - **Count with `-n`, never with `| tail`.**
-  `journalctl -t heinzel -n 20` reads from the end
-  of the journal. `journalctl -t heinzel | tail -n
+  `journalctl -t jolitz -n 20` reads from the end
+  of the journal. `journalctl -t jolitz | tail -n
   20` formats every entry since the journal began
   and keeps twenty.
 - **Filter by field.** `-t <identifier>`,
@@ -19,7 +19,7 @@ not in a pipe behind it.**
   `-p warning`. The journal indexes these and skips
   everything else.
 - **Search text with `-g`, never with `| grep`.**
-  `journalctl --since "48 hours ago" -g heinzel -n
+  `journalctl --since "48 hours ago" -g jolitz -n
   20`. A pattern in lowercase matches regardless of
   case. A system without pattern support says so
   ("Compiled without pattern matching support");
@@ -33,10 +33,10 @@ not in a pipe behind it.**
   `-o cat` drops timestamp and host when only the
   messages matter.
 
-`grep heinzel` over the whole journal does not find
-what Heinzel *wrote*: it finds the logins and sudo
-lines of the `heinzel` account. What Heinzel writes
-carries the identifier `heinzel` (`-t heinzel`, see
+`grep jolitz` over the whole journal does not find
+what jolitz *wrote*: it finds the logins and sudo
+lines of the `jolitz` account. What jolitz writes
+carries the identifier `jolitz` (`-t jolitz`, see
 `rules/activity-check.md`).
 
 ## Log files
@@ -56,7 +56,7 @@ give `--last <n>m` or `--start`, and a
 ## One Answer Is Enough
 
 When a precise query has answered the question
-(`-t heinzel --since "48 hours ago"` returns
+(`-t jolitz --since "48 hours ago"` returns
 nothing), report it. Do not follow it with a broad
 cross-check that reads the whole log. If you need
 one, make it as precise as the first.

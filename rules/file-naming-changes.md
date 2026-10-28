@@ -57,7 +57,7 @@ written files, where mtime may sit either side of the
 rotation window; the resulting duplicates are how you
 find out the rule was wrong.
 
-Write the mapping to `/var/backups/heinzel/` as
+Write the mapping to `/var/backups/jolitz/` as
 `<scheme>-rename-map-<timestamp>.txt` (new TAB old) so
 the rename can be replayed backwards, and use
 `command mv -n` so an unforeseen collision cannot

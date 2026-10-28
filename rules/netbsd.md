@@ -144,19 +144,19 @@ without it.
   (`messages.0.gz`).
 - After an unclean shutdown `messages` can hold NUL
   bytes, and `grep` then prints only `Binary file
-  matches`. Use `grep -a`, also for the heinzel
-  journal (`grep -a heinzel /var/log/messages`).
+  matches`. Use `grep -a`, also for the jolitz
+  journal (`grep -a jolitz /var/log/messages`).
 
 ## Common Pitfalls
 
 - **No `sudo`, no `doas`** in base. Installing one
   (`pkgin install sudo`) and its sudoers line is
   ordinary work that asks first; the sudoers write
-  needs the operator's `HEINZEL_GUARD_DISABLE`.
+  needs the operator's `JOLITZ_GUARD_DISABLE`.
 - **No `daemon(8)`**: the rollback timer uses the
   `nohup` variant. Disarm with `pkill -F`, never
   `pkill -f '<pattern>'`: the pattern also matches
-  the shell running the command and kills heinzel's
+  the shell running the command and kills jolitz's
   own session.
 - **ntpd and IPv6**: where the host has an IPv6
   route that does not reach the internet (UTM's

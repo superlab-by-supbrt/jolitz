@@ -25,7 +25,7 @@ check() {
   EXPECT=$1
   CMDSTR=$2
   OUT=$(json_for "$CMDSTR" \
-    | env -u HEINZEL_GUARD_DISABLE sh "$HOOK")
+    | env -u JOLITZ_GUARD_DISABLE sh "$HOOK")
   if printf '%s' "$OUT" \
     | grep -q '"permissionDecision":"deny"'; then
     GOT=deny
@@ -69,8 +69,8 @@ check deny "sed -i 's/^/#/' /etc/ssh/sshd_config"
 check deny 'ssh h "echo PermitRootLogin yes >> /etc/ssh/sshd_config"'
 check deny 'tee /etc/ssh/sshd_config < new.conf'
 check deny 'vi /etc/ssh/sshd_config'
-check deny 'HEINZEL_GUARD_DISABLE=1 mkfs.ext4 /dev/sda1'
-check deny 'export HEINZEL_GUARD_DISABLE=1; fdisk /dev/sda'
+check deny 'JOLITZ_GUARD_DISABLE=1 mkfs.ext4 /dev/sda1'
+check deny 'export JOLITZ_GUARD_DISABLE=1; fdisk /dev/sda'
 
 # --- exemption must belong to the taboo invocation (issue #4) ---
 # A -l / -r / -c anywhere in the string used to disarm the rule,
@@ -278,13 +278,13 @@ check deny "perl -e 'open(D,\">\",\"/dev/nvme0n1\"); print D chr(0)'"
 check deny "node -e \"require('fs').writeFileSync('/dev/vda','')\""
 
 # --- SSH connection sharing (rules/ssh-connections.md) ---------
-# heinzel's control socket must not read as key material, or
+# jolitz's control socket must not read as key material, or
 # every remote rm/mv/chmod sent with the standard options is
 # denied (see the accepted false positives in the guard).
-check pass 'ssh -o ControlMaster=auto -o ControlPath=~/.cache/heinzel/ssh-%C root@h "rm -f /var/tmp/old.log; chmod 644 /etc/motd"'
+check pass 'ssh -o ControlMaster=auto -o ControlPath=~/.cache/jolitz/ssh-%C root@h "rm -f /var/tmp/old.log; chmod 644 /etc/motd"'
 
 # --- the command prefix (issue #77) -----------------------------
-# heinzel writes cp/mv/rm as `command cp` to skip an rm -i alias.
+# jolitz writes cp/mv/rm as `command cp` to skip an rm -i alias.
 # The prefix must not hide a taboo from the guard.
 check deny 'command rm -rf ~/.ssh'
 check deny 'command mv /etc/ssh/sshd_config /tmp/'
@@ -292,7 +292,7 @@ check deny 'command cp /tmp/x /etc/sudoers'
 check deny 'command dd if=/dev/zero of=/dev/sda'
 check deny 'command fdisk /dev/sda'
 check deny 'ssh root@h "command rm /etc/ssh/ssh_host_ed25519_key"'
-check pass 'command cp -p /etc/nginx/nginx.conf /var/backups/heinzel/'
+check pass 'command cp -p /etc/nginx/nginx.conf /var/backups/jolitz/'
 check pass 'command rm /var/tmp/old.log'
 
 # --- must pass -------------------------------------------------
@@ -319,9 +319,9 @@ check pass 'df -h'
 check pass 'echo halting services'
 check pass 'dd if=/dev/sda of=/root/disk-backup.img'
 check pass 'uname -a'
-check pass 'echo see HEINZEL_GUARD_DISABLE in the docs'
+check pass 'echo see JOLITZ_GUARD_DISABLE in the docs'
 
-# --- boot loaders and firmware variables (Heinzel Pro, 3.0) ----
+# --- boot loaders and firmware variables ----------------------
 # Every effect once as itself, once inside ssh host "...", once
 # through a language runtime, and its read-only form passes.
 check deny 'efibootmgr -c -d /dev/sda -p 1 -L Debian -l \EFI\debian\grubx64.efi'
@@ -377,7 +377,7 @@ check pass 'cat /sys/firmware/efi/efivars/BootOrder-8be4df61-93ca-11d2-aa0d-00e0
 check pass 'cat /boot/loader.conf'
 check pass 'grep -r GRUB_CMDLINE /etc/default/grub'
 
-# --- accounts and sudo (Heinzel Pro, 3.0) ----------------------
+# --- accounts and sudo ----------------------------------------
 # Deleting an account or a group, and any write to sudoers or an
 # account file, is denied. Creating an account and resetting a
 # password stay with the prompt and pass here.
@@ -451,37 +451,37 @@ check pass 'sysadminctl -secureTokenStatus alice'
 check pass 'groups alice'
 check pass 'ssh root@h "cat /etc/sudoers.d/deploy"'
 
-# The server lock (/etc/heinzel.conf, rules/access-control.md).
-# The machine's owner sets it; heinzel reads it and never lifts
+# The server lock (/etc/jolitz.conf, rules/access-control.md).
+# The machine's owner sets it; jolitz reads it and never lifts
 # it, by any of the ways a file gets written, moved or deleted.
-check deny 'echo "allow_changes = true" > /etc/heinzel.conf'
-check deny 'echo x >> /etc/heinzel.conf'
-check deny "sed -i 's/false/true/' /etc/heinzel.conf"
-check deny 'rm /etc/heinzel.conf'
-check deny 'rm -f /private/etc/heinzel.conf'
-check deny 'mv /etc/heinzel.conf /etc/heinzel.conf.off'
-check deny 'chmod 000 /etc/heinzel.conf'
-check deny 'truncate -s 0 /etc/heinzel.conf'
-check deny 'cp heinzel.conf /etc/heinzel.conf'
-check deny 'tee /etc/heinzel.conf < x'
-check deny 'vi /etc/heinzel.conf'
-check deny 'ssh root@h "rm /etc/heinzel.conf"'
-check deny 'ssh root@h "sed -i s/false/true/ /etc/heinzel.conf"'
-check deny 'python3 -c "import os; os.remove(\"/etc/heinzel.conf\")"'
+check deny 'echo "allow_changes = true" > /etc/jolitz.conf'
+check deny 'echo x >> /etc/jolitz.conf'
+check deny "sed -i 's/false/true/' /etc/jolitz.conf"
+check deny 'rm /etc/jolitz.conf'
+check deny 'rm -f /private/etc/jolitz.conf'
+check deny 'mv /etc/jolitz.conf /etc/jolitz.conf.off'
+check deny 'chmod 000 /etc/jolitz.conf'
+check deny 'truncate -s 0 /etc/jolitz.conf'
+check deny 'cp jolitz.conf /etc/jolitz.conf'
+check deny 'tee /etc/jolitz.conf < x'
+check deny 'vi /etc/jolitz.conf'
+check deny 'ssh root@h "rm /etc/jolitz.conf"'
+check deny 'ssh root@h "sed -i s/false/true/ /etc/jolitz.conf"'
+check deny 'python3 -c "import os; os.remove(\"/etc/jolitz.conf\")"'
 # Other spellings of the same file: a case-insensitive filesystem
 # (macOS), // and /./, a relative path after cd, find -delete.
-check deny 'rm /ETC/HEINZEL.CONF'
-check deny 'rm /etc//heinzel.conf'
-check deny 'rm /etc/./heinzel.conf'
-check deny 'cd /etc && rm heinzel.conf'
-check deny 'cd /etc; echo allow_changes=true > heinzel.conf'
-check deny 'find /etc -name heinzel.conf -delete'
-check deny 'ln -sf /dev/null /etc/heinzel.conf'
-check pass 'cat /etc/heinzel.conf'
-check pass 'ssh root@h "cat /etc/heinzel.conf"'
-check pass 'ssh root@h "if [ -e /etc/heinzel.conf ]; then cat /etc/heinzel.conf || echo HEINZEL_CONF_UNREADABLE; else echo HEINZEL_CONF_ABSENT; fi"'
-check pass 'grep -i allow_changes /etc/heinzel.conf'
-check pass 'ls -l /etc/heinzel.conf'
+check deny 'rm /ETC/JOLITZ.CONF'
+check deny 'rm /etc//jolitz.conf'
+check deny 'rm /etc/./jolitz.conf'
+check deny 'cd /etc && rm jolitz.conf'
+check deny 'cd /etc; echo allow_changes=true > jolitz.conf'
+check deny 'find /etc -name jolitz.conf -delete'
+check deny 'ln -sf /dev/null /etc/jolitz.conf'
+check pass 'cat /etc/jolitz.conf'
+check pass 'ssh root@h "cat /etc/jolitz.conf"'
+check pass 'ssh root@h "if [ -e /etc/jolitz.conf ]; then cat /etc/jolitz.conf || echo JOLITZ_CONF_UNREADABLE; else echo JOLITZ_CONF_ABSENT; fi"'
+check pass 'grep -i allow_changes /etc/jolitz.conf'
+check pass 'ls -l /etc/jolitz.conf'
 
 # --- every code block the skills and rules ship passes ---------
 # A taboo word used as data in a documented probe is denied like
@@ -489,8 +489,8 @@ check pass 'ls -l /etc/heinzel.conf'
 # security skill once skipped inert login shells by a regex of
 # their names; the deny pins why that shape was retired. A block
 # meant to be denied says so after the language on its fence:
-# `operator` (the user runs it, heinzel never does). The old
-# `guard-off` fence (heinzel ran it after the operator disarmed
+# `operator` (the user runs it, jolitz never does). The old
+# `guard-off` fence (jolitz ran it after the operator disarmed
 # the guard) left with the OS-replacement rules in 3.0; it is
 # still skipped so a stray one never passes as shipped code. The
 # file name in each block path keeps names unique when find
@@ -526,12 +526,12 @@ NGUARDOFF=0
 while read -r md; do
   [ -n "$md" ] || continue
   NGUARDOFF=$((NGUARDOFF + 1))
-  if grep -q 'HEINZEL_GUARD_DISABLE' "$md"; then
+  if grep -q 'JOLITZ_GUARD_DISABLE' "$md"; then
     PASS=$((PASS + 1))
   else
     FAIL=$((FAIL + 1))
     echo "FAIL: $md has guard-off blocks but never names" \
-      "HEINZEL_GUARD_DISABLE"
+      "JOLITZ_GUARD_DISABLE"
   fi
 done <<EOF
 $(grep -rlE --include='*.md' \
@@ -554,7 +554,7 @@ PROBE=$(awk '/^## System Accounts with Login Shells/ { s = 1 }
   s && b && /^```$/ { exit }
   b { print }
   s && /^```bash$/ { b = 1 }' \
-  "$CLAUDE_DIR/skills/heinzel-security/references/user-accounts.md")
+  "$CLAUDE_DIR/skills/jolitz-security/references/user-accounts.md")
 WANT="bash empty ksh postgres py root "
 GOT=$(printf '%s\n' \
   'root:x:0:0:root:/root:/bin/bash' \
@@ -726,9 +726,9 @@ check pass 'ls -ln /etc/ssh/sshd_config'
 # are the ones that make the exemption safe; if any of them ever
 # flips to pass, the exemption has become a hole.
 #
-# The exact command that exposed this: heinzel's own changelog
+# The exact command that exposed this: jolitz's own changelog
 # write, blocked over the word inside the prose.
-check pass 'cat >> /Users/s/heinzel/memory/servers/h/changelog.log <<EOF
+check pass 'cat >> /Users/s/jolitz/memory/servers/h/changelog.log <<EOF
   Verify: clean shutdown checkpoint + database ready.
 EOF'
 check pass 'cat >> notes.md <<EOF
@@ -786,7 +786,7 @@ fdisk /dev/sda'
 check deny 'cat > /dev/sda <<EOF
 anything
 EOF'
-check deny 'cat > /etc/cron.d/heinzel-job <<EOF
+check deny 'cat > /etc/cron.d/jolitz-job <<EOF
 0 3 * * * root shutdown -h now
 EOF'
 check deny 'cat > /etc/systemd/system/x.service <<EOF
@@ -865,7 +865,7 @@ printf '#!/bin/sh\nexit 2\n' > "$SHIM2/awk"
 chmod +x "$SHIM2/awk"
 OUT=$(json_for 'cat >> /tmp/doc.md <<EOF
 shutdown -h now
-EOF' | env -u HEINZEL_GUARD_DISABLE PATH="$SHIM2:$PATH" sh "$HOOK")
+EOF' | env -u JOLITZ_GUARD_DISABLE PATH="$SHIM2:$PATH" sh "$HOOK")
 if printf '%s' "$OUT" \
   | grep -q '"permissionDecision":"deny"'; then
   PASS=$((PASS + 1))
@@ -877,7 +877,7 @@ rm -rf "$SHIM2"
 
 # --- fallback path: malformed (non-JSON) stdin -----------------
 OUT=$(printf '%s' 'mkfs.ext4 /dev/sda1' \
-  | env -u HEINZEL_GUARD_DISABLE sh "$HOOK")
+  | env -u JOLITZ_GUARD_DISABLE sh "$HOOK")
 if printf '%s' "$OUT" \
   | grep -q '"permissionDecision":"deny"'; then
   PASS=$((PASS + 1))
@@ -887,12 +887,12 @@ else
 fi
 
 # --- the operator override -------------------------------------
-# HEINZEL_GUARD_DISABLE=1, exported by the operator, lifts the
+# JOLITZ_GUARD_DISABLE=1, exported by the operator, lifts the
 # taboos for a session. Attack tools, the server lock and a
 # second assignment of the variable stay blocked.
 check_off() {
   EXPECT=$1
-  OUT=$(json_for "$2" | HEINZEL_GUARD_DISABLE=1 sh "$HOOK")
+  OUT=$(json_for "$2" | JOLITZ_GUARD_DISABLE=1 sh "$HOOK")
   if printf '%s' "$OUT" \
     | grep -q '"permissionDecision":"deny"'; then
     GOT=deny
@@ -913,10 +913,10 @@ check_off pass 'visudo -f /etc/sudoers.d/deploy'
 check_off pass 'sed -i s/a/b/ .claude/hooks/guard-taboos.sh'
 check_off deny 'hashcat -m 0 hashes.txt words.txt'
 check_off deny 'apt-get install -y hydra'
-check_off deny 'echo allow_changes = true > /etc/heinzel.conf'
-check_off deny 'rm /etc/heinzel.conf'
-check_off deny 'python3 -c "open(\"/etc/heinzel.conf\",\"w\")"'
-check_off deny 'HEINZEL_GUARD_DISABLE=1 fdisk /dev/sda'
+check_off deny 'echo allow_changes = true > /etc/jolitz.conf'
+check_off deny 'rm /etc/jolitz.conf'
+check_off deny 'python3 -c "open(\"/etc/jolitz.conf\",\"w\")"'
+check_off deny 'JOLITZ_GUARD_DISABLE=1 fdisk /dev/sda'
 
 # --- the guard's own files -------------------------------------
 # A rewritten hook or an env block in a settings file disarms the
@@ -925,7 +925,7 @@ check deny 'echo x >> .claude/settings.local.json'
 check deny 'sed -i s/deny/pass/ .claude/hooks/guard-taboos.sh'
 check deny 'rm ~/proj/.claude/hooks/guard-taboos.sh'
 check deny 'cp /tmp/s.json .claude/settings.json'
-check deny "jq '.env.HEINZEL_GUARD_DISABLE=\"1\"' s.json"
+check deny "jq '.env.JOLITZ_GUARD_DISABLE=\"1\"' s.json"
 check pass 'cat .claude/settings.json'
 check pass 'grep -n deny .claude/hooks/guard-taboos.sh'
 # Only reads pass next to .claude: a shell running a script there
@@ -941,12 +941,12 @@ check deny 'chflags nouchg .claude/hooks/guard-taboos.sh'
 check deny 'ls .claude; tee settings.json < /tmp/s'
 check pass 'ls .claude 2>/dev/null'
 check pass 'ls -la .claude/hooks/ 2>&1'
-check pass 'python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py orphans > scan.json'
+check pass 'python3 .claude/skills/jolitz-macos-cleanup/scripts/scan.py orphans > scan.json'
 check_cwd() {
   # $1 expected, $2 cwd, $3 command
   OUT=$(jq -n --arg c "$2" --arg x "$3" \
     '{cwd:$c,tool_name:"Bash",tool_input:{command:$x}}' \
-    | env -u HEINZEL_GUARD_DISABLE sh "$HOOK")
+    | env -u JOLITZ_GUARD_DISABLE sh "$HOOK")
   if printf '%s' "$OUT" \
     | grep -q '"permissionDecision":"deny"'; then
     GOT=deny
@@ -972,8 +972,8 @@ if command -v jq >/dev/null 2>&1; then
   check_cwd pass /p/.claude/skills/x 'cat SKILL.md'
   # With the cwd inside .claude, the scanner's redirect names a
   # guard file.
-  check_cwd deny /p/.claude 'python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py > settings.json'
-  check_cwd pass /p/.claude 'python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py orphans'
+  check_cwd deny /p/.claude 'python3 .claude/skills/jolitz-macos-cleanup/scripts/scan.py > settings.json'
+  check_cwd pass /p/.claude 'python3 .claude/skills/jolitz-macos-cleanup/scripts/scan.py orphans'
 fi
 # Case, parent references, /./ and other writers.
 check deny 'echo "{}" > .CLAUDE/Settings.json'
@@ -986,7 +986,7 @@ check deny 'dd if=/tmp/s of=.claude/settings.json'
 check deny 'git checkout HEAD~5 -- .claude/hooks/guard-taboos.sh'
 check deny 'tar -xf /tmp/x.tar .claude'
 check pass 'git log --oneline -- .claude/hooks/guard-taboos.sh'
-check pass '/usr/bin/python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py orphans > scan.json'
+check pass '/usr/bin/python3 .claude/skills/jolitz-macos-cleanup/scripts/scan.py orphans > scan.json'
 check deny '/usr/bin/python3 .claude/skills/x/../../hooks/y.py > scan.json'
 # The allow list: writers no deny list named, globs, a cd out of
 # skills/, substitutions, and the scanner's exact forms.
@@ -997,20 +997,20 @@ check deny 'python3 .claude/skills/*/x.py > settings.json'
 check deny 'cd .claude/skills && cd .. && touch settings.json'
 check deny 'echo $(cat .claude/settings.json)'
 check deny 'xargs -I{} cp {} .claude/settings.json < /tmp/l'
-check deny '/usr/bin/python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py orphans; rm .claude/settings.json'
-check deny '/usr/bin/python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py orphans > ../.claude/settings.json'
+check deny '/usr/bin/python3 .claude/skills/jolitz-macos-cleanup/scripts/scan.py orphans; rm .claude/settings.json'
+check deny '/usr/bin/python3 .claude/skills/jolitz-macos-cleanup/scripts/scan.py orphans > ../.claude/settings.json'
 check deny "$(printf 'echo x > .clau\342\200\213de/settings.json')"
 check deny "$(printf 'echo x > \305\277ettings.local.json')"
 check pass "$(printf 'ssh h \"grep Gr\303\274\303\237e /var/log/app.log\"; systemctl status x')"
 check pass 'cat .claude/settings.json | grep -n env'
 check pass 'find .claude -name "*.json"'
 check deny 'find .claude -name "*.json" -delete'
-check pass "$(printf '/usr/bin/python3 \\\n  .claude/skills/heinzel-macos-cleanup/scripts/scan.py orphans')"
-check pass 'python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py app "Microsoft Word"'
-check pass 'ssh -o BatchMode=yes -o ControlPath=~/.cache/heinzel/ssh-%C u@h /usr/bin/python3 - orphans < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
+check pass "$(printf '/usr/bin/python3 \\\n  .claude/skills/jolitz-macos-cleanup/scripts/scan.py orphans')"
+check pass 'python3 .claude/skills/jolitz-macos-cleanup/scripts/scan.py app "Microsoft Word"'
+check pass 'ssh -o BatchMode=yes -o ControlPath=~/.cache/jolitz/ssh-%C u@h /usr/bin/python3 - orphans < .claude/skills/jolitz-macos-cleanup/scripts/scan.py'
 # A newline after the scanner starts a second command.
-check deny "$(printf 'python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py\ncd .claude\nrm -rf hooks')"
-check deny "$(printf 'ssh h /usr/bin/python3 - < .claude/skills/heinzel-macos-cleanup/scripts/scan.py\nrm .claude/settings.json')"
+check deny "$(printf 'python3 .claude/skills/jolitz-macos-cleanup/scripts/scan.py\ncd .claude\nrm -rf hooks')"
+check deny "$(printf 'ssh h /usr/bin/python3 - < .claude/skills/jolitz-macos-cleanup/scripts/scan.py\nrm .claude/settings.json')"
 # git reads, but not its output and program flags.
 check deny 'git diff --output=.claude/hooks/guard-taboos.sh'
 check deny 'git log --output .claude/settings.json'
@@ -1026,13 +1026,13 @@ check pass 'git diff -- .claude/hooks/guard-taboos.sh'
 check pass 'git grep -n GUARD .claude'
 check pass 'git show HEAD:.claude/settings.json'
 # The scanner over ssh takes only the prescribed -o options.
-check deny 'ssh -oProxyCommand=/tmp/x h /usr/bin/python3 - < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
-check deny 'ssh -o ProxyCommand=/tmp/x h /usr/bin/python3 - < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
-check deny 'ssh -o LocalCommand=/tmp/x -o PermitLocalCommand=yes h /usr/bin/python3 - < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
-check deny 'ssh -Fcfg /usr/bin/python3 - < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
-check deny 'ssh -o BatchMode=yes -Esettings.json /usr/bin/python3 - < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
-check deny 'ssh -F /tmp/cfg h /usr/bin/python3 - < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
-check pass 'ssh -o BatchMode=yes -o ConnectTimeout=5 -o ControlMaster=auto -o ControlPath=~/.cache/heinzel/ssh-%C -o ControlPersist=10m -o Port=2222 root@h.example.com /usr/bin/python3 - app Word < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
+check deny 'ssh -oProxyCommand=/tmp/x h /usr/bin/python3 - < .claude/skills/jolitz-macos-cleanup/scripts/scan.py'
+check deny 'ssh -o ProxyCommand=/tmp/x h /usr/bin/python3 - < .claude/skills/jolitz-macos-cleanup/scripts/scan.py'
+check deny 'ssh -o LocalCommand=/tmp/x -o PermitLocalCommand=yes h /usr/bin/python3 - < .claude/skills/jolitz-macos-cleanup/scripts/scan.py'
+check deny 'ssh -Fcfg /usr/bin/python3 - < .claude/skills/jolitz-macos-cleanup/scripts/scan.py'
+check deny 'ssh -o BatchMode=yes -Esettings.json /usr/bin/python3 - < .claude/skills/jolitz-macos-cleanup/scripts/scan.py'
+check deny 'ssh -F /tmp/cfg h /usr/bin/python3 - < .claude/skills/jolitz-macos-cleanup/scripts/scan.py'
+check pass 'ssh -o BatchMode=yes -o ConnectTimeout=5 -o ControlMaster=auto -o ControlPath=~/.cache/jolitz/ssh-%C -o ControlPersist=10m -o Port=2222 root@h.example.com /usr/bin/python3 - app Word < .claude/skills/jolitz-macos-cleanup/scripts/scan.py'
 # Quotes, globs and braces that the shell turns into .claude.
 check deny 'echo x > .cla""ude/settings.json'
 check deny "echo x > .cla'u'de/settings.json"
@@ -1075,7 +1075,7 @@ SHIM=$(mktemp -d)
 printf '#!/bin/sh\nexit 2\n' > "$SHIM/awk"
 chmod +x "$SHIM/awk"
 OUT=$(json_for 'fdisk -l /dev/sda' \
-  | env -u HEINZEL_GUARD_DISABLE PATH="$SHIM:$PATH" sh "$HOOK")
+  | env -u JOLITZ_GUARD_DISABLE PATH="$SHIM:$PATH" sh "$HOOK")
 if printf '%s' "$OUT" \
   | grep -q '"permissionDecision":"deny"'; then
   PASS=$((PASS + 1))
@@ -1108,27 +1108,27 @@ check deny 'echo "editor -> $(readlink -f /usr/bin/editor)"'
 # --- rollback timer (rules/rollback-timer.md) ------------------
 # Every step of the recipe must pass, and a rollback script is
 # scanned like any other script: a taboo inside it still denies.
-check pass 'ssh root@h "cp -p /etc/netplan/50-cloud-init.yaml /var/backups/heinzel/50-cloud-init.yaml.20261018-0930"'
-check pass 'ssh root@h "cat > /var/backups/heinzel/rollback-20261018-0930.sh" <<'\''EOF'\''
+check pass 'ssh root@h "cp -p /etc/netplan/50-cloud-init.yaml /var/backups/jolitz/50-cloud-init.yaml.20261018-0930"'
+check pass 'ssh root@h "cat > /var/backups/jolitz/rollback-20261018-0930.sh" <<'\''EOF'\''
 #!/bin/sh
-cp -p /var/backups/heinzel/50-cloud-init.yaml.20261018-0930 /etc/netplan/50-cloud-init.yaml
+cp -p /var/backups/jolitz/50-cloud-init.yaml.20261018-0930 /etc/netplan/50-cloud-init.yaml
 netplan apply
-logger -t heinzel "rollback-20261018-0930 ran"
+logger -t jolitz "rollback-20261018-0930 ran"
 EOF'
-check pass 'ssh root@h "chmod 700 /var/backups/heinzel/rollback-20261018-0930.sh"'
-check pass 'ssh root@h "systemctl list-timers --all heinzel-rollback-*"'
-check pass 'ssh root@h "systemd-run --unit=heinzel-rollback-20261018-0930 --on-active=120 /var/backups/heinzel/rollback-20261018-0930.sh"'
-check pass 'ssh root@h "systemd-run --unit=heinzel-apply-20261018-0930 --wait netplan apply"'
+check pass 'ssh root@h "chmod 700 /var/backups/jolitz/rollback-20261018-0930.sh"'
+check pass 'ssh root@h "systemctl list-timers --all jolitz-rollback-*"'
+check pass 'ssh root@h "systemd-run --unit=jolitz-rollback-20261018-0930 --on-active=120 /var/backups/jolitz/rollback-20261018-0930.sh"'
+check pass 'ssh root@h "systemd-run --unit=jolitz-apply-20261018-0930 --wait netplan apply"'
 check pass 'ssh -o BatchMode=yes -o ConnectTimeout=5 -o ControlMaster=no -o ControlPath=none -o HostKeyAlias=h root@192.0.2.10 true'
-check pass 'ssh root@h "systemctl stop heinzel-rollback-20261018-0930.timer"'
-check pass 'ssh root@h "nft list ruleset > /var/backups/heinzel/ruleset-20261018-0930.nft"'
+check pass 'ssh root@h "systemctl stop jolitz-rollback-20261018-0930.timer"'
+check pass 'ssh root@h "nft list ruleset > /var/backups/jolitz/ruleset-20261018-0930.nft"'
 check pass 'ssh root@h "firewall-cmd --reload"'
-check pass 'ssh root@h "daemon -f -p /var/run/heinzel-rollback-20261018-0930.pid sh -c '\''sleep 120; sh /var/backups/heinzel/rollback-20261018-0930.sh'\''"'
-check pass 'ssh root@h "pkill -F /var/run/heinzel-rollback-20261018-0930.pid"'
-check pass 'ssh root@h "nohup sh -c '\''echo \$\$ > /var/run/heinzel-rollback-20261018-0930.pid; sleep 120; sh /var/backups/heinzel/rollback-20261018-0930.sh'\'' >/dev/null 2>&1 &"'
-check deny 'ssh root@h "cat > /var/backups/heinzel/rollback-20261018-0930.sh" <<'\''EOF'\''
+check pass 'ssh root@h "daemon -f -p /var/run/jolitz-rollback-20261018-0930.pid sh -c '\''sleep 120; sh /var/backups/jolitz/rollback-20261018-0930.sh'\''"'
+check pass 'ssh root@h "pkill -F /var/run/jolitz-rollback-20261018-0930.pid"'
+check pass 'ssh root@h "nohup sh -c '\''echo \$\$ > /var/run/jolitz-rollback-20261018-0930.pid; sleep 120; sh /var/backups/jolitz/rollback-20261018-0930.sh'\'' >/dev/null 2>&1 &"'
+check deny 'ssh root@h "cat > /var/backups/jolitz/rollback-20261018-0930.sh" <<'\''EOF'\''
 #!/bin/sh
-cp -p /var/backups/heinzel/sshd_config.20261018-0930 /etc/ssh/sshd_config
+cp -p /var/backups/jolitz/sshd_config.20261018-0930 /etc/ssh/sshd_config
 EOF'
 
 # --- file-edit tools (Edit, Write, NotebookEdit) ---------------
@@ -1145,7 +1145,7 @@ file_json() {
 check_file() {
   EXPECT=$1
   OUT=$(file_json "$2" "$3" "$4" "$5" \
-    | env -u HEINZEL_GUARD_DISABLE sh "$HOOK" file)
+    | env -u JOLITZ_GUARD_DISABLE sh "$HOOK" file)
   if printf '%s' "$OUT" \
     | grep -q '"permissionDecision":"deny"'; then
     GOT=deny
@@ -1163,7 +1163,7 @@ check_file() {
 check_file_off() {
   EXPECT=$1
   OUT=$(file_json "$2" "$3" "$4" "$5" \
-    | HEINZEL_GUARD_DISABLE=1 sh "$HOOK" file)
+    | JOLITZ_GUARD_DISABLE=1 sh "$HOOK" file)
   if printf '%s' "$OUT" \
     | grep -q '"permissionDecision":"deny"'; then
     GOT=deny
@@ -1184,20 +1184,20 @@ if command -v jq >/dev/null 2>&1; then
   check_file deny Edit file_path /p/.claude/settings.local.json x
   check_file deny Write file_path /p/.claude/hooks/guard-taboos.sh x
   check_file deny Write file_path /home/u/.zshrc \
-    'export HEINZEL_GUARD_DISABLE=1'
+    'export JOLITZ_GUARD_DISABLE=1'
   check_file deny Edit file_path /home/u/s.json \
-    '"env": {"HEINZEL_GUARD_DISABLE": "1"}'
+    '"env": {"JOLITZ_GUARD_DISABLE": "1"}'
   check_file pass Write file_path /home/u/notes.md \
-    'HEINZEL_GUARD_DISABLE set to 1 before the launch'
+    'JOLITZ_GUARD_DISABLE set to 1 before the launch'
   check_file pass Write file_path /home/u/x.sh \
-    '[ "${HEINZEL_GUARD_DISABLE:-}" = "1" ]'
+    '[ "${JOLITZ_GUARD_DISABLE:-}" = "1" ]'
   # With the override: the taboos lift, the lock and a second
   # assignment do not.
   check_file_off pass Write file_path /etc/sudoers.d/deploy x
   check_file_off pass Write file_path /p/.claude/hooks/x.sh x
-  check_file_off deny Write file_path /etc/heinzel.conf x
+  check_file_off deny Write file_path /etc/jolitz.conf x
   check_file_off deny Write file_path /home/u/.zshrc \
-    'export HEINZEL_GUARD_DISABLE=1'
+    'export JOLITZ_GUARD_DISABLE=1'
 fi
 
 if command -v jq >/dev/null 2>&1; then
@@ -1214,8 +1214,7 @@ if command -v jq >/dev/null 2>&1; then
   check_file deny Write file_path /tmp/../dev/nvme0n1 x
   check_file deny NotebookEdit notebook_path \
     /root/.ssh/authorized_keys x
-  # Heinzel Pro's files since 3.0: sudoers, the account files,
-  # a firmware variable.
+  # sudoers, the account files, a firmware variable.
   check_file deny Write file_path /etc/sudoers x
   check_file deny Edit file_path /etc/sudoers.d/deploy x
   check_file deny Write file_path /usr/local/etc/sudoers x
@@ -1224,8 +1223,8 @@ if command -v jq >/dev/null 2>&1; then
   check_file deny Write file_path /etc/group x
   check_file deny Write file_path /etc/master.passwd x
   check_file deny Write file_path /sys/firmware/efi/efivars/Boot0001-x x
-  check_file deny Write file_path /etc/heinzel.conf x
-  check_file deny Edit file_path /private/etc/heinzel.conf x
+  check_file deny Write file_path /etc/jolitz.conf x
+  check_file deny Edit file_path /private/etc/jolitz.conf x
   check_file pass Write file_path /etc/sudo.conf x
   check_file pass Write file_path /etc/default/grub x
   check_file pass Write file_path /boot/loader.conf x
@@ -1292,7 +1291,7 @@ if command -v jq >/dev/null 2>&1; then
     EXPECT=$1
     OUT=$(jq -n --arg c "$2" --arg p "$3" \
       '{cwd:$c,tool_name:"Write",tool_input:{file_path:$p}}' \
-      | env -u HEINZEL_GUARD_DISABLE sh "$HOOK" file)
+      | env -u JOLITZ_GUARD_DISABLE sh "$HOOK" file)
     if printf '%s' "$OUT" \
       | grep -q '"permissionDecision":"deny"'; then
       GOT=deny
@@ -1313,14 +1312,14 @@ if command -v jq >/dev/null 2>&1; then
   rel_file deny /home/alice .ssh/id_ed25519
   rel_file deny /etc/nginx ../ssh/sshd_config
   rel_file deny /dev sda
-  rel_file pass /home/alice/heinzel memory/servers/h/memory.md
-  rel_file pass /home/alice/heinzel sshd_config
+  rel_file pass /home/alice/jolitz memory/servers/h/memory.md
+  rel_file pass /home/alice/jolitz sshd_config
   # No cwd in the input: the hook's own working directory counts.
   RELDIR=$(mktemp -d)
   mkdir "$RELDIR/.ssh"
   OUT=$(jq -n '{tool_input:{file_path:"id_ed25519"}}' \
     | (cd "$RELDIR/.ssh" \
-      && env -u HEINZEL_GUARD_DISABLE sh "$HOOK" file))
+      && env -u JOLITZ_GUARD_DISABLE sh "$HOOK" file))
   if printf '%s' "$OUT" \
     | grep -q '"permissionDecision":"deny"'; then
     PASS=$((PASS + 1))
@@ -1333,7 +1332,7 @@ if command -v jq >/dev/null 2>&1; then
   # harmless one cannot stand in front of a protected one.
   OUT=$(jq -n '{tool_name:"NotebookEdit",tool_input:{file_path:
     "/tmp/a.ipynb",notebook_path:"/etc/ssh/sshd_config"}}' \
-    | env -u HEINZEL_GUARD_DISABLE sh "$HOOK" file)
+    | env -u JOLITZ_GUARD_DISABLE sh "$HOOK" file)
   if printf '%s' "$OUT" \
     | grep -q '"permissionDecision":"deny"'; then
     PASS=$((PASS + 1))
@@ -1344,10 +1343,10 @@ if command -v jq >/dev/null 2>&1; then
   # The use case from PR #62: memory that NAMES the protected
   # paths and a few taboo commands is ordinary text.
   check_file pass Edit file_path \
-    /home/alice/heinzel/memory/servers/h/memory.md \
+    /home/alice/jolitz/memory/servers/h/memory.md \
     'sshd: /etc/ssh/sshd_config, keys in /root/.ssh/authorized_keys'
   check_file pass Write file_path \
-    /home/alice/heinzel/memory/servers/h/changelog.log \
+    /home/alice/jolitz/memory/servers/h/changelog.log \
     'shutdown -h now was refused; mkfs.ext4 /dev/sda1 was not run'
   # Same boundary as the Bash rules: the client config and
   # known_hosts are not keys, ssh_config is not sshd_config.
@@ -1367,7 +1366,7 @@ if command -v jq >/dev/null 2>&1; then
   degraded_file() {
     EXPECT=$1
     OUT=$(printf '%s' "$2" \
-      | env -u HEINZEL_GUARD_DISABLE PATH="$SHIM3:$PATH" \
+      | env -u JOLITZ_GUARD_DISABLE PATH="$SHIM3:$PATH" \
         sh "$HOOK" file)
     if printf '%s' "$OUT" \
       | grep -q '"permissionDecision":"deny"'; then
