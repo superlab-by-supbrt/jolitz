@@ -1,5 +1,53 @@
 # Changelog
 
+## 3.3.3-jolitz.9 — 2026-10-28
+
+- **A team hub, optional.** `hub/` is a Go service, one
+  static binary with SQLite, that mirrors every member's
+  `memory/` and shows it live: fleet, host handover sheets,
+  timeline, activity, search, who is working where
+  (session heartbeats) and a claim per host. JSON API under
+  `/api/v1/` with a bearer token per person and the roles
+  viewer, operator, admin; `/api` documents it, `/export`
+  returns `memory/` as a tarball. The hub runs no command,
+  holds no token in clear and reaches no server. Nothing is
+  active without `~/.config/jolitz/hub.conf`.
+- **`bin/jolitz-sync`** pushes memory files after every
+  change and pulls at session start, from the hooks,
+  byte-identical; a local file newer than the hub's is kept
+  and the hub version written next to it as `.hub`. Memory
+  lint runs before every push; the server refuses a file
+  that looks like it holds a secret.
+- **Skill `jolitz-hub`.** "Set up the jolitz hub on
+  ops.example.com", "connect me to the hub", "add bob to
+  the hub", "hub status", "leave the hub": the usual
+  pipeline, service class and port check, the release
+  binary of this checkout's `VERSION` verified against
+  `SHA256SUMS`, user, data directory, systemd unit or
+  FreeBSD `rc.d`, reverse proxy, firewall question, backup,
+  changelog; the first admin token is shown once. Joining
+  takes a URL and a token file the user creates; the token
+  never passes through jolitz. `rules/hub.md` carries the
+  conventions, `assets/hub/hub.svg` the picture.
+- **The hub works on its own.** A scheduler in
+  `jolitz-hub serve` prunes old sessions and guard rows,
+  fetches end-of-life dates from endoflife.date daily
+  (product names only) and sends the weekly fleet summary
+  through ntfy, Matrix or a Slack-compatible webhook, the
+  secrets read from files the admin places in the data
+  directory. `GET /metrics` serves the gauges of
+  `jolitz.prom` plus open sessions, file count and the age
+  of each person's last push; `GET /api/v1/overview.json`
+  has the shape of `bin/jolitz-overview --json`. A
+  `/settings` page shows the effective configuration
+  without secrets, the last run of each job, and sends a
+  test message per channel. Configuration in `hub.toml`
+  (`--config`), documented in `hub/README.md`.
+- **Releases carry the hub binaries** for linux/amd64,
+  linux/arm64, freebsd/amd64 and darwin/arm64 with
+  `SHA256SUMS`; CI runs `gofmt`, `go vet`, `go test` and the
+  four cross-builds.
+
 ## 3.3.3-jolitz.8 — 2026-10-28
 
 - **Three new skills.** `jolitz-incident` (a read-only

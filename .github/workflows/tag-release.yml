@@ -37,3 +37,38 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "v${{ steps.v.outputs.version }}" -m "Release v${{ steps.v.outputs.version }}"
           git push origin "v${{ steps.v.outputs.version }}"
+
+      # The hub binaries travel with the release. The install
+      # skill downloads jolitz-hub_<os>_<arch> and SHA256SUMS
+      # from this tag, so hub and clients share one version.
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        if: steps.check.outputs.exists == 'false'
+        with:
+          go-version-file: hub/go.mod
+          cache-dependency-path: hub/go.sum
+
+      - name: Build hub binaries
+        if: steps.check.outputs.exists == 'false'
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          mkdir -p dist
+          cd hub
+          for t in linux/amd64 linux/arm64 freebsd/amd64 darwin/arm64; do
+            GOOS=${t%/*} GOARCH=${t#*/} CGO_ENABLED=0 \
+              go build -trimpath \
+              -ldflags "-s -w -X main.version=$VERSION" \
+              -o "../dist/jolitz-hub_${t%/*}_${t#*/}" .
+          done
+          cd ../dist
+          sha256sum jolitz-hub_* > SHA256SUMS
+
+      - name: Publish release with binaries
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          gh release create "v$VERSION" dist/* \
+            --title "v$VERSION" \
+            --notes "See CHANGELOG.md, section $VERSION. The hub binaries are for the install skill; verify them against SHA256SUMS."
