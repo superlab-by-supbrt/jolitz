@@ -37,3 +37,22 @@ from a workspace one level up, with a CLAUDE.md of
 its own and this repository as a subdirectory, so
 the product's hooks do not run and its CLAUDE.md is
 read as content.
+
+## Layout
+
+```
+CLAUDE.md        instructions for the AI tool (the product)
+rules/           rule files per platform and topic
+.claude/skills/  housekeeping, security, email, fleet audit,
+                 incident, updates, docker, macOS cleanup, hub
+.claude/hooks/   update check, hub sync and the guard
+bin/             jolitz-update, -backup, -migrate, -overview,
+                 -memory-lint, -doctor, -log, -guard-report,
+                 -sync
+lib/             the renderer behind jolitz-overview
+hub/             the team hub (Go), optional
+tests/           lint, overview, bin tools, sync client
+docs/            the long forms the README links to
+memory/          the operator's state (gitignored)
+assets/          screenshots, demo data, the trailer script
+```
