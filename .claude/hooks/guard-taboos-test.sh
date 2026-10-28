@@ -1472,6 +1472,9 @@ if command -v jq >/dev/null 2>&1; then
     'C:/Users/max/jolitz'
   win_file pass "$W\\jolitz\\memory\\servers\\web1\\memory.md" \
     "$W\\jolitz"
+  # On Unix a drive-like prefix is a relative path below the cwd.
+  win_file deny 'c:/../../settings.json' /p/.claude/skills
+  win_file deny '\\x/../../settings.json' /p/.claude/skills
   win_file pass 'memory\notes.md' "$W\\jolitz"
   check_cwd deny "$W\\jolitz\\.claude" 'echo x > settings.json'
   check_cwd pass "$W\\jolitz" 'ls -la'

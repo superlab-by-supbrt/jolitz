@@ -548,10 +548,13 @@ if [ "${1:-}" = "file" ]; then
       ((.cwd // $pwd) | tostring) as $c
       | .tool_input | (.file_path, .notebook_path)
       | select(. != null) | tostring
-      | if test("^([/\\\\]|[A-Za-z]:)") then . else $c + "/" + . end' \
+      | if startswith("/") then . else ., $c + "/" + . end' \
       2>/dev/null) || TARGET=""
     # Windows hands over C:\Users\x\.claude\settings.json. As
     # C:/Users/x/.claude/settings.json the patterns below see it.
+    # A path without a leading slash is checked both as given (a
+    # Windows drive path) and below the cwd (on Unix c:/../x is
+    # relative); a match in either line denies.
     TARGET=$(printf '%s' "$TARGET" | tr '\\' '/')
   fi
   # The log names the path, never the text being written.
