@@ -4,6 +4,8 @@
 - Distro family: debian
 - RAM: 32 GB
 - Tags: prod, db
+- Owner: bob
+- Services: postgresql 13, pgbackrest
 - PostgreSQL 13, data in /srv/pg, 120 GB
 - Backup: pgBackRest to backup.example.com, nightly 02:15
 - Database password: in /root/.pgpass (0600)

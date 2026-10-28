@@ -1,5 +1,49 @@
 # Changelog
 
+## 3.3.3-jolitz.8 — 2026-10-28
+
+- **Three new skills.** `jolitz-incident` (a read-only
+  timeline, what changed on the host, one finding with
+  evidence and a proposed fix), `jolitz-updates` (the dry
+  run of every host's package manager side by side, a
+  window proposed, applied only after the OK and never with
+  a reboot chained on), `jolitz-docker` (containers and
+  compose projects, published ports against the firewall,
+  image age, restart policies, disk use).
+- **Fleet audit:** certificate expiry as a category,
+  FreeBSD and macOS probes, and every drift entry appended
+  to the host's `todo.md` so it reaches overview and
+  weekly mail.
+- **Housekeeping:** FreeBSD and NetBSD baselines; the
+  backup check can restore one sample and compare its
+  checksum before it says OK.
+- **Around the tool.** `bin/jolitz-doctor` checks the
+  workstation (Claude Code version, guard registration,
+  jq, curl, socket directory, git state, memory, logs, ssh
+  agent) with one line per check and exit 2 on a FAIL;
+  `bin/jolitz-log` searches every changelog by host, tag,
+  date and pattern; `bin/jolitz-guard-report` turns the
+  guard log into an issue template.
+- **More views from memory.** `- Owner:` and
+  `- Services:` lines in `memory.md` give the Servers
+  table an owner column and the overview a services
+  matrix; `- Link:` lines in `memory/network.md` are drawn
+  as a graph; `timeline.html` puts every change on one
+  axis; `--json` and `--prom` write `overview.json` and a
+  Prometheus textfile.
+- **Rules.** `rules/guest-software.md` and `rules/sap.md`:
+  jolitz as a guest under an application it does not
+  administer, with the application's own taboos.
+  `rules/local-model.md`: read-only by default under a
+  local model. `rules/notify.md`: push to ntfy, Matrix or
+  a Slack-compatible webhook, secrets only in files.
+  `rules/backups.md`: the diff and the config test before
+  a config file goes live. `memory/opencode.json.example`
+  carries a `permission` block for OpenCode.
+- **CI** runs the guard matrix and every test under
+  Alpine busybox as well; the matrix no longer uses a
+  GNU-only `grep` option.
+
 ## 3.3.3-jolitz.7 — 2026-10-28
 
 - **The guard sees more spellings of a write.** All

@@ -43,6 +43,8 @@ cat > "$M/servers/web1.example.com/memory.md" <<EOF
 - Distro family: debian
 - Tags: prod, web
 - SSH port: 2222
+- Owner: alice
+- Services: nginx 1.26, postgresql 17
 - Last connected: $TODAY
 - Database password: in /etc/app/db.env (0600 root)
 EOF
@@ -58,6 +60,7 @@ app.example.com now deploys blue/green <script>alert(1)</script>
   Flags: migrations must now stay
   backward-compatible.
 [2026-06-12 08:00] [alice as root] nginx reloaded (auto, policy)
+[2026-06-13 08:00] [alice as root] quoted "value" and back\slash
 EOF
 cat > "$M/servers/web1.example.com/rules.md" <<'EOF'
 ## Replace: Firewall
@@ -94,6 +97,12 @@ cat > "$M/servers/mac.local/memory.md" <<'EOF'
 - OS: macOS 15.1 Sequoia
 - Mode: local
 - Last connected: yesterday
+EOF
+
+cat > "$M/network.md" <<'EOF'
+# Network
+All servers sit in one VLAN; db1 is reached over the private IP.
+- Link: web1.example.com -> db1.example.com (postgresql 5432)
 EOF
 
 cat > "$M/eol/debian.json" <<'EOF'
@@ -153,19 +162,19 @@ printf '2026-10-28 alice: asked for the root password=abc123\n' \
   >> "$S/refusals.log"
 "$LINT" -d "$S" > "$T/sec.out"; rc=$?
 ok $(( rc != 1 )) "lint exits 1 on a secret (got $rc)"
-has "$T/sec.out" 'WARN  web1.example.com: servers/web1.example.com/memory.md:10: looks like a password value' \
+has "$T/sec.out" 'WARN  web1.example.com: servers/web1.example.com/memory.md:12: looks like a password value' \
   "lint warns about a bare word after Password:"
-hasnt "$T/sec.out" 'memory.md:11:' "an expiry note after Token: is not a value"
+hasnt "$T/sec.out" 'memory.md:13:' "an expiry note after Token: is not a value"
 has "$T/sec.out" 'ERROR memory: refusals.log:1:' \
   "lint scans refusals.log"
 hasnt "$T/sec.out" 'hunter2x' "lint never prints the password word"
-has "$T/sec.out" 'ERROR web1.example.com: servers/web1.example.com/memory.md:9: looks like a secret' \
+has "$T/sec.out" 'ERROR web1.example.com: servers/web1.example.com/memory.md:11: looks like a secret' \
   "lint names file and line of a token"
 has "$T/sec.out" 'ERROR db1.example.com: servers/db1.example.com/changelog.log:3:' \
   "lint finds a private key header"
 has "$T/sec.out" 'ERROR db1.example.com: servers/db1.example.com/notes.txt:1:' \
   "lint finds a password assignment in any host file"
-has "$T/sec.out" 'ERROR memory: network.md:1:' \
+has "$T/sec.out" 'ERROR memory: network.md:4:' \
   "lint finds a password in a URL outside the server folders"
 hasnt "$T/sec.out" "$TOK" "lint never prints the secret value"
 hasnt "$T/sec.out" 'hunter2' "lint never prints a password"
@@ -175,7 +184,7 @@ ok $(( rc != 1 )) "overview refuses to build over a secret (got $rc)"
 [ ! -e "$S/overview/index.html" ]; ok $? "no page is written over a secret"
 
 # --- overview: html ------------------------------------------
-"$OVERVIEW" -d "$M" > "$T/ov.out" 2>&1; rc=$?
+"$OVERVIEW" -d "$M" --json --prom --days 100000 > "$T/ov.out" 2>&1; rc=$?
 ok $(( rc != 0 )) "overview builds (got $rc: $(cat "$T/ov.out"))"
 I="$M/overview/index.html"
 [ -f "$I" ]; ok $? "index.html exists"
@@ -207,6 +216,64 @@ has "$W" '- Database password: in /etc/app/db.env (0600 root)' \
   "host page shows memory.md"
 has "$W" 'nftables only.' "host page shows rules.md"
 
+# --- overview: owner, services, network -----------------------
+has "$I" '<th>Owner</th>' "index has an Owner column"
+has "$I" '<td>alice</td>' "index shows the owner"
+has "$W" '<tr><th>Owner</th><td>alice</td></tr>' "host page shows the owner"
+D="$M/overview/hosts/db1.example.com.html"
+hasnt "$D" '<th>Owner</th>' "a host without owner has no Owner row"
+has "$I" '<h2>Services</h2>' "services matrix present"
+has "$I" '>postgresql</th>' "services matrix has a row per service"
+has "$I" '<td>17</td>' "services matrix cell holds the version"
+has "$W" '<tr><th>Services</th><td>nginx 1.26, postgresql 17</td></tr>' \
+  "host page lists services"
+has "$I" '<h2>Network</h2>' "network section present"
+has "$I" 'postgresql 5432' "network link label shown"
+has "$I" 'href="hosts/db1.example.com.html"' "network node links the host page"
+has "$I" 'href="timeline.html"' "index links the timeline"
+
+# --- overview: timeline --------------------------------------
+TL="$M/overview/timeline.html"
+[ -f "$TL" ]; ok $? "timeline.html exists"
+has "$TL" '<svg' "timeline holds an SVG"
+has "$TL" '&lt;script&gt;alert(1)&lt;/script&gt;' "timeline escapes the headline"
+hasnt "$TL" '<script>alert(1)' "timeline has no raw markup from memory"
+has "$TL" '<rect' "a Flags entry is drawn as a square"
+
+# --- overview: json and prometheus ---------------------------
+J="$M/overview/overview.json"
+[ -f "$J" ]; ok $? "overview.json exists"
+jq empty "$J" 2>/dev/null; ok $? "overview.json parses"
+has "$J" '"owner": "alice"' "json holds the owner"
+[ "$(jq -r '.hosts[] | select(.name == "web1.example.com") | .owner' "$J" 2>/dev/null)" = alice ]
+ok $? "json: owner by host"
+[ "$(jq -r '.hosts[] | select(.name == "db1.example.com") | .owner' "$J" 2>/dev/null)" = "" ]
+ok $? "json: missing owner is an empty string"
+[ "$(jq -r '.hosts[] | select(.name == "db1.example.com") | .todos' "$J" 2>/dev/null)" = 1 ]
+ok $? "json: to-do count by host"
+[ "$(jq -r '.hosts[] | select(.name == "web1.example.com") | .services[1].version' "$J" 2>/dev/null)" = 17 ]
+ok $? "json: services split into name and version"
+[ "$(jq -r '.changes[] | select(.date == "2026-06-13") | .headline' "$J" 2>/dev/null)" = 'quoted "value" and back\slash' ]
+ok $? "json: quote and backslash in a headline survive"
+[ "$(jq -r '.changes[] | select(.date == "2026-06-11") | .headline' "$J" 2>/dev/null)" = 'app.example.com now deploys blue/green <script>alert(1)</script> — because deploys interrupted visitors' ]
+ok $? "json: headline with markup round-trips"
+[ "$(jq -r '.guard.denials_30d' "$J" 2>/dev/null)" = 0 ]
+ok $? "json: guard count without a log is 0"
+[ "$(jq -r '.network | length' "$J" 2>/dev/null)" = 1 ]
+ok $? "json: network links listed"
+PR="$M/overview/jolitz.prom"
+[ -f "$PR" ]; ok $? "jolitz.prom exists"
+has "$PR" 'jolitz_fleet_hosts 3' "prom: host count"
+has "$PR" 'jolitz_host_todos{host="db1.example.com"} 1' "prom: to-dos by host"
+has "$PR" 'jolitz_host_eol_days{host="db1.example.com"} 0' "prom: ended release is 0"
+has "$PR" 'jolitz_host_eol_days{host="mac.local"} -1' "prom: unknown EOL is -1"
+has "$PR" 'jolitz_host_last_connected_days{host="mac.local"} -1' \
+  "prom: unknown last connection is -1"
+has "$PR" 'jolitz_host_last_connected_days{host="web1.example.com"} 0' \
+  "prom: connected today is 0"
+has "$PR" '# TYPE jolitz_host_eol_days gauge' "prom: TYPE line"
+has "$PR" 'jolitz_guard_denials_30d 0' "prom: guard count"
+
 # --- overview: text and tag ----------------------------------
 "$OVERVIEW" -d "$M" --text --days 100000 > "$T/txt.out"; rc=$?
 ok $(( rc != 0 )) "text mode runs (got $rc)"
@@ -217,6 +284,7 @@ has "$T/txt.out" '  db1.example.com: last 2025-01-01' "text: stale host"
 has "$T/txt.out" '  db1.example.com sshd.PermitRootLogin: no -> yes' \
   "text: audit change"
 has "$T/txt.out" 'Memory lint: 3 warnings' "text: lint count"
+has "$T/txt.out" '  web1.example.com: alice' "text: owner line"
 "$OVERVIEW" -d "$M" --text --tag web > "$T/tag.out"; rc=$?
 ok $(( rc != 0 )) "tag filter runs (got $rc)"
 has "$T/tag.out" 'Hosts: 1,' "tag filter keeps one host"
@@ -229,11 +297,13 @@ has "$T/tag.out" 'Fleet audit 2026-10-28 09:00: 0 settings differ' \
 B="$T/badhost"
 cp -R "$M" "$B"
 mkdir "$B/servers/bad name"
+printf '# Network\nOnly prose here, no link lines.\n' > "$B/network.md"
 "$OVERVIEW" -d "$B" > "$T/bad.out" 2>&1; rc=$?
 ok $(( rc != 0 )) "overview still builds next to an odd directory name (got $rc)"
 has "$T/bad.out" 'skipping' "overview warns about the odd directory name"
 [ ! -e "$B/overview/hosts/bad name.html" ]; ok $? "no page for the odd name"
 [ -f "$B/overview/hosts/web1.example.com.html" ]; ok $? "other host pages still built"
+hasnt "$B/overview/index.html" '<h2>Network' "prose-only network.md yields no section"
 
 # --- guard log -----------------------------------------------
 mkdir -p "$HOME/.cache/jolitz"
@@ -245,6 +315,10 @@ has "$I" '<td>1</td><td>'"$TODAY"'</td><td>powering off a machine</td>' \
   "guard log counted by reason"
 "$OVERVIEW" -d "$M" --text > "$T/g.out"
 has "$T/g.out" '  1x powering off a machine' "text: guard denials"
+"$OVERVIEW" -d "$M" --text --prom --json > /dev/null 2>&1
+has "$PR" 'jolitz_guard_denials_30d 1' "prom: guard denial counted"
+[ "$(jq -r '.guard.reasons[0].count' "$J" 2>/dev/null)" = 1 ]
+ok $? "json: guard reason counted"
 
 echo "memory-tools tests: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

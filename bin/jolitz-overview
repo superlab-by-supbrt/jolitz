@@ -17,17 +17,24 @@
 #   jolitz-overview --eol          Fetch end-of-life dates
 #                                   first; cached in
 #                                   memory/eol/
+#   jolitz-overview --json         Also write overview.json
+#   jolitz-overview --prom         Also write jolitz.prom
+#                                   (Prometheus text format)
 #   jolitz-overview -d <dir>       Use <dir> as memory/
 #   jolitz-overview -o <dir>       Write the pages to <dir>
 #   jolitz-overview --help         Show this help
 #
 # Sources: memory/servers/*/{memory.md,todo.md,
-# changelog.log,rules.md}, the newest two fleet audit
+# changelog.log,rules.md}, "- Link:" lines in
+# memory/network.md, the newest two fleet audit
 # snapshots in memory/audits/, cached EOL data in
 # memory/eol/, and the guard log
 # ~/.cache/jolitz/guard.log if JOLITZ_GUARD_LOG=1
 # wrote one. bin/jolitz-memory-lint runs first; a
 # value that looks like a secret stops the build.
+#
+# Output: index.html, timeline.html and hosts/*.html;
+# with --json overview.json, with --prom jolitz.prom.
 set -e
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
@@ -52,10 +59,14 @@ MODE=html
 DAYS=""
 TAG=""
 FETCH_EOL=0
+JSON=0
+PROM=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --text) MODE=text ;;
     --eol) FETCH_EOL=1 ;;
+    --json) JSON=1 ;;
+    --prom) PROM=1 ;;
     --days|--tag|-d|-o)
       [ $# -ge 2 ] || { usage >&2; exit 2; }
       case "$1" in
@@ -103,10 +114,12 @@ printf '%s\n' "$LINT" | grep '^WARN' > "$WORK/lint.txt" || true
 : > "$WORK/audit-cur.tsv"
 : > "$WORK/audit-prev.tsv"
 : > "$WORK/guard.tsv"
+: > "$WORK/links.tsv"
 
 # --- memory.md: top-level "- Key: value" lines -------------
 # Prints one TSV row: host, os, ip, distro, last
-# connected, tags, ssh port, mode, product, version.
+# connected, tags, ssh port, mode, product, version,
+# owner, services.
 cat > "$WORK/facts.awk" <<'AWK'
 BEGIN { OFS = "\t" }
 /^- [A-Za-z][A-Za-z ]*:/ {
@@ -154,7 +167,8 @@ END {
   lc = f["Last connected"]; sub(/[ \t].*/, "", lc)
   p = product(f["OS"])
   print host, f["OS"], f["IP"], f["Distro family"], lc, t, \
-    f["SSH port"], f["Mode"], p, version(f["OS"], p)
+    f["SSH port"], f["Mode"], p, version(f["OS"], p), f["Owner"], \
+    f["Services"]
 }
 AWK
 
@@ -261,11 +275,30 @@ for d in "$MEM"/servers/*; do
   [ -f "$d/rules.md" ] && rules=1
   # Columns 9 and 10 (product, version) move behind
   # the counters, so the renderer reads 1-8, then 9-11
-  # counters, then 12-13.
+  # counters, then 12-13, then 14-15 owner and services.
   printf '%s\n' "$row" | awk -F "$TAB" -v r="$rules" -v t="$todos" \
-    -v l="$last" 'BEGIN{OFS="\t"} {print $1,$2,$3,$4,$5,$6,$7,$8,r,t,l,$9,$10}' \
+    -v l="$last" 'BEGIN{OFS="\t"} {print $1,$2,$3,$4,$5,$6,$7,$8,r,t,l,$9,$10,$11,$12}' \
     >> "$WORK/hosts.tsv"
 done
+
+# --- network.md: "- Link: a -> b (label)" lines ------------
+# Free prose stays where it is; only these lines feed
+# the network graph. The label is optional.
+if [ -f "$MEM/network.md" ]; then
+  awk 'BEGIN { OFS = "\t" }
+    /^- Link:[ \t]*[^ \t]+[ \t]*->[ \t]*[^ \t]/ {
+      l = substr($0, 8); sub(/^[ \t]+/, "", l); sub(/[ \t]+$/, "", l)
+      lab = ""
+      if (l ~ /\)$/ && index(l, "(") > 0) {
+        lab = substr(l, index(l, "(") + 1); sub(/\)$/, "", lab)
+        l = substr(l, 1, index(l, "(") - 1)
+      }
+      a = l; sub(/[ \t]*->.*/, "", a)
+      b = l; sub(/.*->[ \t]*/, "", b); sub(/[ \t]+$/, "", b)
+      gsub(/\t/, " ", lab)
+      if (a != "" && b != "") print a, b, lab
+    }' "$MEM/network.md" > "$WORK/links.tsv"
+fi
 
 sort -t "$TAB" -k1,1r -k2,2r -k3,3 "$WORK/changes.tsv" -o "$WORK/changes.tsv"
 
@@ -335,15 +368,21 @@ NOW=$(date '+%Y-%m-%d %H:%M')
 
 if [ "$MODE" = html ]; then
   mkdir -p "$OUT/hosts"
+elif [ "$JSON" -eq 1 ] || [ "$PROM" -eq 1 ]; then
+  mkdir -p "$OUT"
 fi
 
 awk -F "$TAB" -v mode="$MODE" -v today="$TODAY" -v now="$NOW" \
   -v days="$DAYS" -v tag="$TAG" -v out="$OUT" -v mem="$MEM" \
-  -v jq="$HAVE_JQ" -f "$REPO_DIR/lib/overview.awk" \
+  -v jq="$HAVE_JQ" -v json="$JSON" -v prom="$PROM" \
+  -f "$REPO_DIR/lib/overview.awk" \
   "$WORK/hosts.tsv" "$WORK/todos.tsv" "$WORK/changes.tsv" \
   "$WORK/aliases.tsv" "$WORK/eol.tsv" "$WORK/audit-cur.tsv" \
-  "$WORK/audit-prev.tsv" "$WORK/guard.tsv" "$WORK/lint.txt"
+  "$WORK/audit-prev.tsv" "$WORK/guard.tsv" "$WORK/lint.txt" \
+  "$WORK/links.tsv"
 
 if [ "$MODE" = html ]; then
   echo "wrote $OUT/index.html"
 fi
+[ "$JSON" -eq 0 ] || echo "wrote $OUT/overview.json"
+[ "$PROM" -eq 0 ] || echo "wrote $OUT/jolitz.prom"

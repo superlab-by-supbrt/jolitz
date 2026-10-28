@@ -1,0 +1,109 @@
+#!/bin/sh
+# jolitz-guard-report — summarize the guard log
+# (~/.cache/jolitz/guard.log, written when
+# JOLITZ_GUARD_LOG=1) as a Markdown issue template: one
+# table row per denial reason. Reads a local file only;
+# never connects to a server.
+#
+# Usage:
+#   jolitz-guard-report                      Whole log
+#   jolitz-guard-report --since YYYY-MM-DD   Denials from that
+#                                             day on
+#   jolitz-guard-report --commands           Append the denied
+#                                             commands per reason
+#   jolitz-guard-report -f <log>             Read <log> instead
+#   jolitz-guard-report --help               Show this help
+#
+# The log is tab-separated: time (UTC, ISO 8601), mode,
+# reason, subject (the command, cut at 200 characters).
+# Without --commands no subject is printed, so the output
+# can be pasted into an issue as it is. With --commands,
+# check every line for secrets before pasting
+# (rules/secrets.md).
+#
+# Exit status: 0; 1 when the log does not exist; 2 usage.
+set -e
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+SELF="$SCRIPT_DIR/$(basename "$0")"
+
+usage() {
+  awk '/^# jolitz-guard-report/{in_help=1} in_help{if(/^[^#]/)exit; sub(/^# ?/,""); print}' "$SELF"
+}
+
+LOG="$HOME/.cache/jolitz/guard.log"
+SINCE=""
+COMMANDS=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --commands) COMMANDS=1 ;;
+    --since|-f)
+      [ $# -ge 2 ] || { usage >&2; exit 2; }
+      case "$1" in
+        --since) SINCE=$2 ;;
+        -f) LOG=$2 ;;
+      esac
+      shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "error: unknown option $1" >&2; usage >&2; exit 2 ;;
+  esac
+  shift
+done
+
+if [ -n "$SINCE" ] && ! printf '%s\n' "$SINCE" \
+    | grep -Eq '^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$'; then
+  echo "error: --since wants YYYY-MM-DD, got $SINCE" >&2
+  exit 2
+fi
+if [ ! -f "$LOG" ]; then
+  echo "error: $LOG does not exist (set JOLITZ_GUARD_LOG=1 to write it)" >&2
+  exit 1
+fi
+
+awk -F '\t' -v since="$SINCE" -v commands="$COMMANDS" '
+  NF < 3 { next }
+  { day = substr($1, 1, 10) }
+  day !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/ { next }
+  since != "" && day < since { next }
+  {
+    r = $3
+    if (!(r in cnt)) { order[++n] = r; cnt[r] = 0; last[r] = "" }
+    cnt[r]++
+    if (day > last[r]) last[r] = day
+    if (from == "" || day < from) from = day
+    if (to == "" || day > to) to = day
+    if (commands) subj[r] = subj[r] "\n    " $4
+  }
+  END {
+    if (n == 0) {
+      print "Guard denials: none" (since != "" ? " since " since : "")
+      exit 0
+    }
+    # Most frequent first; equal counts keep file order.
+    for (i = 1; i <= n; i++)
+      for (j = i + 1; j <= n; j++)
+        if (cnt[order[j]] > cnt[order[i]]) {
+          t = order[i]; order[i] = order[j]; order[j] = t
+        }
+    print "Guard denials " from ".." to
+    print ""
+    print "| Reason | Count | Last |"
+    print "| --- | ---: | --- |"
+    for (i = 1; i <= n; i++) {
+      r = order[i]; rr = r; gsub(/\|/, "\\|", rr)
+      print "| " rr " | " cnt[r] " | " last[r] " |"
+    }
+    print ""
+    print "A denial that blocked real work is a false positive; attach the command only after checking it for secrets."
+    if (commands) {
+      for (i = 1; i <= n; i++) {
+        r = order[i]
+        print ""
+        print "### " r
+        print ""
+        print substr(subj[r], 2)
+      }
+    }
+  }
+' "$LOG"
+exit 0

@@ -143,6 +143,16 @@ can lock itself with `allow_changes = false` in
 local mode too, and treat a lock like the read-only
 list. Never write, move or delete that file.
 
+## Local Model
+
+Read `rules/local-model.md`. When
+`memory/opencode.json` names a local provider
+(Ollama or another on the operator's hardware),
+every host is read-only as in `memory/readonly.md`.
+The line `Local model changes: allowed` in
+`memory/user.md` lifts it; only the operator writes
+it.
+
 ## Critical Safety Rules
 
 - **Never fabricate server facts.** Do not guess or
@@ -475,6 +485,16 @@ a second firewall manager on top
 On macOS, a disabled Application Firewall is common
 and less critical — see `rules/macos.md`.
 
+## Guest Software
+
+Read `rules/guest-software.md` when a host runs an
+application jolitz does not administer. jolitz does
+the OS layer, runs the read-only probes the rule
+names, keeps the application's taboos in every mode
+and hands the rest to the application's admin. The
+host's `memory.md` names it: `- Guest: sap`. One rule
+file per application; `rules/sap.md` is the first.
+
 ## Housekeeping
 
 Routine health inspections. Only when the user asks.
@@ -506,6 +526,17 @@ verify, and memory update. Per-server config (recipient,
 source, transport, sender identity, policies) lives in
 `memory/servers/<hostname>/memory.md`, extending the
 existing `Mail:` / `Alert email:` lines pattern.
+
+## Notifications
+
+Read `rules/notify.md`. Only when the user asks or a
+scheduled run names it: push the fleet summary or a
+housekeeping result to ntfy, a Matrix room or a
+Slack-compatible webhook with `curl`. Channels are
+`Notify:` lines in `memory/user.md`; tokens and
+webhook URLs live only in mode-600 files under
+`~/.config/jolitz/`. Email stays the default for
+reports.
 
 ## Fleet Audit
 
@@ -549,6 +580,37 @@ of uninstalled apps, or uninstalls one app with all its
 files. A read-only scanner classifies entries in
 `~/Library` and `/Library`. Removal moves only approved
 entries to the Trash.
+
+## Incident Triage
+
+Only when the user asks ("502", "load", "disk full",
+"is X down"). The `jolitz-incident` skill in
+`.claude/skills/jolitz-incident/` carries the
+workflow: first-connection pipeline, a read-only
+timeline from journal and logs, what changed
+(`bin/jolitz-log` and the host changelog), service
+state, then a report with finding, evidence and a
+proposed fix with its `Way back:` line. It changes
+nothing without the user's OK.
+
+## Updates Across the Fleet
+
+Only when the user asks. The `jolitz-updates` skill
+in `.claude/skills/jolitz-updates/` runs the dry run
+of each host's package manager (`rules/<family>.md`),
+collects reboot-required, and proposes a table and a
+window. It applies only after the user's OK, one job
+per host (`rules/ssh-connections.md`), and never
+chains a reboot onto an update.
+
+## Docker Hosts
+
+Only when the user asks. The `jolitz-docker` skill
+in `.claude/skills/jolitz-docker/` inventories
+containers and compose projects, compares published
+ports with the firewall (`rules/best-practices.md`),
+and reports image age, restart policies and disk
+use. Read-only unless the user asks for a change.
 
 ## Programming Language Runtimes
 
@@ -639,7 +701,9 @@ a dedicated deploy user with minimal privileges.
 ## Backups
 
 Read `rules/backups.md`. Back up every config file
-before editing it.
+before editing it. Before the write, show the user
+`diff -u` of backup and new file together with the
+config test result; the change runs only after that.
 
 ## Shell Aliases
 

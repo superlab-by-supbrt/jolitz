@@ -25,9 +25,16 @@ jobs:
         run: sh .claude/hooks/guard-taboos-test.sh
 
       # Lint and overview against a throwaway memory/ tree,
-      # under the mawk that Ubuntu ships as awk.
+      # under the gawk the runner image installs as awk (5.2.1
+      # on Ubuntu 24.04). The busybox job below covers the
+      # other awk; mawk and BWK awk are run by hand.
       - name: Memory lint and overview tests
         run: sh tests/memory-tools-test.sh
+
+      # doctor, log search and guard report against fakes in
+      # a temp HOME and PATH; no network, no server.
+      - name: bin tools tests
+        run: sh tests/bin-tools-test.sh
 
       - name: Validate tracked JSON files
         run: |
@@ -46,6 +53,23 @@ jobs:
       - name: ShellCheck (error severity)
         run: shellcheck -S error bin/* .claude/hooks/*.sh tests/*.sh
 
+  # The same scripts under busybox: ash as sh, busybox awk,
+  # sed, tr and stat. Appliances and small hosts ship this
+  # userland, and the guard must fail closed there, never
+  # open.
+  busybox:
+    runs-on: ubuntu-latest
+    container: alpine:3.20
+    steps:
+      - run: apk add --no-cache git jq
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - name: Guard test matrix (busybox)
+        run: sh .claude/hooks/guard-taboos-test.sh
+      - name: Memory lint and overview tests (busybox)
+        run: sh tests/memory-tools-test.sh
+      - name: bin tools tests (busybox)
+        run: sh tests/bin-tools-test.sh
+
   windows-git-bash:
     # Native Windows runs the hooks in Git Bash, as this job does.
     # A Windows path (C:\...) must hit the same blocks as on Unix,
@@ -56,7 +80,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Tools
         run: |
@@ -89,7 +113,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Tools
         run: command -v jq || choco install jq --no-progress -y

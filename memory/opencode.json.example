@@ -14,5 +14,63 @@
         }
       }
     }
+  },
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "halt": "deny",
+      "halt *": "deny",
+      "poweroff": "deny",
+      "poweroff *": "deny",
+      "shutdown": "deny",
+      "shutdown now": "deny",
+      "shutdown -h*": "deny",
+      "shutdown -P*": "deny",
+      "init 0": "deny",
+      "telinit 0": "deny",
+      "*sysrq-trigger*": "deny",
+      "*/sys/power/state*": "deny",
+      "systemctl suspend*": "deny",
+      "systemctl hibernate*": "deny",
+      "systemctl hybrid-sleep*": "deny",
+      "systemctl suspend-then-hibernate*": "deny",
+      "mkfs*": "deny",
+      "mke2fs*": "deny",
+      "newfs*": "deny",
+      "wipefs *": "deny",
+      "blkdiscard *": "deny",
+      "nvme format*": "deny",
+      "nvme sanitize*": "deny",
+      "dd *of=/dev/*": "deny",
+      "visudo*": "deny",
+      "vipw*": "deny",
+      "vigr*": "deny",
+      "userdel *": "deny",
+      "groupdel *": "deny",
+      "grub-install*": "deny",
+      "update-grub*": "deny",
+      "grub-set-default*": "deny",
+      "grub-reboot*": "deny",
+      "bootctl install*": "deny",
+      "bootctl update*": "deny",
+      "bootctl remove*": "deny",
+      "bootctl set-*": "deny",
+      "systemctl stop ssh*": "deny",
+      "systemctl disable ssh*": "deny",
+      "systemctl mask ssh*": "deny",
+      "rm */etc/jolitz.conf*": "deny",
+      "mv */etc/jolitz.conf*": "deny",
+      "claude -p*": "deny",
+      "claude --print*": "deny",
+      "opencode run*": "deny"
+    },
+    "edit": {
+      "*": "ask",
+      "*/.claude/*": "deny",
+      "*/etc/jolitz.conf": "deny",
+      "*/etc/ssh/sshd_config*": "deny",
+      "*/etc/sudoers*": "deny",
+      "*/.ssh/*": "deny"
+    }
   }
 }

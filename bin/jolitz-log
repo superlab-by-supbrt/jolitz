@@ -1,0 +1,133 @@
+#!/bin/sh
+# jolitz-log — search the local changelogs of all servers
+# (memory/servers/*/changelog.log) and print one line per
+# entry, newest first. Reads local files only; never
+# connects to a server.
+#
+# Usage:
+#   jolitz-log                       Every entry, every host
+#   jolitz-log --host <h>            One host (directory name)
+#   jolitz-log --since YYYY-MM-DD    Entries from that day on
+#   jolitz-log --tag <t>             Hosts with that tag
+#                                     (- Tags: in memory.md)
+#   jolitz-log --grep <ere>          Entries whose headline or
+#                                     detail matches, case-
+#                                     insensitively (both sides
+#                                     are lowercased, so write
+#                                     the pattern in lowercase)
+#   jolitz-log -d <dir>              Use <dir> as memory/
+#   jolitz-log --help                Show this help
+#
+# Output: "YYYY-MM-DD HH:MM <host><TAB><headline>". An entry
+# starts with "[YYYY-MM-DD HH:MM]" in column 1
+# (rules/changelog.md); unindented lines that follow belong
+# to the headline, indented lines are detail and are
+# searched but not printed. Alias symlinks under
+# memory/servers/ are skipped.
+#
+# Exit status: 0 (also when nothing matches), 2 usage.
+set -e
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+REPO_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
+SELF="$SCRIPT_DIR/$(basename "$0")"
+
+usage() {
+  awk '/^# jolitz-log/{in_help=1} in_help{if(/^[^#]/)exit; sub(/^# ?/,""); print}' "$SELF"
+}
+
+MEM="$REPO_DIR/memory"
+HOST=""
+SINCE=""
+TAG=""
+ERE=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --host|--since|--tag|--grep|-d)
+      [ $# -ge 2 ] || { usage >&2; exit 2; }
+      case "$1" in
+        --host) HOST=$2 ;;
+        --since) SINCE=$2 ;;
+        --tag) TAG=$2 ;;
+        --grep) ERE=$2 ;;
+        -d) MEM=$2 ;;
+      esac
+      shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "error: unknown option $1" >&2; usage >&2; exit 2 ;;
+  esac
+  shift
+done
+
+if [ -n "$SINCE" ] && ! printf '%s\n' "$SINCE" \
+    | grep -Eq '^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$'; then
+  echo "error: --since wants YYYY-MM-DD, got $SINCE" >&2
+  exit 2
+fi
+if [ ! -d "$MEM/servers" ]; then
+  echo "error: $MEM/servers does not exist" >&2
+  exit 2
+fi
+
+TAG_LC=$(printf '%s\n' "$TAG" | tr 'A-Z' 'a-z')
+# An alias symlink names the real directory.
+if [ -n "$HOST" ] && [ -L "$MEM/servers/$HOST" ]; then
+  t=$(readlink "$MEM/servers/$HOST") && HOST=${t##*/}
+fi
+# The pattern reaches awk through the environment:
+# awk -v would process backslash escapes in it.
+JOLITZ_LOG_ERE=$ERE
+export JOLITZ_LOG_ERE
+
+# has_tag <memory.md>: 0 when "- Tags:" lists $TAG_LC.
+has_tag() {
+  [ -f "$1" ] || return 1
+  awk -v want="$TAG_LC" '
+    /^- Tags:/ {
+      v = substr($0, 8); n = split(v, a, ",")
+      for (i = 1; i <= n; i++) {
+        t = tolower(a[i]); gsub(/^[ \t]+|[ \t]+$/, "", t)
+        if (t == want) found = 1
+      }
+      exit
+    }
+    END { exit found ? 0 : 1 }' "$1"
+}
+
+for d in "$MEM"/servers/*; do
+  [ -d "$d" ] || continue
+  [ -L "$d" ] && continue
+  h=${d##*/}
+  [ -z "$HOST" ] || [ "$h" = "$HOST" ] || continue
+  [ -z "$TAG" ] || has_tag "$d/memory.md" || continue
+  [ -f "$d/changelog.log" ] || continue
+  awk -v host="$h" -v since="$SINCE" '
+    BEGIN { pat = tolower(ENVIRON["JOLITZ_LOG_ERE"]) }
+    function flush() {
+      if (date != "" && (since == "" || date >= since)) {
+        gsub(/\t/, " ", head)
+        if (pat == "" || tolower(head " " det) ~ pat)
+          printf "%s %s %s\t%s\n", date, time, host, head
+      }
+      date = ""; time = ""; head = ""; det = ""; indet = 0
+    }
+    /^\[[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]\]/ {
+      flush()
+      date = substr($0, 2, 10); time = substr($0, 13, 5)
+      head = substr($0, 19); sub(/^[ \t]+/, "", head)
+      next
+    }
+    date == "" { next }
+    /^[ \t]*$/ { next }
+    /^[ \t]/ {
+      indet = 1
+      l = $0; sub(/^[ \t]+/, "", l)
+      det = (det == "" ? l : det " " l)
+      next
+    }
+    !indet { head = (head == "" ? $0 : head " " $0) }
+    indet { det = (det == "" ? $0 : det " " $0) }
+    END { flush() }
+  ' "$d/changelog.log"
+done | sort -r
+exit 0

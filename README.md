@@ -100,13 +100,43 @@ tool.
 - **Scheduled runs.** `Email me a housekeeping report for
   every server each Monday`: cron or a systemd timer with
   `claude -p` (`rules/scheduled-housekeeping.md`).
+- **Incident triage.** `nginx answers 502 on shop`, `load on
+  db1 is at 12`, `is mail down?`: a read-only timeline from
+  journal and logs, what changed on the host lately (its
+  changelog), the service state, then one finding with its
+  evidence and a proposed fix with the way back. Nothing
+  changes until you say so (`jolitz-incident`).
+- **Updates across the fleet.** `Which updates are pending on
+  prod?`: the dry run of every host's package manager side by
+  side, reboot-required marked, a window proposed. Applied
+  only after your OK, one job per host, never with a reboot
+  chained on (`jolitz-updates`).
+- **Docker hosts.** `What runs in Docker on app2?`: containers
+  and compose projects, published ports against the firewall,
+  image age, restart policies, disk use. Read-only unless you
+  ask for a change (`jolitz-docker`).
 - **Email.** `Email me the output of "df -h" from
   app.example.com`, from your workstation or the server.
+- **Push.** `Send the fleet summary to my ntfy topic`: ntfy, a
+  Matrix room or a Slack-compatible webhook, tokens only in
+  files under `~/.config/jolitz/` (`rules/notify.md`).
 - **macOS.** `Clean up leftovers of old apps on this Mac`
   finds what removed apps left behind; only what you approve
   goes to the Trash. Needs the Command Line Tools.
 - **Plans.** `/plan Migrate the database on db.example.com`
   explores and drafts, and changes nothing until you approve.
+
+### Guest software
+
+A host that runs SAP, an appliance or a vendor's stack gets
+`- Guest: sap` in its memory, and jolitz reads
+`rules/sap.md` on every connection: it does the operating
+system, runs the application's read-only status commands,
+keeps the application's own taboos in every mode (no instance
+stopped, no write under `/usr/sap` or `/hana`, no SQL) and
+hands the rest to the Basis admin. The pattern for other
+applications is in `rules/guest-software.md`: one rule file
+per token, six fixed sections.
 
 ### Heavy work, with the guard lifted
 
@@ -150,6 +180,7 @@ bin/jolitz-overview            # memory/overview/index.html
 bin/jolitz-overview --eol      # fetch end-of-life dates first
 bin/jolitz-overview --tag prod # only servers tagged prod
 bin/jolitz-overview --text     # plain text, last 7 days
+bin/jolitz-overview --json --prom   # overview.json, jolitz.prom
 ```
 
 ![Fleet overview: servers, end of life, to-dos, changes, audit drift](assets/overview/overview.png)
@@ -264,6 +295,44 @@ memory lint: 4 hosts, 1 errors, 1 warnings
 The patterns are a backstop; a secret in a format they do
 not know passes.
 
+### More views from the same memory
+
+- **Owner and services.** `- Owner: alice` and
+  `- Services: nginx 1.26, postgresql 17` in a host's
+  `memory.md` put the owner into the Servers table and the
+  handover sheet, and build a services matrix: which host
+  runs which service in which version, without a connection.
+- **Timeline.** `memory/overview/timeline.html`: every change
+  of the window on one axis, one lane per host, standing
+  constraints (`Flags:`) marked.
+- **Network.** `- Link: web1.example.com -> db1.example.com
+  (postgresql 5432)` lines in `memory/network.md` are drawn as
+  a graph on the overview; prose around them stays prose.
+- **Machine-readable.** `--json` writes
+  `memory/overview/overview.json` (hosts, to-dos, changes,
+  end of life, audit, guard counts), `--prom` writes
+  `memory/overview/jolitz.prom` for a Prometheus textfile
+  collector: days to end of life, days since the last
+  contact, open to-dos per host, guard denials. Grafana or an
+  alert rule can then do the nagging.
+
+### Around the tool
+
+```bash
+bin/jolitz-doctor                        # is the workstation set up right?
+bin/jolitz-log --grep nginx --since 2026-10-01   # what did we change?
+bin/jolitz-guard-report                  # denials as an issue template
+```
+
+`jolitz-doctor` checks Claude Code version, guard
+registration, `jq`, `curl`, the socket directory, git state
+(pinned, behind, dirty), `memory/user.md`, memory lint, the
+age of the EOL cache, log sizes and the SSH agent; one line
+each, `OK`, `WARN` or `FAIL`, exit 2 on a FAIL so cron can
+tell. `jolitz-log` searches every host's changelog by host,
+tag, date and pattern. `jolitz-guard-report` turns the guard
+log into a table by reason, commands only on request.
+
 ## How it stays out of trouble
 
 - **It asks.** Destructive commands, firewall changes,
@@ -283,8 +352,11 @@ not know passes.
   `memory.md`. A reboot inside the window boots the new
   config without the timer; the rule says so before such a
   change.
-- **It backs up.** Every config file goes to
-  `/var/backups/jolitz/` before an edit, kept 30 days.
+- **It backs up, and shows the diff.** Every config file goes
+  to `/var/backups/jolitz/` before an edit, kept 30 days. The
+  new version is written next to the backup first; you see
+  `diff -u` and the config test before it goes live
+  (`rules/backups.md`).
 - **It logs.** One plain line per change in the system
   journal (`journalctl -t jolitz`), the detail and the way
   back in `memory/servers/<host>/changelog.log`.
@@ -528,7 +600,16 @@ Claude Code is what jolitz is developed with. OpenCode reads
 the same `CLAUDE.md` and `.claude/skills/` while
 `OPENCODE_DISABLE_CLAUDE_CODE` is unset. Other tools get the
 rule layer; the skills (housekeeping, security, email, fleet
-audit, macOS cleanup) need Skills support.
+audit, incident, updates, docker, macOS cleanup) need Skills
+support. `memory/opencode.json.example` carries a
+`permission` block that denies in OpenCode what the guard
+denies in Claude Code, as far as its glob patterns reach.
+
+With a local model (Ollama or another provider on your own
+hardware) every host is read-only by default: smaller models
+keep long rule sets worse, and OpenCode runs no guard. The
+line `Local model changes: allowed` in `memory/user.md`
+lifts it (`rules/local-model.md`).
 
 ### A local model
 
@@ -567,12 +648,13 @@ log show \
 CLAUDE.md        instructions for the AI tool
 rules/           rule files per platform and topic
 .claude/skills/  housekeeping, security, email, fleet audit,
-                 macOS cleanup
+                 incident, updates, docker, macOS cleanup
 .claude/hooks/   update check and the guard
 bin/             jolitz-update, jolitz-backup, jolitz-migrate,
-                 jolitz-overview, jolitz-memory-lint
+                 jolitz-overview, jolitz-memory-lint,
+                 jolitz-doctor, jolitz-log, jolitz-guard-report
 lib/             the renderer behind jolitz-overview
-tests/           tests for lint and overview
+tests/           tests for lint, overview and the bin tools
 memory/          your state (gitignored)
 assets/overview/ screenshots and demo data for the overview
 assets/trailer/  script that renders the trailer

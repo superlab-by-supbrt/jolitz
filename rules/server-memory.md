@@ -42,6 +42,38 @@ Never invent a tag. The fleet audit, housekeeping
 across several hosts and the overview take a tag to
 narrow their scope ("fleet audit for prod").
 
+**Owner and services.** Two optional lines, both read
+by the overview (Servers table, services matrix,
+`overview.json`):
+
+```markdown
+- Owner: alice
+- Services: nginx 1.26, postgresql 17, docker
+```
+
+`Owner` is a name or team the user gave. `Services`
+is comma-separated; a version follows the name after
+a space and may be left out. Record only what was
+seen on the host or said by the user.
+
+**Guest software.** A host that runs an application
+jolitz does not administer carries `- Guest: sap`
+(lowercase token, comma-separated for several); the
+token names `rules/<token>.md`, read on every
+connection (`rules/guest-software.md`).
+
+**Network links.** Cross-server facts live in
+`memory/network.md` as free prose. One line form is
+read by the overview and drawn as a graph:
+
+```markdown
+- Link: web1.example.com -> db1.example.com (postgresql 5432)
+```
+
+The label in parentheses is optional. The host on the
+left opens the connection. Prose around these lines
+stays untouched.
+
 **Lint after editing.** After changing memory
 files, run `bin/jolitz-memory-lint <hostname>`. An
 `ERROR` means a value that looks like a credential:

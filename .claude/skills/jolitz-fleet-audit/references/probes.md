@@ -12,11 +12,19 @@ echo "###fw###"; <firewall probe>
 echo "###mta###"; <mta probe>
 echo "###time###"; <time probe>
 echo "###reboot###"; <reboot probe>
+echo "###certs###"; <certificate probe>
 '
 ```
 
 Then split the output on `###<key>###` markers to fill the
 comparison table.
+
+The marker set follows the OS family the pipeline detected
+(`rules/os-detection.md`). Linux runs sections 1 to 7.
+FreeBSD runs 2, 7 and 8; section 8 fills the `firewall`,
+`time` and `reboot` rows with its own commands. macOS runs
+2, 7 and 9 the same way. A marker whose section does not
+apply emits nothing, and the table cell reads `n/a`.
 
 **Privilege handling.** The sshd and firewall probes need
 root. When the SSH user is not root, try `sudo -n` (never an
@@ -271,3 +279,160 @@ Highlight as drift / warning:
   has not fired despite a pending kernel.
 - Hosts with uptime > 90d — even without a pending reboot,
   worth a heads-up.
+
+## 7. TLS certificates (every OS)
+
+Certificates do not drift between hosts; the row shows how
+many days each one has left, and under 30 the host gets a
+to-do (`references/output-format.md`). The probe reads the
+files certbot keeps — `/etc/letsencrypt/live/` on Linux,
+`/usr/local/etc/letsencrypt/live/` on FreeBSD — and, where
+there are none, asks the local port 443. The port needs no
+root; the `cert.pem` files are usually root-only, so the
+privilege ladder of section 2 applies to the loop.
+
+```bash
+for cert in /etc/letsencrypt/live/*/cert.pem \
+            /usr/local/etc/letsencrypt/live/*/cert.pem; do
+  [ -f "$cert" ] || continue
+  name=$(basename "$(dirname "$cert")")
+  end=$(openssl x509 -enddate -noout -in "$cert" 2>/dev/null \
+    | cut -d= -f2)
+  echo "cert=$name notAfter=$end"
+done
+if [ ! -d /etc/letsencrypt/live ] \
+   && [ ! -d /usr/local/etc/letsencrypt/live ]; then
+  end=$(echo | openssl s_client -connect localhost:443 \
+    -servername "$(hostname -f)" 2>/dev/null \
+    | openssl x509 -enddate -noout 2>/dev/null | cut -d= -f2)
+  [ -n "$end" ] && echo "cert=$(hostname -f) notAfter=$end"
+fi
+```
+
+Compute the days locally from `notAfter` and the audit date:
+`date -d` on Linux and `date -j -f` on the BSDs and macOS
+differ, so the host prints the date and the agent does the
+arithmetic. `certbot certificates` prints the same lineages
+with expiry and renewal state; use it when the to-do needs
+that detail, after `certbot --help` on the host. No output
+at all means no certificate was found: the row reads `none`,
+a finding on a host whose `memory.md` names a web server.
+
+Row keys: `certs.<name>.days`, one row per lineage or FQDN;
+the value is the number of days as a string, `expired` when
+negative.
+
+Highlight as a to-do (not as drift):
+
+- `days` under 30: WARN. The renewal timer or cron is the
+  suspect (`systemctl list-timers --all | grep -i certbot`;
+  `certbot renew --dry-run` per `rules/way-back.md`).
+- `days` under 7 or `expired`: CRITICAL.
+
+## 8. FreeBSD
+
+`rules/freebsd.md` names every command. `sshd -T` (section
+2) works unchanged; `pfctl` needs root, so the ladder of
+section 3 applies and the sentinel `unknown(needs-root)`
+stands in for the state. No `/etc/os-release`, no
+`systemctl`.
+
+```bash
+freebsd-version
+freebsd-version -k
+pkg audit -F 2>&1 | tail -n 1
+pkg upgrade -n 2>&1 | tail -n 1
+grep -h url /etc/pkg/FreeBSD.conf /usr/local/etc/pkg/repos/*.conf \
+  2>/dev/null
+sysrc -a 2>/dev/null \
+  | grep -E '^(pf|ntpd|chronyd|openntpd|ntpdate)_enable'
+pfctl -s info 2>&1 | head -n 1
+service ntpd status 2>&1
+service chronyd status 2>&1
+ntpq -pn 2>/dev/null | grep -c '^\*'
+service -e 2>/dev/null | wc -l
+```
+
+Row keys:
+
+- `base.userland` — `freebsd-version`; `base.kernel` —
+  `freebsd-version -k`. A kernel older than the userland is
+  an installed base update waiting for its reboot:
+  `reboot.required=yes`, otherwise `no`.
+- `pkg.vulnerable` — the count from `pkg audit -F`
+  ("N problem(s) in M installed package(s) found").
+- `pkg.pending` — the count from `pkg upgrade -n`; `0` for
+  "Your packages are up to date".
+- `pkg.branch` — `quarterly` or `latest` from the `url`
+  line.
+- `firewall.tool` — `pf` when `pf_enable: YES`, else
+  `none`; `firewall.state` — `enabled` or `disabled` from
+  the `Status:` line of `pfctl -s info`, or
+  `unknown(needs-root)`.
+- `time.service` — the daemon whose `_enable` is `YES`
+  (`ntpd`, `chronyd`, `openntpd`); `time.synced` — `yes`
+  when `ntpq -pn` shows a `*` peer. chrony's state comes
+  from `chronyc tracking`; check `chronyc help` on the host
+  before relying on its fields.
+- `services.enabled` — the line count of `service -e`, a
+  sanity number for the "Changed since" comparison.
+
+Highlight as drift:
+
+- Different `pkg.branch` across the FreeBSD hosts.
+- `pkg.vulnerable` above 0 on any host (also a to-do).
+- `firewall.tool=none` or `firewall.state=disabled` while
+  the others run pf.
+- `reboot.required=yes` with an uptime over 7 days: the
+  base update was installed and nobody rebooted.
+
+## 9. macOS
+
+`rules/macos.md` names the commands. `sshd -T` from section 2
+works; `systemsetup` and `sshd -T` need root, so the ladder
+applies (`sudo -n`, the user must be in the admin group). A
+Mac behind NAT with the firewall off is INFO, not CRITICAL
+(`rules/macos.md`).
+
+```bash
+sw_vers -productVersion
+softwareupdate -l 2>&1 | grep -c '^\* '
+defaults read /Library/Preferences/com.apple.SoftwareUpdate \
+  AutomaticCheckEnabled 2>/dev/null
+defaults read /Library/Preferences/com.apple.SoftwareUpdate \
+  CriticalUpdateInstall 2>/dev/null
+/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate
+/usr/libexec/ApplicationFirewall/socketfilterfw --getstealthmode
+systemsetup -getusingnetworktime 2>&1
+systemsetup -getremotelogin 2>&1
+sntp -t 1 time.apple.com 2>&1 | tail -n 1
+```
+
+Row keys:
+
+- `macos.version` — `sw_vers -productVersion`.
+- `macos.updates` — the count of `*` lines in
+  `softwareupdate -l` (the man page: each available update
+  is prefixed `*`, a non-recommended one `-`). `0` when the
+  output says no new software is available.
+- `macos.auto_check`, `macos.critical_updates` — the two
+  `defaults` values, `1` or `0`; a missing key reads
+  `(unset)`. `CriticalUpdateInstall` should be `1`.
+- `firewall.tool=applicationfirewall`; `firewall.state` —
+  `on` or `off` from `--getglobalstate`; `firewall.stealth`
+  — `on` or `off`.
+- `time.service` — `networktime` when
+  `-getusingnetworktime` says `On`, else `off`;
+  `time.synced` — `yes` when the `sntp` offset is under 5 s.
+- `sshd.remotelogin` — `On` or `Off` from `-getremotelogin`.
+- `reboot.required` — `(unset)`: macOS has no marker file.
+  `softwareupdate -l` says in an update's line when it
+  needs a restart; that goes into the to-do text.
+
+Highlight as drift:
+
+- `macos.critical_updates` not `1` on any Mac.
+- `firewall.state` differing between Macs (INFO level).
+- `time.service=off` on any host.
+- `macos.updates` above 0 in two audits in a row (compare
+  with the previous snapshot).
