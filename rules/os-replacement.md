@@ -1063,11 +1063,16 @@ useradd -r -d /run/sshd -s /usr/sbin/nologin sshd
 useradd -r -d /var/lib/ntp -s /usr/sbin/nologin ntp
 ```
 
-Write `useradd` commands directly into the target
-rootfs's `/etc/passwd`, `/etc/shadow`, and
-`/etc/group` if `chroot` is not possible (different
-architecture or OS). Use the next available UID in
-the system range (100–999).
+If `chroot` is not possible (different architecture
+or OS), `useradd` cannot run against the new root.
+Append the entries by hand to the target rootfs's
+`/etc/passwd`, `/etc/shadow` and `/etc/group`
+instead, in the format those files use. Use the
+next available UID in the system range (100–999).
+The guard denies a write to an account file under
+any prefix, so this step needs the override from
+Prerequisites, step 4, like the rest of this
+workflow.
 
 ### 2. Configuration Files
 

@@ -249,7 +249,14 @@ for CI/CD, key auth, target /var/www/myapp"
 
 ## Removing a Deploy User
 
-When the user asks to remove a deployment setup:
+When the user asks to remove a deployment setup.
+Steps 1 and 2 delete a sudoers file and an account,
+which the guard hook denies in every permission
+mode; they run only in a session the operator
+started with `JOLITZ_GUARD_DISABLE` set to 1, and
+each asks first with its way back (the backup from
+`rules/backups.md`, the home directory kept until
+the user confirms).
 
 1. Remove the sudoers file:
    `rm /etc/sudoers.d/deploy`

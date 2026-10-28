@@ -92,9 +92,11 @@ fi
 ```
 
 Row keys: each line is `key value`. Since OpenSSH 10.4
-the keys are mixed case (`PermitRootLogin`), so compare
-them without regard to case. Compare column-by-column. A host whose sshd column is `unknown(needs-root)`
-is reported as such, never as "defaults".
+the keys are mixed case (`PermitRootLogin`; every key
+from 10.5), so compare them without regard to case.
+Compare column-by-column. A host whose sshd column is
+`unknown(needs-root)` is reported as such, never as
+"defaults".
 
 Highlight as drift:
 

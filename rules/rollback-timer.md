@@ -41,9 +41,9 @@ sits at the machine. Arm it anyway when the machine
 is reached remotely by others or has no keyboard.
 
 A one-shot rollback timer armed in a running
-session is a safety net, not a run with nobody at
-the keyboard (`CLAUDE.md` → What jolitz does not
-do). It is always allowed.
+session is a safety net, not a scheduled run
+(`rules/scheduled-housekeeping.md`). It is always
+allowed.
 
 ## The window
 
