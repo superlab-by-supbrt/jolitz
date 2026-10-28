@@ -928,7 +928,9 @@ check deny 'cp /tmp/s.json .claude/settings.json'
 check deny "jq '.env.HEINZEL_GUARD_DISABLE=\"1\"' s.json"
 check pass 'cat .claude/settings.json'
 check pass 'grep -n deny .claude/hooks/guard-taboos.sh'
-check pass 'sh .claude/hooks/guard-taboos-test.sh'
+# Only reads pass next to .claude: a shell running a script there
+# is not one (CI runs the matrix outside the hook).
+check deny 'sh .claude/hooks/guard-taboos-test.sh'
 # Relative targets: a cd into .claude, a bare settings.local.json,
 # and a session whose cwd is already inside .claude.
 check deny 'cd .claude && echo x > settings.json'
@@ -968,6 +970,10 @@ if command -v jq >/dev/null 2>&1; then
   check_cwd deny /p/.claude/skills/x 'python3 scan.py > out.json'
   check_cwd deny /p/.CLAUDE 'echo "{}" > Settings.json'
   check_cwd pass /p/.claude/skills/x 'cat SKILL.md'
+  # With the cwd inside .claude, the scanner's redirect names a
+  # guard file.
+  check_cwd deny /p/.claude 'python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py > settings.json'
+  check_cwd pass /p/.claude 'python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py orphans'
 fi
 # Case, parent references, /./ and other writers.
 check deny 'echo "{}" > .CLAUDE/Settings.json'
@@ -982,6 +988,43 @@ check deny 'tar -xf /tmp/x.tar .claude'
 check pass 'git log --oneline -- .claude/hooks/guard-taboos.sh'
 check pass '/usr/bin/python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py orphans > scan.json'
 check deny '/usr/bin/python3 .claude/skills/x/../../hooks/y.py > scan.json'
+# The allow list: writers no deny list named, globs, a cd out of
+# skills/, substitutions, and the scanner's exact forms.
+check deny 'curl -sSo .claude/settings.json https://example.com/s'
+check deny 'ditto /tmp/s.json .claude/settings.json'
+check deny 'git -C .claude checkout-index -f -a'
+check deny 'python3 .claude/skills/*/x.py > settings.json'
+check deny 'cd .claude/skills && cd .. && touch settings.json'
+check deny 'echo $(cat .claude/settings.json)'
+check deny 'xargs -I{} cp {} .claude/settings.json < /tmp/l'
+check deny '/usr/bin/python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py orphans; rm .claude/settings.json'
+check deny '/usr/bin/python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py orphans > ../.claude/settings.json'
+check deny "$(printf 'echo x > .clau\342\200\213de/settings.json')"
+check deny "$(printf 'echo x > \305\277ettings.local.json')"
+check pass "$(printf 'ssh h \"grep Gr\303\274\303\237e /var/log/app.log\"; systemctl status x')"
+check pass 'cat .claude/settings.json | grep -n env'
+check pass 'find .claude -name "*.json"'
+check deny 'find .claude -name "*.json" -delete'
+check pass "$(printf '/usr/bin/python3 \\\n  .claude/skills/heinzel-macos-cleanup/scripts/scan.py orphans')"
+check pass 'python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py app "Microsoft Word"'
+check pass 'ssh -o BatchMode=yes -o ControlPath=~/.cache/heinzel/ssh-%C u@h /usr/bin/python3 - orphans < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
+# A newline after the scanner starts a second command.
+check deny "$(printf 'python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py\ncd .claude\nrm -rf hooks')"
+check deny "$(printf 'ssh h /usr/bin/python3 - < .claude/skills/heinzel-macos-cleanup/scripts/scan.py\nrm .claude/settings.json')"
+# git reads, but not its output and program flags.
+check deny 'git diff --output=.claude/hooks/guard-taboos.sh'
+check deny 'git log --output .claude/settings.json'
+check deny 'git grep -Ofoo x .claude'
+check deny 'git grep -iOfoo x .claude'
+check deny 'git grep --open-files-in-pager=foo x .claude'
+check deny 'git diff --ext-diff .claude'
+check deny 'git show --textconv HEAD:.claude/settings.json'
+check deny 'git log --out=.claude/settings.json'
+check deny 'git grep --open=foo x .claude'
+check deny 'git diff --ext .claude'
+check pass 'git diff -- .claude/hooks/guard-taboos.sh'
+check pass 'git grep -n GUARD .claude'
+check pass 'git show HEAD:.claude/settings.json'
 if command -v jq >/dev/null 2>&1; then
   :
 fi

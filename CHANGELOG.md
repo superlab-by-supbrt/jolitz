@@ -11,6 +11,14 @@
   write onto a spelled-out path, lost in
   3.3.3-jolitz.1, is back. `.claude/skills/` stays
   usable, for the macOS cleanup scanner.
+- **Next to `.claude` only reads pass.** The guard
+  no longer lists the ways to write there; it
+  allows cat, grep, ls, head, find without `-exec`
+  and `-delete`, and git log, show and diff without
+  `--output`, `-O`, `--ext-diff` or `--textconv`.
+  The scanner keeps its two forms, on one line, and
+  without a redirect when the session runs inside
+  `.claude`.
 - **The README speaks of jolitz.** Technical names
   (skills, `bin/heinzel-*`, `HEINZEL_*`, the journal
   tag, the server lock file) keep the upstream
