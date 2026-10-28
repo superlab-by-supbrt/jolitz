@@ -103,7 +103,29 @@ func New(cfg Config) http.Handler {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		s.errorPage(w, r, http.StatusNotFound, "No such page.")
 	})
-	return mux
+	return s.sameOrigin(mux)
+}
+
+// sameOrigin refuses a state-changing request that a browser sent
+// from another origin. SameSite=Lax keeps the cookie off a POST
+// from another site, but not from another host of the same site
+// (wiki.example.com posting to hub.example.com). Browsers send
+// Sec-Fetch-Site and Origin with every POST; a request that has
+// one of them must come from this host. A request with neither is
+// not from a browser form (curl, jolitz-sync) and carries its own
+// bearer token, which no other page can read.
+func (s *server) sameOrigin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if api.SafeMethod(r.Method) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if !api.SameOrigin(r) {
+			s.errorPage(w, r, http.StatusForbidden, "This form was sent from another site. Open the hub directly and try again.")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // ---- page plumbing -----------------------------------------

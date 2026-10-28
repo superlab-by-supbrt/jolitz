@@ -622,3 +622,74 @@ func TestEndpointsRegistered(t *testing.T) {
 	res, out := e.do("admin", "GET", "nothing", "")
 	e.want(404, res, out, "unknown endpoint")
 }
+
+// The login cookie does not authenticate a write a browser sent
+// from another origin; the same write with the bearer token, or
+// from the hub's own origin, goes through.
+func TestCookieWriteNeedsSameOrigin(t *testing.T) {
+	e := newEnv(t)
+	put := func(hdr map[string]string) int {
+		req, _ := http.NewRequest("PUT", e.srv.URL+"/api/v1/claims/web1.example.com", strings.NewReader(`{"note":"x"}`))
+		req.AddCookie(&http.Cookie{Name: CookieName, Value: e.tokens["op"]})
+		for k, v := range hdr {
+			req.Header.Set(k, v)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+	if c := put(map[string]string{"Origin": "https://wiki.example.com", "Sec-Fetch-Site": "same-site"}); c != 401 {
+		t.Errorf("cross-origin cookie write = %d, want 401", c)
+	}
+	if c := put(map[string]string{"Origin": "null"}); c != 401 {
+		t.Errorf("null-origin cookie write = %d, want 401", c)
+	}
+	if res, _ := e.do("", "GET", "claims", ""); res.StatusCode != 401 {
+		t.Fatalf("claims without token = %d", res.StatusCode)
+	}
+	if res, body := e.do("viewer", "GET", "claims", ""); res.StatusCode != 200 || strings.Contains(body, "web1.example.com") {
+		t.Errorf("a refused write left a claim: %s", body)
+	}
+	u := strings.TrimPrefix(e.srv.URL, "http://")
+	if c := put(map[string]string{"Origin": "http://" + u, "Sec-Fetch-Site": "same-origin"}); c != 200 && c != 201 {
+		t.Errorf("same-origin cookie write = %d", c)
+	}
+	// A cross-origin GET with the cookie still reads: reads change
+	// nothing and the response is not readable by the other page.
+	req, _ := http.NewRequest("GET", e.srv.URL+"/api/v1/claims", nil)
+	req.AddCookie(&http.Cookie{Name: CookieName, Value: e.tokens["op"]})
+	req.Header.Set("Origin", "https://wiki.example.com")
+	if res, err := http.DefaultClient.Do(req); err != nil || res.StatusCode != 200 {
+		t.Errorf("cookie read = %v %v", res, err)
+	}
+}
+
+// An OIDC browser session is the same cookie and gets the same
+// rule: no write from another origin.
+func TestWebSessionWriteNeedsSameOrigin(t *testing.T) {
+	e := newEnv(t)
+	secret, err := e.st.StartWebSession("op", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	put := func(origin string) int {
+		req, _ := http.NewRequest("PUT", e.srv.URL+"/api/v1/claims/web1.example.com", strings.NewReader(`{"note":"x"}`))
+		req.AddCookie(&http.Cookie{Name: CookieName, Value: secret})
+		req.Header.Set("Origin", origin)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+	if c := put("https://wiki.example.com"); c != 401 {
+		t.Errorf("cross-origin web-session write = %d, want 401", c)
+	}
+	if c := put(e.srv.URL); c != 200 && c != 201 {
+		t.Errorf("same-origin web-session write = %d", c)
+	}
+}

@@ -4,7 +4,7 @@ jolitz runs under OpenCode with a local model when
 `memory/opencode.json` names a provider on the
 operator's own hardware: an `ollama` section, or a
 `baseURL` on localhost or a private address
-(README → A local model). Then every host is
+(`docs/opencode.md` → A local model). Then every host is
 read-only by default.
 
 ## Why

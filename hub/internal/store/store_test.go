@@ -248,6 +248,19 @@ func TestFileVersions(t *testing.T) {
 		if _, _, err := st.GetFile("network.md"); err != nil {
 			t.Errorf("network.md pruned: %v", err)
 		}
+
+		// A deleted file keeps no history past the cutoff: its
+		// content does not outlive the delete forever.
+		if err := st.DeleteFile(p); err != nil {
+			t.Fatal(err)
+		}
+		st.Now = func() time.Time { return now.Add(96 * time.Hour) }
+		if _, err := st.PruneFileVersions(now.Add(72 * time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+		if hist, _ = st.FileHistory(p); len(hist) != 0 {
+			t.Errorf("history of a deleted file after prune %+v, want none", hist)
+		}
 	})
 }
 
@@ -376,5 +389,63 @@ func TestMigrateFromPhaseTwo(t *testing.T) {
 	}
 	if _, err := st.StartWebSession("alice", time.Hour); err != nil {
 		t.Errorf("web_sessions: %v", err)
+	}
+}
+
+// A database at schema 2 with users gets the OIDC binding
+// columns, every user unbound, and the unique index on the pair.
+func TestMigrateSchemaTwoToThree(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hub.db")
+	db, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ms, err := migrations(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range ms[:2] {
+		if _, err := db.Exec(m.SQL); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`INSERT INTO schema_migrations VALUES(?,?,'2026-10-01T00:00:00Z')`, m.Version, m.Name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec(`INSERT INTO users(name, token_sha256, role, created_at) VALUES
+		('alice', 'aa', 'admin', '2026-10-01T00:00:00Z'), ('bob', 'bb', 'viewer', '2026-10-01T00:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	st, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if v, err := st.Version(); err != nil || v != 3 || SchemaVersion() < 3 {
+		t.Errorf("version %d %v", v, err)
+	}
+	users, err := st.ListUsers()
+	if err != nil || len(users) != 2 {
+		t.Fatalf("users %+v %v", users, err)
+	}
+	for _, u := range users {
+		if _, _, ok, err := st.OIDCBinding(u.Name); ok || err != nil {
+			t.Errorf("%s bound after the migration: %v", u.Name, err)
+		}
+	}
+	if err := st.BindOIDC("alice", "https://id.example.com", "s1"); err != nil {
+		t.Fatal(err)
+	}
+	// The index holds even past the store's own checks.
+	if _, err := st.db.Exec(`UPDATE users SET oidc_issuer = 'https://id.example.com', oidc_subject = 's1' WHERE name = 'bob'`); err == nil {
+		t.Error("two users with one pair")
+	}
+	// Two unbound users are no conflict.
+	if _, err := st.AddUser("carol", RoleViewer); err != nil {
+		t.Errorf("third unbound user: %v", err)
 	}
 }

@@ -636,3 +636,41 @@ func TestLinkEdits(t *testing.T) {
 		t.Errorf("network.md created: %d %q", res.StatusCode, got)
 	}
 }
+
+// A form posted from another origin is refused before any
+// handler runs; the same form from the hub itself passes.
+func TestCrossOriginPostRefused(t *testing.T) {
+	e := newEnv(t)
+	post := func(hdr map[string]string) int {
+		req, _ := http.NewRequest("POST", e.srv.URL+"/hosts/web1.example.com/claim",
+			strings.NewReader(url.Values{"note": {"x"}}.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(&http.Cookie{Name: api.CookieName, Value: e.tokens["alice"]})
+		for k, v := range hdr {
+			req.Header.Set(k, v)
+		}
+		c := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		res, err := c.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+	if c := post(map[string]string{"Sec-Fetch-Site": "same-site", "Origin": "https://wiki.example.com"}); c != 403 {
+		t.Errorf("same-site post = %d, want 403", c)
+	}
+	if c := post(map[string]string{"Origin": "https://evil.example.org"}); c != 403 {
+		t.Errorf("foreign origin = %d, want 403", c)
+	}
+	if c := post(map[string]string{"Origin": "null"}); c != 403 {
+		t.Errorf("null origin = %d, want 403", c)
+	}
+	if c, err := e.st.Claim("web1.example.com"); err == nil && c != nil {
+		t.Errorf("a refused post claimed the host for %q", c.User)
+	}
+	u, _ := url.Parse(e.srv.URL)
+	if c := post(map[string]string{"Sec-Fetch-Site": "same-origin", "Origin": "http://" + u.Host}); c != 303 {
+		t.Errorf("same-origin post = %d, want 303", c)
+	}
+}

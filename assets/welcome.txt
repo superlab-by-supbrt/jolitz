@@ -1,0 +1,20 @@
+   _       _ _ _
+  (_) ___ | (_) |_ ____      +----------------------+
+  | |/ _ \| | | __|_  /      | $ jolitz             |
+  | | (_) | | | |_ / /       | > looks before it    |
+ _/ |\___/|_|_|\__/___|      |   touches            |
+|__/                         | > knows the way back |
+                             +----------------------+
+  a sysadmin's habits for your AI
+  named in honour of Bill and Lynne Jolitz, 386BSD
+
+  It looks before it touches, backs up before it edits,
+  names the way back before it changes anything, and does
+  nothing without your OK.
+
+  First steps
+    1  Name a server:  "How full are the disks on web1?"
+    2  It asks once for your SSH user, keeps it in memory/
+    3  Check this machine:  bin/jolitz-doctor
+
+  every change asks first  -  read each command  -  MIT, no warranty
