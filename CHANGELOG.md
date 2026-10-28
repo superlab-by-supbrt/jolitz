@@ -1,5 +1,24 @@
 # Changelog
 
+## 3.3.3-jolitz.6 — 2026-10-28
+
+- **The guard reads Windows paths.** A file edit on
+  `C:\Users\x\.claude\settings.json`, on a key under
+  `C:\Users\x\.ssh\`, or a session whose directory is
+  `C:\…\.claude` passed, because every pattern expects
+  `/`. Paths from the file tools, the session directory
+  and backslash paths in a command are now read with
+  slashes.
+- **Without jq the guard no longer blocks everything.** The
+  hook input always carries `transcript_path` under
+  `~/.claude`; scanned raw, it put every command next to the
+  guard's own files, even `ls`. The fallback now leaves that
+  one field out. Taboos stay blocked.
+- **The README says what a workstation needs:** `jq`, and on
+  Windows Git for Windows or WSL 2.
+- **CI runs the guard matrix on Windows** in Git Bash, and
+  checks that no shell script is checked out with CRLF.
+
 ## 3.3.3-jolitz.5 — 2026-10-28
 
 - **The README opens with everyday work.** A table of

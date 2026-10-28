@@ -40,6 +40,38 @@ jobs:
       - name: ShellCheck (error severity)
         run: shellcheck -S error bin/* .claude/hooks/*.sh tests/*.sh
 
+  windows-git-bash:
+    # Native Windows runs the hooks in Git Bash, as this job does.
+    # A Windows path (C:\...) must hit the same blocks as on Unix,
+    # and CRLF must not reach a shell script (.gitattributes).
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Tools
+        run: |
+          command -v jq || choco install jq --no-progress -y
+          jq --version
+          bash --version | head -1
+
+      - name: Scripts checked out with LF
+        run: |
+          for f in bin/* .claude/hooks/*.sh tests/*.sh; do
+            if grep -q "$(printf '\r')" "$f"; then
+              echo "CRLF in $f"; exit 1
+            fi
+          done
+
+      - name: Guard test matrix
+        run: sh .claude/hooks/guard-taboos-test.sh
+
+      - name: Memory lint and overview tests
+        run: sh tests/memory-tools-test.sh
+
   macos-cleanup-scanner:
     # The skill runs the Command Line Tools Python.
     # This job uses that same /usr/bin/python3.
