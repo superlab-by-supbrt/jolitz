@@ -16,8 +16,12 @@
   one field out. Taboos stay blocked.
 - **The README says what a workstation needs:** `jq`, and on
   Windows Git for Windows or WSL 2.
-- **CI runs the guard matrix on Windows** in Git Bash, and
-  checks that no shell script is checked out with CRLF.
+- **CI on Windows.** Every pull request runs a guard smoke
+  test with Windows hook input in Git Bash (`tests/windows-smoke.sh`),
+  the memory tool tests, and a check that no shell script is
+  checked out with CRLF. The full guard matrix, which takes
+  longer than 45 minutes under Git Bash, runs on Windows for
+  `main` and on request.
 
 ## 3.3.3-jolitz.5 — 2026-10-28
 
