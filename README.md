@@ -15,10 +15,11 @@ reads project files and runs shell commands.
 
 jolitz is a fork of
 [heinzel](https://github.com/wintermeyer/heinzel) by Stefan
-Wintermeyer; see [Origin](#origin). Inside, the rules, skills
-and journal entries still call the agent "heinzel", which
-keeps merges from upstream simple. Throughout this README,
-"Heinzel" means the agent as it runs.
+Wintermeyer; see [Origin](#origin). Technical names keep the
+upstream spelling, which keeps merges from upstream simple:
+the skills (`heinzel-housekeeping`, …), `bin/heinzel-*`, the
+`HEINZEL_*` variables, the journal tag `heinzel` and the
+server lock `/etc/heinzel.conf`.
 
 ## Install
 
@@ -49,16 +50,16 @@ claude        # or: opencode
 ❯ Install postgresql on server1.example.com
 ```
 
-On the first connection Heinzel may ask what it cannot
+On the first connection jolitz may ask what it cannot
 detect, usually the SSH user. The answer goes to
 `memory/user.md`, so it asks once. You can pre-fill that file
 from `memory/user.md.example`. It also holds your language
 (`Language: German`).
 
-Heinzel proposes every command, says what it does and why,
+jolitz proposes every command, says what it does and why,
 and waits for your approval.
 
-Heinzel shares one SSH connection per host and keeps it open
+jolitz shares one SSH connection per host and keeps it open
 for 10 minutes after the last call. The sockets live in
 `~/.cache/heinzel` (mode 0700), so any process of your local
 user can use an open connection without the key.
@@ -86,12 +87,12 @@ user can use an open connection without the key.
   SSH, same rules.
 - `/plan Migrate the database on db.example.com`: explores
   and drafts a plan, changes nothing until you approve.
-  `/plan` is Claude Code. In OpenCode, ask Heinzel to plan
+  `/plan` is Claude Code. In OpenCode, ask jolitz to plan
   first.
 
 More that happens without asking:
 
-- **OS detection.** On first contact Heinzel detects the OS
+- **OS detection.** On first contact jolitz detects the OS
   and hardware and loads the rule file for that platform.
 - **Memory.** Each server gets a folder under
   `memory/servers/` with its state, a changelog and an open
@@ -106,11 +107,11 @@ More that happens without asking:
   memory. Each alias can have its own SSH user.
 - **SSH ports.** A port other than 22 is stored per server.
   List the ports you use as `Alternative SSH ports:` in
-  `memory/user.md`. Heinzel tries those and never scans.
+  `memory/user.md`. jolitz tries those and never scans.
 - **Email details.** Mails carry a short signature with the
   operator's name (`Operator name:` in `memory/user.md`) and
   headers that keep out-of-office replies away. The first
-  mail per host asks where to send from. Heinzel uses an
+  mail per host asks where to send from. jolitz uses an
   existing MTA and asks before installing one.
 
 The macOS cleanup scanner needs the Command Line Tools
@@ -162,7 +163,7 @@ The safety rules are part of every session.
   editing. Cleaned up after 30 days.
 - **Knows the way back before it changes anything.** Every
   question before a change ends with `Way back: <how>` or
-  `Way back: none`. Heinzel prefers changes that last only
+  `Way back: none`. jolitz prefers changes that last only
   until the next reload until they are proven (`sysctl -w`
   before `sysctl.d`, `mount` before `fstab`), keeps the old
   kernel, cluster or binary until the new one works, and
@@ -170,10 +171,10 @@ The safety rules are part of every session.
   (`rules/way-back.md`).
 - **Rolls back what locks it out.** Before a change that can
   cut off the login (IP address, route, firewall, VPN, PAM),
-  Heinzel arms a timer on the server that restores the old
+  jolitz arms a timer on the server that restores the old
   state after 120 seconds. Only a fresh SSH login after the
   change stops it. If the new address is wrong, the server
-  undoes it by itself and Heinzel reports what happened
+  undoes it by itself and jolitz reports what happened
   (`rules/rollback-timer.md`). Set a longer window per server
   with `- Rollback window: 300` in its `memory.md`.
 - **Tests before applying** with dry-run or validation modes
@@ -184,13 +185,14 @@ The safety rules are part of every session.
 - **Stable repos only.** No third-party sources without your
   approval.
 - **Least privilege.** Normal user first, `sudo` when needed,
-  root last. With neither, Heinzel does what it can and
+  root last. With neither, jolitz does what it can and
   writes a report for the tasks that need root.
 - **Blacklist and read-only servers.** Hosts in
   `memory/blacklist.md` are never contacted. Hosts in
   `memory/readonly.md` are inspected but never changed.
 - **Server lock.** A machine's owner can lock it against
-  every Heinzel with a file on the machine itself:
+  jolitz (and heinzel, which reads the same file) with a
+  file on the machine itself:
 
   ```
   # /etc/heinzel.conf
@@ -198,11 +200,11 @@ The safety rules are part of every session.
   reason = Database migration until 20 Oct, hands off
   ```
 
-  Heinzel still connects and inspects, but changes nothing
+  jolitz still connects and inspects, but changes nothing
   and reports what it would have done. An unreadable file
-  or any value other than `true` locks too. Heinzel never
+  or any value other than `true` locks too. jolitz never
   writes, moves or deletes the file; you remove the lock by
-  hand. It is a promise kept by Heinzel, not a security
+  hand. It is a promise kept by jolitz, not a security
   boundary: it stops no tool that ignores it
   (`rules/access-control.md`).
 - **Protected paths.** `memory/protected-paths.md` marks
@@ -217,7 +219,7 @@ The safety rules are part of every session.
 
 ### Against hallucinations
 
-An LLM can invent a flag or a path. Heinzel puts verified
+An LLM can invent a flag or a path. jolitz puts verified
 facts in front of it instead:
 
 - A rule file per platform holds the right commands, package
@@ -231,7 +233,7 @@ facts in front of it instead:
 This reduces the risk. It does not remove it.
 
 > [!CAUTION]
-> Heinzel operates on live systems, as root, with sudo or
+> jolitz operates on live systems, as root, with sudo or
 > unprivileged. Review every command before you approve it.
 
 A disciplined AI that follows the checklist every time makes
@@ -265,14 +267,14 @@ that is `opencode run "…"`.
 - `--dangerously-skip-permissions` removes all review,
   including the protection against malicious text in server
   output. Use it in disposable environments only.
-- Whatever the mode, Heinzel's own rules still apply. See
+- Whatever the mode, jolitz's own rules still apply. See
   the [permission modes docs](https://code.claude.com/docs/en/permission-modes)
   for details.
 
 A nightly health check by cron:
 
 ```
-17 6 * * * cd /path/to/heinzel && flock -n \
+17 6 * * * cd /path/to/jolitz && flock -n \
   /tmp/heinzel-cron-server1.lock timeout 30m \
   /abs/path/to/claude --permission-mode auto \
   -p "Run housekeeping on server1.example.com and \
@@ -354,7 +356,7 @@ follow the same chain, e.g.
 ## Updates
 
 The version is in `VERSION`, the changes in `CHANGELOG.md`.
-Claude Code updates Heinzel at session start with a
+Claude Code updates jolitz at session start with a
 `git pull`, unless you are pinned, on another branch, or have
 set `HEINZEL_NO_UPDATE=1`. Elsewhere:
 
@@ -385,7 +387,7 @@ Other distributions work with general best practices.
 
 ### AI tools
 
-Claude Code is the tool Heinzel is developed with. OpenCode
+Claude Code is the tool jolitz is developed with. OpenCode
 reads the same `CLAUDE.md` and `.claude/skills/`, as long as
 `OPENCODE_DISABLE_CLAUDE_CODE` is unset. Any other tool that
 reads project files gets the rule layer. The skills
@@ -394,7 +396,7 @@ cleanup) need a tool that supports Skills.
 
 ### OpenCode with a local model
 
-Heinzel can run on your own hardware with
+jolitz can run on your own hardware with
 [Ollama](https://ollama.com):
 
 ```bash

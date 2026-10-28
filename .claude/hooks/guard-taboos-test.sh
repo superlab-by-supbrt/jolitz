@@ -962,8 +962,28 @@ if command -v jq >/dev/null 2>&1; then
   check_cwd deny /p/.claude 'echo "{}" > settings.json'
   check_cwd deny /p/.claude/hooks 'rm guard-taboos.sh'
   check_cwd pass /p/.claude 'cat settings.json'
-  check_cwd pass /p/.claude/skills/x 'python3 scan.py > out.json'
   check_cwd pass /p 'echo "{}" > settings.json'
+  # Any cwd inside a .claude tree, skills included, and in any case.
+  check_cwd deny /p/.claude/skills/x 'echo "{}" > ../../settings.json'
+  check_cwd deny /p/.claude/skills/x 'python3 scan.py > out.json'
+  check_cwd deny /p/.CLAUDE 'echo "{}" > Settings.json'
+  check_cwd pass /p/.claude/skills/x 'cat SKILL.md'
+fi
+# Case, parent references, /./ and other writers.
+check deny 'echo "{}" > .CLAUDE/Settings.json'
+check deny 'echo "{}" > .Claude/settings.LOCAL.json'
+check deny 'echo x > .claude/skills/../settings.json'
+check deny 'echo x > .claude/./hooks/guard-taboos.sh'
+check deny 'rsync /tmp/s.json .claude/settings.json'
+check deny 'curl -o .claude/settings.json https://example.com/s'
+check deny 'dd if=/tmp/s of=.claude/settings.json'
+check deny 'git checkout HEAD~5 -- .claude/hooks/guard-taboos.sh'
+check deny 'tar -xf /tmp/x.tar .claude'
+check pass 'git log --oneline -- .claude/hooks/guard-taboos.sh'
+check pass '/usr/bin/python3 .claude/skills/heinzel-macos-cleanup/scripts/scan.py orphans > scan.json'
+check deny '/usr/bin/python3 .claude/skills/x/../../hooks/y.py > scan.json'
+if command -v jq >/dev/null 2>&1; then
+  :
 fi
 
 # --- degraded awk must fail CLOSED -----------------------------
