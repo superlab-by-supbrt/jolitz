@@ -28,6 +28,11 @@ jobs:
       - name: Memory lint and overview tests
         run: sh tests/memory-tools-test.sh
 
+      # doctor, log search and guard report against fakes in
+      # a temp HOME and PATH; no network, no server.
+      - name: bin tools tests
+        run: sh tests/bin-tools-test.sh
+
       - name: Validate tracked JSON files
         run: |
           git ls-files '*.json' | while read -r f; do
@@ -44,6 +49,23 @@ jobs:
 
       - name: ShellCheck (error severity)
         run: shellcheck -S error bin/* .claude/hooks/*.sh tests/*.sh
+
+  # The same scripts under busybox: ash as sh, busybox awk,
+  # sed, tr and stat. Appliances and small hosts ship this
+  # userland, and the guard must fail closed there, never
+  # open.
+  busybox:
+    runs-on: ubuntu-latest
+    container: alpine:3.20
+    steps:
+      - run: apk add --no-cache git jq
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - name: Guard test matrix (busybox)
+        run: sh .claude/hooks/guard-taboos-test.sh
+      - name: Memory lint and overview tests (busybox)
+        run: sh tests/memory-tools-test.sh
+      - name: bin tools tests (busybox)
+        run: sh tests/bin-tools-test.sh
 
   macos-cleanup-scanner:
     # The skill runs the Command Line Tools Python.

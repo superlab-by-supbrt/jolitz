@@ -708,9 +708,9 @@ while read -r md; do
       "JOLITZ_GUARD_DISABLE"
   fi
 done <<EOF
-$(grep -rlE --include='*.md' \
-  '^[[:space:]]*```.*[[:space:]]guard-off[[:space:]]*$' \
-  "$CLAUDE_DIR/skills" "$CLAUDE_DIR/../rules")
+$(find "$CLAUDE_DIR/skills" "$CLAUDE_DIR/../rules" -name '*.md' \
+  -exec grep -lE \
+  '^[[:space:]]*```.*[[:space:]]guard-off[[:space:]]*$' {} +)
 EOF
 if [ "$NGUARDOFF" -eq 0 ]; then
   FAIL=$((FAIL + 1))
