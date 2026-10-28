@@ -441,6 +441,12 @@ has "$T/o" 'unreachable' "unreachable is said"
 "$SYNC" -d "$M" session end > "$T/o" 2>&1; rc=$?
 ok $(( rc != 0 )) "session end with no open session exits 0 (got $rc)"
 
+# Plain http carries the token in clear: loopback only.
+printf 'url=http://198.51.100.7:7331\ntoken_file=%s\n' "$HDR_A" > "$CONF"
+"$SYNC" -d "$M" status > "$T/o" 2>&1; rc=$?
+ok $(( rc != 2 )) "plain http to a remote host exits 2 (got $rc)"
+has "$T/o" 'plain http' "plain http to a remote host is refused with a reason"
+
 printf 'url = %s\ntoken_file = %s\nworkstation = test-ws\n' \
   "$URL" "$HDR_X" > "$CONF"
 "$SYNC" -d "$M" status > "$T/o" 2>&1; rc=$?
@@ -523,6 +529,18 @@ ok $? "the alias points to the canonical directory"
 "$SYNC" -d "$M2" pull --quiet > "$T/o" 2>&1; rc=$?
 ok $(( rc != 0 )) "quiet pull with nothing to do exits 0 (got $rc)"
 [ ! -s "$T/o" ]; ok $? "quiet pull with nothing to do is silent"
+
+# A host directory that is a symlink out of memory/ (planted,
+# or a mistake) must not receive the hub's files: the write
+# would land wherever the link points.
+M3="$T/memory3"
+OUT3="$T/outside"
+mkdir -p "$M3/servers" "$OUT3"
+ln -s "$OUT3" "$M3/servers/db1.example.com"
+"$SYNC" -d "$M3" pull > "$T/o" 2>&1; rc=$?
+[ ! -e "$OUT3/memory.md" ]; ok $? "pull never writes through a host symlink that leaves memory/"
+has "$T/o" 'outside memory/' "pull names the link that leaves memory/"
+[ -f "$M3/servers/web1.example.com/memory.md" ]; ok $? "pull still writes the other hosts"
 
 # --- a colleague's change arrives ----------------------------
 printf '%s\n- Tags: prod, web, bob\n' "$(cat "$M/servers/web1.example.com/memory.md")" \
