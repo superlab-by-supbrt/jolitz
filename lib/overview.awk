@@ -3,6 +3,7 @@
 # Input files (tab-separated, prepared by the script):
 #   hosts.tsv      host os ip distro lastconn tags port mode
 #                  rules todos lastchange product version
+#                  owner services
 #   todos.tsv      host text
 #   changes.tsv    date time host who headline rollback
 #                  flags detail (lines joined by \037)
@@ -12,10 +13,16 @@
 #   audit-prev.tsv date host key value (the one before)
 #   guard.tsv      time mode reason subject
 #   lint.txt       WARN lines of jolitz-memory-lint
+#   links.tsv      from to label ("- Link:" in network.md)
 #
 # Variables: mode (html|text), today, now, days, tag, out,
-# mem, jq. Plain POSIX awk: it runs under the BWK awk of
-# macOS and the mawk of Debian and Ubuntu.
+# mem, jq, json (0|1), prom (0|1). Plain POSIX awk: it
+# runs under the BWK awk of macOS and the mawk of Debian
+# and Ubuntu.
+#
+# Every string from memory passes esc() on its way into
+# HTML and jesc() on its way into JSON or a Prometheus
+# label.
 
 function base(p) { sub(/.*\//, "", p); return p }
 
@@ -24,6 +31,22 @@ function esc(s) {
   gsub(/>/, "\\&gt;", s); gsub(/"/, "\\&quot;", s)
   return s
 }
+
+# JSON string body: backslash, double quote and control
+# characters escaped. Built character by character; the
+# awks disagree on backslashes in a gsub replacement.
+function jesc(s,   i, n, c, o) {
+  o = ""; n = length(s)
+  for (i = 1; i <= n; i++) {
+    c = substr(s, i, 1)
+    if (c == "\\") o = o "\\\\"
+    else if (c == "\"") o = o "\\\""
+    else if (c in ctl) o = o ctl[c]
+    else o = o c
+  }
+  return o
+}
+function jstr(s) { return "\"" jesc(s) "\"" }
 
 # Days since 1970-01-01 for a YYYY-MM-DD date, -1 if the
 # string is no such date.
@@ -51,10 +74,11 @@ function dstr(z,   era, doe, yoe, y, doy, mp, d, m) {
   return sprintf("%04d-%02d-%02d", y, m, d)
 }
 
-# Sets E_STATE (ended|soon|ok|open|unlisted|nodata|"") and
-# E_TEXT for host number n.
+# Sets E_STATE (ended|soon|ok|open|unlisted|nodata|""),
+# E_TEXT and E_DAYS (days left, 0 once ended, -1 when
+# unknown) for host number n.
 function eol(n,   p, v, c, mm, k) {
-  p = hf[n, 12]; v = hf[n, 13]; E_STATE = ""; E_TEXT = ""
+  p = hf[n, 12]; v = hf[n, 13]; E_STATE = ""; E_TEXT = ""; E_DAYS = -1
   if (p == "") return
   if (!(p in eolprod)) {
     E_STATE = "nodata"; E_TEXT = "no data (run with --eol)"
@@ -76,6 +100,7 @@ function eol(n,   p, v, c, mm, k) {
     return
   }
   k = dnum(eolrow[p, c[k]]) - T
+  E_DAYS = k < 0 ? 0 : k
   if (k < 0) {
     E_STATE = "ended"; E_TEXT = "ended " dstr(T + k)
   } else if (k <= 180) {
@@ -100,6 +125,11 @@ function agetext(n,   a) {
   a = T - a
   return hf[n, 5] " (" (a == 0 ? "today" : a == 1 ? "1 day" : a " days") ")"
 }
+# Days since the last connection, -1 when unknown.
+function agedays(n,   a) {
+  a = dnum(hf[n, 5])
+  return a < 0 ? -1 : T - a
+}
 
 function pill(cls, text) {
   return "<span class=\"pill " cls "\">" esc(text) "</span>"
@@ -122,7 +152,7 @@ FNR == 1 { file = base(FILENAME) }
 
 file == "hosts.tsv" {
   H++
-  for (i = 1; i <= 13; i++) hf[H, i] = $i
+  for (i = 1; i <= 15; i++) hf[H, i] = $i
   hidx[$1] = H
   next
 }
@@ -168,8 +198,20 @@ file == "lint.txt" {
   L++; lint[L] = $0
   next
 }
+file == "links.tsv" {
+  # With --tag, a link needs one end inside the selection.
+  if (tag != "" && !($1 in hidx) && !($2 in hidx)) next
+  LK++; lk[LK, 1] = $1; lk[LK, 2] = $2; lk[LK, 3] = $3
+  if (!($1 in nodeidx)) { NN++; node[NN] = $1; nodeidx[$1] = NN }
+  if (!($2 in nodeidx)) { NN++; node[NN] = $2; nodeidx[$2] = NN }
+  next
+}
 
-BEGIN { T = dnum(today) }
+BEGIN {
+  T = dnum(today)
+  for (i = 1; i < 32; i++) ctl[sprintf("%c", i)] = sprintf("\\u%04x", i)
+  ctl["\t"] = "\\t"; ctl["\n"] = "\\n"; ctl["\r"] = "\\r"
+}
 
 # --- shared computations ------------------------------------
 function compute(   i, k, h, n, seen, v, cnt, tv) {
@@ -217,6 +259,36 @@ function compute(   i, k, h, n, seen, v, cnt, tv) {
     for (n = i - 1; n >= 1 && tgl[n] > v; n--) tgl[n + 1] = tgl[n]
     tgl[n + 1] = v
   }
+  services()
+  for (i = 1; i <= H; i++) if (hf[i, 14] != "") OWN++
+}
+
+# "- Services: nginx 1.26, postgresql 17, docker" per host
+# -> svl[1..SV] sorted names, svhas[name, host], svver[name,
+# host] and svn[host] names with svv[host, k] versions.
+function services(   i, k, n, a, v, name, ver, j) {
+  for (i = 1; i <= H; i++) {
+    svn[i] = 0
+    if (hf[i, 15] == "") continue
+    n = split(hf[i, 15], a, ",")
+    for (k = 1; k <= n; k++) {
+      v = a[k]; sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
+      if (v == "") continue
+      name = v; ver = ""
+      if (index(v, " ") > 0) {
+        name = substr(v, 1, index(v, " ") - 1)
+        ver = substr(v, index(v, " ") + 1); sub(/^[ \t]+/, "", ver)
+      }
+      svn[i]++; svname[i, svn[i]] = name; svv[i, svn[i]] = ver
+      svhas[name, i] = 1; svver[name, i] = ver
+      if (!(name in svseen)) { svseen[name] = 1; SV++; svl[SV] = name }
+    }
+  }
+  for (i = 2; i <= SV; i++) {
+    v = svl[i]
+    for (j = i - 1; j >= 1 && svl[j] > v; j--) svl[j + 1] = svl[j]
+    svl[j + 1] = v
+  }
 }
 
 function hosttags(h) { return (h in hidx) ? hf[hidx[h], 6] : "" }
@@ -247,6 +319,14 @@ function text(   i, n, k, h, any) {
   }
   if (!any) print "  none"
   print ""
+  if (OWN) {
+    print "Owners"
+    for (k = 1; k <= H; k++) {
+      i = ord[k]
+      if (hf[i, 14] != "") print "  " hf[i, 1] ": " hf[i, 14]
+    }
+    print ""
+  }
   print "End of life"
   any = 0
   for (k = 1; k <= H; k++) {
@@ -339,7 +419,20 @@ function css() {
 "padding:2px 12px;cursor:pointer}.filters button[aria-pressed=true]{" \
 "background:var(--accent);color:var(--bg);border-color:var(--accent)}" \
 "td.diff{font-weight:600}tr.drift th:first-child::before{content:'! '}" \
-"code{font-size:13px}@media print{.filters,script{display:none}" \
+"code{font-size:13px}.matrix td{text-align:center;white-space:nowrap}" \
+".matrix th.svc{font:500 13px ui-monospace,Menlo,monospace;" \
+"text-transform:none;letter-spacing:0;color:var(--fg)}" \
+"svg.chart{display:block;width:100%;height:auto;padding:8px}" \
+"svg.chart text{fill:var(--muted);font-size:12px}" \
+"svg.chart text.host,svg.chart text.node{fill:var(--fg);font-size:13px}" \
+"svg.chart .lane{stroke:var(--line)}svg.chart .tick{stroke:var(--line)}" \
+"svg.chart .dot{fill:var(--accent)}svg.chart .flag{fill:var(--warn)}" \
+"svg.chart .edge{stroke:var(--muted);stroke-width:1.2}" \
+"svg.chart text.lbl{paint-order:stroke;stroke:var(--card);" \
+"stroke-width:4px;stroke-linejoin:round}" \
+"svg.chart .nd{fill:var(--card);stroke:var(--accent);stroke-width:2}" \
+"svg.chart a text{fill:var(--accent)}" \
+"@media print{.filters,script{display:none}" \
 "body{background:#fff}.box{border-color:#ccc}}\n</style>"
 }
 
@@ -442,7 +535,7 @@ function index_page(f,   i, k, h, n, cls, any, v, r, pa) {
   }
 
   print "<h2>Servers</h2>\n<div class=\"box\"><table>" > f
-  print "<thead><tr><th>Server</th><th>Tags</th><th>OS</th><th>End of life</th><th>IP</th><th>Last connected</th><th>To-dos</th><th>Last change</th></tr></thead><tbody>" > f
+  print "<thead><tr><th>Server</th><th>Owner</th><th>Tags</th><th>OS</th><th>End of life</th><th>IP</th><th>Last connected</th><th>To-dos</th><th>Last change</th></tr></thead><tbody>" > f
   for (k = 1; k <= H; k++) {
     i = ord[k]; cls = age(i)
     printf "<tr data-tags=\"%s\"><td><a href=\"hosts/%s.html\">%s</a>", \
@@ -450,7 +543,8 @@ function index_page(f,   i, k, h, n, cls, any, v, r, pa) {
     if (al[hf[i, 1]] != "") printf "<br><span class=\"sub\">also %s</span>", \
       esc(al[hf[i, 1]]) > f
     if (hf[i, 9] == 1) printf "<br><span class=\"sub\">own rules.md</span>" > f
-    printf "</td><td>%s</td><td>%s", taglist(hf[i, 6]), esc(hf[i, 2]) > f
+    printf "</td><td>%s</td><td>%s</td><td>%s", esc(hf[i, 14]), \
+      taglist(hf[i, 6]), esc(hf[i, 2]) > f
     if (hf[i, 8] != "") printf " <span class=\"sub\">(%s)</span>", esc(hf[i, 8]) > f
     printf "</td><td>%s</td><td>%s", eolcell(i), esc(hf[i, 3]) > f
     if (hf[i, 7] != "") printf "<br><span class=\"sub\">ssh port %s</span>", esc(hf[i, 7]) > f
@@ -460,8 +554,31 @@ function index_page(f,   i, k, h, n, cls, any, v, r, pa) {
       (hf[i, 10] > 0 ? hf[i, 10] : "<span class=\"muted\">0</span>"), \
       esc(hf[i, 11]) > f
   }
-  if (!H) print "<tr><td colspan=\"8\" class=\"muted\">No servers in memory/servers/ yet.</td></tr>" > f
+  if (!H) print "<tr><td colspan=\"9\" class=\"muted\">No servers in memory/servers/ yet.</td></tr>" > f
   print "</tbody></table></div>" > f
+
+  if (SV) {
+    print "<h2>Services</h2>" > f
+    print "<p class=\"sub\">From <code>- Services:</code> in memory.md. A cell shows the version, a dot a service without one.</p>" > f
+    print "<div class=\"box\"><table class=\"matrix\"><thead><tr><th>Service</th>" > f
+    for (k = 1; k <= H; k++)
+      printf "<th><a href=\"hosts/%s.html\">%s</a></th>", esc(hf[ord[k], 1]), \
+        esc(hf[ord[k], 1]) > f
+    print "</tr></thead><tbody>" > f
+    for (i = 1; i <= SV; i++) {
+      printf "<tr><th class=\"svc\">%s</th>", esc(svl[i]) > f
+      for (k = 1; k <= H; k++) {
+        n = ord[k]
+        if (!((svl[i] SUBSEP n) in svhas)) printf "<td></td>" > f
+        else if (svver[svl[i], n] == "") printf "<td>&bull;</td>" > f
+        else printf "<td>%s</td>", esc(svver[svl[i], n]) > f
+      }
+      print "</tr>" > f
+    }
+    print "</tbody></table></div>" > f
+  }
+
+  if (LK) network(f)
 
   print "<h2>Open to-dos</h2>\n<div class=\"box\"><ul class=\"list\">" > f
   for (i = 1; i <= TD; i++)
@@ -470,7 +587,9 @@ function index_page(f,   i, k, h, n, cls, any, v, r, pa) {
   if (!TD) print "<li class=\"muted\">Nothing open.</li>" > f
   print "</ul></div>" > f
 
-  printf "<h2>Changes, last %d days</h2>\n<div class=\"box\"><ul class=\"list\">\n", days > f
+  printf "<h2>Changes, last %d days</h2>\n", days > f
+  print "<p class=\"sub\"><a href=\"timeline.html\">Timeline</a>: the same window, one lane per server.</p>" > f
+  print "<div class=\"box\"><ul class=\"list\">" > f
   any = 0
   for (i = 1; i <= C; i++) {
     if (dnum(ch[i, 1]) < 0 || T - dnum(ch[i, 1]) > days + 0) continue
@@ -550,6 +669,8 @@ function host_page(n,   f, h, i, any, k, v) {
   if (hf[n, 8] != "") printf "<tr><th>Mode</th><td>%s</td></tr>\n", esc(hf[n, 8]) > f
   printf "<tr><th>Last connected</th><td>%s</td></tr>\n", esc(agetext(n)) > f
   if (hf[n, 6] != "") printf "<tr><th>Tags</th><td>%s</td></tr>\n", taglist(hf[n, 6]) > f
+  if (hf[n, 14] != "") printf "<tr><th>Owner</th><td>%s</td></tr>\n", esc(hf[n, 14]) > f
+  if (hf[n, 15] != "") printf "<tr><th>Services</th><td>%s</td></tr>\n", esc(hf[n, 15]) > f
   if (al[h] != "") printf "<tr><th>Also known as</th><td>%s</td></tr>\n", esc(al[h]) > f
   print "</tbody></table></div>" > f
 
@@ -604,9 +725,235 @@ function host_page(n,   f, h, i, any, k, v) {
   close(f)
 }
 
+# --- network: hosts on a circle, labelled lines ----------------
+function hostlink(name,   s) {
+  s = esc(name)
+  if (name in hidx) return "<a href=\"hosts/" s ".html\">" s "</a>"
+  return s
+}
+function network(f,   i, cx, cy, r, w, h, a, pi, nx, ny, x1, y1, x2, y2, \
+    anchor, dx, dy) {
+  pi = atan2(0, -1)
+  w = 760; h = NN <= 2 ? 220 : 160 + 44 * NN
+  if (h > 640) h = 640
+  cx = w / 2; cy = h / 2; r = (h - 70) / 2
+  print "<h2>Network</h2>" > f
+  print "<p class=\"sub\">From <code>- Link:</code> lines in <code>memory/network.md</code>. Arrows point from the side that opens the connection.</p>" > f
+  print "<div class=\"box\">" > f
+  printf "<svg class=\"chart\" viewBox=\"0 0 %d %d\" role=\"img\" aria-label=\"Network links\">\n", \
+    w, h > f
+  print "<defs><marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"10\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto\"><path d=\"M0 0 L10 5 L0 10 z\" style=\"fill:var(--muted)\"/></marker></defs>" > f
+  for (i = 1; i <= NN; i++) {
+    a = 2 * pi * (i - 1) / NN - pi / 2
+    nx[i] = cx + r * cos(a); ny[i] = cy + r * sin(a)
+  }
+  for (i = 1; i <= LK; i++) {
+    if (lk[i, 1] == lk[i, 2]) continue
+    x1 = nx[nodeidx[lk[i, 1]]]; y1 = ny[nodeidx[lk[i, 1]]]
+    x2 = nx[nodeidx[lk[i, 2]]]; y2 = ny[nodeidx[lk[i, 2]]]
+    # stop short of the node circle (radius 8) on both ends
+    dx = x2 - x1; dy = y2 - y1; a = sqrt(dx * dx + dy * dy)
+    if (a < 1) continue
+    printf "<line class=\"edge\" x1=\"%.1f\" y1=\"%.1f\" x2=\"%.1f\" y2=\"%.1f\" marker-end=\"url(#arrow)\"><title>%s -&gt; %s%s</title></line>\n", \
+      x1 + dx * 10 / a, y1 + dy * 10 / a, x2 - dx * 12 / a, y2 - dy * 12 / a, \
+      esc(lk[i, 1]), esc(lk[i, 2]), (lk[i, 3] != "" ? " (" esc(lk[i, 3]) ")" : "") > f
+    # The label sits a third of the way from the opening
+    # side, so two edges through the centre do not share it.
+    if (lk[i, 3] != "")
+      printf "<text class=\"lbl\" x=\"%.1f\" y=\"%.1f\" text-anchor=\"middle\">%s</text>\n", \
+        x1 + dx * 0.3, y1 + dy * 0.3 - 5, esc(lk[i, 3]) > f
+  }
+  for (i = 1; i <= NN; i++) {
+    a = 2 * pi * (i - 1) / NN - pi / 2
+    anchor = cos(a) > 0.3 ? "start" : cos(a) < -0.3 ? "end" : "middle"
+    printf "<circle class=\"nd\" cx=\"%.1f\" cy=\"%.1f\" r=\"8\"/>\n", nx[i], ny[i] > f
+    if (node[i] in hidx) printf "<a href=\"hosts/%s.html\">", esc(node[i]) > f
+    printf "<text class=\"node\" x=\"%.1f\" y=\"%.1f\" text-anchor=\"%s\">%s</text>", \
+      nx[i] + 14 * cos(a), ny[i] + 14 * sin(a) + (sin(a) > 0.3 ? 12 : sin(a) < -0.3 ? -4 : 4), \
+      anchor, esc(node[i]) > f
+    if (node[i] in hidx) printf "</a>" > f
+    print "" > f
+  }
+  print "</svg>" > f
+  print "<ul class=\"list\">" > f
+  for (i = 1; i <= LK; i++)
+    printf "<li>%s &rarr; %s%s</li>\n", hostlink(lk[i, 1]), hostlink(lk[i, 2]), \
+      (lk[i, 3] != "" ? " <span class=\"muted\">" esc(lk[i, 3]) "</span>" : "") > f
+  print "</ul></div>" > f
+}
+
+# --- timeline: one lane per host, one mark per change ----------
+function timeline_page(f,   i, k, n, w, h, left, right, top, lane, x, y, \
+    start, d, any, step, t) {
+  w = 960; left = 210; right = 20; top = 30; lane = 30
+  h = top + lane * (H > 0 ? H : 1) + 20
+  start = T - days
+  head(f, "Timeline")
+  print "<p class=\"sub\"><a href=\"index.html\">Fleet overview</a></p>" > f
+  printf "<h1>Timeline, last %d days</h1>\n", days > f
+  printf "<p class=\"sub\">%s%s &middot; %d changes. A dot is a changelog entry, a square an entry with <code>Flags:</code>. Hover for the headline.</p>\n", \
+    esc(now), (tag != "" ? " &middot; tag " esc(tag) : ""), RECENT > f
+  print "<div class=\"box\">" > f
+  printf "<svg class=\"chart\" viewBox=\"0 0 %d %d\" role=\"img\" aria-label=\"Changes per server over time\">\n", \
+    w, h > f
+  # date ticks: start, three in between, today
+  for (t = 0; t <= 4; t++) {
+    x = left + (w - left - right) * t / 4
+    d = start + int(days * t / 4)
+    printf "<line class=\"tick\" x1=\"%.1f\" y1=\"%d\" x2=\"%.1f\" y2=\"%d\"/>\n", \
+      x, top - 6, x, h - 20 > f
+    printf "<text x=\"%.1f\" y=\"%d\" text-anchor=\"%s\">%s</text>\n", x, top - 12, \
+      (t == 0 ? "start" : t == 4 ? "end" : "middle"), dstr(d) > f
+  }
+  for (k = 1; k <= H; k++) {
+    n = ord[k]; y = top + lane * (k - 1) + lane / 2
+    printf "<line class=\"lane\" x1=\"%d\" y1=\"%.1f\" x2=\"%d\" y2=\"%.1f\"/>\n", \
+      left, y, w - right, y > f
+    printf "<a href=\"hosts/%s.html\"><text class=\"host\" x=\"%d\" y=\"%.1f\" text-anchor=\"end\">%s</text></a>\n", \
+      esc(hf[n, 1]), left - 10, y + 4, esc(hf[n, 1]) > f
+    for (i = 1; i <= C; i++) {
+      if (ch[i, 3] != hf[n, 1]) continue
+      d = dnum(ch[i, 1])
+      if (d < 0 || d < start) continue
+      if (d > T) d = T
+      x = left + (w - left - right) * (d - start) / (days > 0 ? days : 1)
+      if (ch[i, 7] != "")
+        printf "<rect class=\"flag\" x=\"%.1f\" y=\"%.1f\" width=\"10\" height=\"10\"><title>%s %s: %s</title></rect>\n", \
+          x - 5, y - 5, esc(ch[i, 1]), esc(ch[i, 3]), esc(ch[i, 5]) > f
+      else
+        printf "<circle class=\"dot\" cx=\"%.1f\" cy=\"%.1f\" r=\"5\"><title>%s %s: %s</title></circle>\n", \
+          x, y, esc(ch[i, 1]), esc(ch[i, 3]), esc(ch[i, 5]) > f
+    }
+  }
+  if (!H) printf "<text x=\"%d\" y=\"%d\">No servers in memory/servers/ yet.</text>\n", \
+    left, top + lane / 2 > f
+  print "</svg></div>" > f
+  print "<h2>Changes</h2>\n<div class=\"box\"><ul class=\"list\">" > f
+  any = 0
+  for (i = 1; i <= C; i++) {
+    if (dnum(ch[i, 1]) < 0 || T - dnum(ch[i, 1]) > days + 0) continue
+    change_item(f, i, 1); any = 1
+  }
+  if (!any) print "<li class=\"muted\">No changes recorded in this window.</li>" > f
+  print "</ul></div>" > f
+  foot(f)
+  print "</body>\n</html>" > f
+  close(f)
+}
+
+# --- json ---------------------------------------------------
+function jlist(s, sep,   a, n, i, o) {
+  n = split(s, a, sep); o = "["
+  for (i = 1; i <= n; i++) if (a[i] != "") o = o (o == "[" ? "" : ", ") jstr(a[i])
+  return o "]"
+}
+function json_out(f,   i, k, n, h, d, m, v, any, c) {
+  printf "{\n  \"generated\": %s,\n  \"today\": %s,\n  \"days\": %d,\n  \"tag\": %s,\n", \
+    jstr(now), jstr(today), days, jstr(tag) > f
+  print "  \"hosts\": [" > f
+  for (k = 1; k <= H; k++) {
+    i = ord[k]; eol(i)
+    printf "    {\"name\": %s, \"os\": %s, \"ip\": %s, \"distro_family\": %s,\n", \
+      jstr(hf[i, 1]), jstr(hf[i, 2]), jstr(hf[i, 3]), jstr(hf[i, 4]) > f
+    printf "     \"last_connected\": %s, \"last_connected_days\": %d,\n", \
+      jstr(hf[i, 5]), agedays(i) > f
+    printf "     \"tags\": %s, \"ssh_port\": %s, \"mode\": %s, \"rules\": %s,\n", \
+      jlist(hf[i, 6], " "), jstr(hf[i, 7]), jstr(hf[i, 8]), (hf[i, 9] == 1 ? "true" : "false") > f
+    printf "     \"todos\": %d, \"last_change\": %s, \"product\": %s, \"version\": %s,\n", \
+      hf[i, 10], jstr(hf[i, 11]), jstr(hf[i, 12]), jstr(hf[i, 13]) > f
+    printf "     \"owner\": %s, \"aliases\": %s,\n", jstr(hf[i, 14]), jlist(al[hf[i, 1]], " ") > f
+    printf "     \"services\": [" > f
+    for (n = 1; n <= svn[i]; n++)
+      printf "%s{\"name\": %s, \"version\": %s}", (n > 1 ? ", " : ""), \
+        jstr(svname[i, n]), jstr(svv[i, n]) > f
+    print "]," > f
+    printf "     \"eol\": {\"state\": %s, \"text\": %s, \"days\": %d},\n", \
+      jstr(E_STATE), jstr(E_TEXT), E_DAYS > f
+    printf "     \"audit\": {" > f
+    any = 0
+    for (n = 1; n <= AK; n++)
+      if ((hf[i, 1] SUBSEP akl[n]) in av) {
+        printf "%s%s: %s", (any ? ", " : ""), jstr(akl[n]), jstr(av[hf[i, 1], akl[n]]) > f
+        any = 1
+      }
+    printf "}}%s\n", (k < H ? "," : "") > f
+  }
+  print "  ]," > f
+  print "  \"todos\": [" > f
+  for (i = 1; i <= TD; i++)
+    printf "    {\"host\": %s, \"text\": %s}%s\n", jstr(td[i, 1]), jstr(td[i, 2]), \
+      (i < TD ? "," : "") > f
+  print "  ]," > f
+  print "  \"changes\": [" > f
+  for (i = 1; i <= C; i++) {
+    printf "    {\"date\": %s, \"time\": %s, \"host\": %s, \"who\": %s,\n", \
+      jstr(ch[i, 1]), jstr(ch[i, 2]), jstr(ch[i, 3]), jstr(ch[i, 4]) > f
+    printf "     \"headline\": %s, \"rollback\": %s, \"flags\": %s,\n", \
+      jstr(ch[i, 5]), jstr(ch[i, 6]), jstr(ch[i, 7]) > f
+    printf "     \"detail\": %s}%s\n", jlist(ch[i, 8], "\037"), (i < C ? "," : "") > f
+  }
+  print "  ]," > f
+  printf "  \"network\": [" > f
+  for (i = 1; i <= LK; i++)
+    printf "%s\n    {\"from\": %s, \"to\": %s, \"label\": %s}", (i > 1 ? "," : ""), \
+      jstr(lk[i, 1]), jstr(lk[i, 2]), jstr(lk[i, 3]) > f
+  print "]," > f
+  printf "  \"audit\": {\"date\": %s, \"previous\": %s, \"drift\": %d, \"changed\": [", \
+    jstr(adate), jstr(pdate), DRIFT > f
+  for (i = 1; i <= AC; i++) {
+    split(acl[i], c, SUBSEP)
+    printf "%s\n    {\"host\": %s, \"key\": %s, \"from\": %s, \"to\": %s}", \
+      (i > 1 ? "," : ""), jstr(c[1]), jstr(c[2]), jstr(pv[c[1], c[2]]), \
+      jstr(av[c[1], c[2]]) > f
+  }
+  print "]}," > f
+  printf "  \"guard\": {\"denials_30d\": %d, \"reasons\": [", GN > f
+  for (i = 1; i <= GR; i++)
+    printf "%s\n    {\"reason\": %s, \"count\": %d, \"last\": %s}", (i > 1 ? "," : ""), \
+      jstr(grl[i]), gcount[grl[i]], jstr(glast[grl[i]]) > f
+  print "]}," > f
+  printf "  \"lint\": [" > f
+  for (i = 1; i <= L; i++) printf "%s\n    %s", (i > 1 ? "," : ""), jstr(lint[i]) > f
+  print "]" > f
+  print "}" > f
+  close(f)
+}
+
+# --- prometheus text format ---------------------------------
+function prom_out(f,   i, k) {
+  print "# HELP jolitz_fleet_hosts Servers in memory/servers/." > f
+  print "# TYPE jolitz_fleet_hosts gauge" > f
+  printf "jolitz_fleet_hosts %d\n", H > f
+  print "# HELP jolitz_host_eol_days Days until the OS release ends support; 0 once ended, -1 when unknown." > f
+  print "# TYPE jolitz_host_eol_days gauge" > f
+  for (k = 1; k <= H; k++) {
+    i = ord[k]; eol(i)
+    printf "jolitz_host_eol_days{host=\"%s\"} %d\n", jesc(hf[i, 1]), E_DAYS > f
+  }
+  print "# HELP jolitz_host_last_connected_days Days since the last connection; -1 when unknown." > f
+  print "# TYPE jolitz_host_last_connected_days gauge" > f
+  for (k = 1; k <= H; k++) {
+    i = ord[k]
+    printf "jolitz_host_last_connected_days{host=\"%s\"} %d\n", jesc(hf[i, 1]), agedays(i) > f
+  }
+  print "# HELP jolitz_host_todos Open to-do items in todo.md." > f
+  print "# TYPE jolitz_host_todos gauge" > f
+  for (k = 1; k <= H; k++) {
+    i = ord[k]
+    printf "jolitz_host_todos{host=\"%s\"} %d\n", jesc(hf[i, 1]), hf[i, 10] > f
+  }
+  print "# HELP jolitz_guard_denials_30d Guard denials in the last 30 days." > f
+  print "# TYPE jolitz_guard_denials_30d gauge" > f
+  printf "jolitz_guard_denials_30d %d\n", GN > f
+  close(f)
+}
+
 END {
   compute()
+  if (json) json_out(out "/overview.json")
+  if (prom) prom_out(out "/jolitz.prom")
   if (mode == "text") { text(); exit }
   index_page(out "/index.html")
+  timeline_page(out "/timeline.html")
   for (k = 1; k <= H; k++) host_page(ord[k])
 }

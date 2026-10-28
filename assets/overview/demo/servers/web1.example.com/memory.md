@@ -6,6 +6,8 @@
 - RAM: 8 GB
 - Disk: 80 GB (/ ext4, 41% used)
 - Tags: prod, web
+- Owner: alice
+- Services: nginx 1.24, certbot, ufw, rails
 - Web server: nginx 1.24, vhosts app.example.com, www
 - App: Rails via app@blue/app@green (ports 4003/4005)
 - TLS: certbot, renew timer active
