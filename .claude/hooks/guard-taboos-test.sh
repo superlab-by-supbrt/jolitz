@@ -1044,6 +1044,12 @@ check deny 'echo "x > .cl*/settings.json'
 check deny 'cp /tmp/s {.cl,}aude/settings.json'
 check deny 'cp /tmp/s .cl\au*/settings.json'
 check deny 'cp /tmp/s .c\l*/settings.json'
+# Braces and $ build flags; ANSI-C escapes build names.
+check deny 'find .claude -{delete,true}'
+check deny 'git log --{output,x}=.claude/settings.json'
+check deny "echo x > \$'\\x2eclaude'/settings.json"
+check pass "cut -d \$'\\t' -f1 /etc/passwd"
+check pass 'cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak.$(date +%F)'
 check pass 'command cp ~/.bash_profile ~/.bash_profile.bak.$(date +%F)'
 check pass 'grep -i ed25519 /root/.ssh/authorized_keys | sed "s/ .*//" '
 check deny 'echo x > .cl*/settings.json'
