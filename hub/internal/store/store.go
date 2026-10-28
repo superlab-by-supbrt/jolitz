@@ -570,11 +570,14 @@ func (s *Store) putFile(tx *sql.Tx, kind Kind, host, path string, body []byte, b
 
 // PruneFileVersions deletes history entries written before t.
 // The current version of every stored file stays, whatever its
-// age, as does the newest version of a deleted file.
+// age. A deleted file has no current version: once its newest
+// version is older than t, its whole history goes, so a delete
+// does not keep the content forever.
 func (s *Store) PruneFileVersions(t time.Time) (int64, error) {
+	cut := t.UTC().Format(time.RFC3339)
 	res, err := s.db.Exec(`DELETE FROM file_versions WHERE updated_at < ?
-		AND version < (SELECT max(version) FROM file_versions v WHERE v.path = file_versions.path)`,
-		t.UTC().Format(time.RFC3339))
+		AND (version < (SELECT max(version) FROM file_versions v WHERE v.path = file_versions.path)
+		  OR path NOT IN (SELECT path FROM files))`, cut)
 	if err != nil {
 		return 0, err
 	}

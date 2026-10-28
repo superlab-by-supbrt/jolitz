@@ -250,6 +250,19 @@ func TestFileVersions(t *testing.T) {
 	if _, _, err := st.GetFile("network.md"); err != nil {
 		t.Errorf("network.md pruned: %v", err)
 	}
+
+	// A deleted file keeps no history past the cutoff: its
+	// content does not outlive the delete forever.
+	if err := st.DeleteFile(p); err != nil {
+		t.Fatal(err)
+	}
+	st.Now = func() time.Time { return now.Add(96 * time.Hour) }
+	if _, err := st.PruneFileVersions(now.Add(72 * time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if hist, _ = st.FileHistory(p); len(hist) != 0 {
+		t.Errorf("history of a deleted file after prune %+v, want none", hist)
+	}
 }
 
 func TestMigrateFromPhaseOne(t *testing.T) {
