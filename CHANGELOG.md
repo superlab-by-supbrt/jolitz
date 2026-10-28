@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.3.3-jolitz.5 — 2026-10-28
+
+- **The README opens with everyday work.** A table of
+  realistic requests, what jolitz does and whether it
+  changes anything, and the fleet overview screenshot. OS
+  replacement, dual boot and deploy users moved to "Heavy
+  work, with the guard lifted", which says when they are
+  realistic: with a console, a rescue system, a VM snapshot
+  or a volume manager, and with downtime planned.
+- **"Which servers run out of support?"** runs
+  `bin/jolitz-overview --eol --text` and answers from it.
+
 ## 3.3.3-jolitz.4 — 2026-10-28
 
 - **A fleet overview from memory.** `bin/jolitz-overview`

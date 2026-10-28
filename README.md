@@ -15,15 +15,18 @@ Free and open source under the MIT license, every feature
 included. There is no paid edition, and there will not be
 one.
 
-```
-❯ /var is full on web1.example.com, what is eating it?
-❯ nginx answers 502 on shop.example.com
-❯ The certificate on mail.example.com runs out on Friday
-❯ Load on db1 has been at 12 since yesterday, why?
-❯ What did we change on app2 last week?
-❯ Replace CentOS with Debian on old.example.com
-❯ Auf backup1 läuft die Platte voll, räum die alten Dumps weg
-```
+| You type | jolitz | Changes |
+|---|---|---|
+| `/var is full on web1.example.com, what is eating it?` | Sizes the big trees, logs and journal; proposes what can go | after your OK |
+| `nginx answers 502 on shop.example.com` | Reads the error log, checks the upstream and its service | nothing yet |
+| `The certificate on mail.example.com runs out on Friday` | Finds the renewal job and why it did not renew | after your OK |
+| `Install the security updates on db1, reboot only if needed` | Dry run first, then the updates; asks before a reboot | after your OK |
+| `What did we change on app2 last week?` | Reads the changelog in memory and the journal on the host | nothing |
+| `Which servers run out of support this year?` | End-of-life dates for every OS in memory | nothing |
+| `Is sshd set up the same on all prod servers?` | Fleet audit for the tag `prod`, drift since the last run | nothing |
+| `Auf backup1 läuft die Platte voll, räum die alten Dumps weg` | Lists the dumps by age and size, asks what to keep | after your OK |
+
+![Fleet overview](assets/overview/overview.png)
 
 Ask in English, German or any other language; jolitz answers
 in the language you write. `Language:` in `memory/user.md`
@@ -75,16 +78,6 @@ tool.
 - **Scheduled runs.** `Email me a housekeeping report for
   every server each Monday`: cron or a systemd timer with
   `claude -p` (`rules/scheduled-housekeeping.md`).
-- **OS replacement.** Wipe and reinstall over SSH, with the
-  partitions freed without data loss
-  (`rules/os-replacement.md`, `rules/partition-staging.md`,
-  `rules/cloud-image.md`). Needs the guard lifted.
-- **Dual boot and EFI.** A second OS next to the first, boot
-  entries and boot loaders (`rules/dual-boot.md`,
-  `rules/efi-boot.md`). Needs the guard lifted.
-- **Deploy users.** A dedicated account and key for CI, a
-  sudo line for the one command that needs it, with the
-  guard lifted (`rules/deployment.md`).
 - **Email.** `Email me the output of "df -h" from
   app.example.com`, from your workstation or the server.
 - **macOS.** `Clean up leftovers of old apps on this Mac`
@@ -92,6 +85,32 @@ tool.
   goes to the Trash. Needs the Command Line Tools.
 - **Plans.** `/plan Migrate the database on db.example.com`
   explores and drafts, and changes nothing until you approve.
+
+### Heavy work, with the guard lifted
+
+Possible, not routine. Each of these can leave a server that
+does not boot, and each needs `JOLITZ_GUARD_DISABLE=1` for
+the session:
+
+- **OS replacement** (`rules/os-replacement.md`): wipe and
+  reinstall, e.g. CentOS 7 to Debian 13. Realistic with a
+  console, IPMI or the provider's rescue system, or on a VM
+  with a snapshot. Over SSH alone only with ZFS, LVM or
+  btrfs, where the old OS stays bootable as a fallback
+  (`rules/partition-staging.md`). Otherwise the last resort
+  writes the whole disk, and a mistake without a console
+  means a new server. Plan for downtime either way.
+- **Dual boot and EFI** (`rules/dual-boot.md`,
+  `rules/efi-boot.md`): a second OS, boot entries, boot
+  loaders. The first boot of a new entry is a one-time try
+  that falls back to the old one.
+- **Accounts and deploy users** (`rules/deployment.md`): a
+  dedicated account and key for CI, a sudo line for the one
+  command that needs it.
+
+The safe path is often a new server next to the old one:
+build it, move the services, switch DNS, keep the old one
+until the new one has run a week.
 
 Long jobs run on the host with their output in files, so a
 dropped connection loses nothing. SSH runs over one shared

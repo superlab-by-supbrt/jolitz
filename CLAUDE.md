@@ -524,7 +524,10 @@ end-of-life dates from endoflife.date. Do not
 summarize the page from memory yourself; the script is
 the source. When the user asks for one server's
 handover sheet, build the overview and give that
-host's page.
+host's page. When the user asks which servers run out
+of support, run `bin/jolitz-overview --eol --text` and
+answer from its "End of life" section, naming
+endoflife.date and the fetch date it prints.
 
 ## macOS Cleanup
 
