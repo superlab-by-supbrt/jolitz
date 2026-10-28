@@ -1,5 +1,5 @@
 ---
-name: heinzel-fleet-audit
+name: jolitz-fleet-audit
 argument-hint: "[hostname1 hostname2 ...]"
 description: Compare key policies across all servers in
   memory/servers/ to surface silent drift. Makes no configuration
@@ -12,9 +12,9 @@ description: Compare key policies across all servers in
   same bug.
 ---
 
-# heinzel-fleet-audit
+# jolitz-fleet-audit
 
-Cross-server policy audit. Heinzel knows every host
+Cross-server policy audit. jolitz knows every host
 individually but has nothing that holds hosts against each
 other. This skill closes that gap by probing the same set of
 settings on every server in `memory/servers/` and rendering a
@@ -23,7 +23,7 @@ side-by-side comparison so silent drift becomes visible.
 **No configuration changes.** The audit never alters any
 host's configuration. The only write is a single audit-trail
 line to each host's system journal (step 6 below). Acting on
-findings is a separate step (heinzel-housekeeping for
+findings is a separate step (jolitz-housekeeping for
 per-host fixes, or manual edits with explicit user approval).
 
 **Never run automatically** — only on explicit user request.
@@ -73,7 +73,7 @@ servers" — that maps to single-host housekeeping.
 
 6. **Log to the system journal** on each audited host:
 
-       logger -t heinzel "fleet-audit: read-only policy probe"
+       logger -t jolitz "fleet-audit: read-only policy probe"
 
    (One line per host — this is an audit trail, not a
    change record.)

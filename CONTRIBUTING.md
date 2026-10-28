@@ -8,14 +8,13 @@ Bug reports, ideas and pull requests are welcome.
   a probe, a guard pattern that upstream has too)
   belongs in [heinzel](https://github.com/wintermeyer/heinzel)
   as well. Send it there first when you can.
-- Internal names stay "heinzel" (skills, journal
-  tag, rollback timer, `bin/heinzel-*`). Renaming
-  them would turn every upstream merge into a
-  conflict.
+- Everything is named jolitz: skills, scripts,
+  variables, paths, the journal tag. "heinzel"
+  appears only where a text points to upstream.
 - Rule files wrap at 80 characters, except code
   blocks. A code block that needs the guard lifted
   is fenced ` ```sh guard-off ` and its file names
-  `HEINZEL_GUARD_DISABLE`.
+  `JOLITZ_GUARD_DISABLE`.
 - A change to `.claude/hooks/guard-taboos.sh` needs
   lines in `guard-taboos-test.sh`: one per effect
   blocked, one for the read-only form that stays

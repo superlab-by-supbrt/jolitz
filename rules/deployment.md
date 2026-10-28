@@ -75,7 +75,7 @@ This produces `deploy_ed25519` (private) and
 
 ### Install the public key on the server
 
-The taboo guard denies heinzel any write to
+The taboo guard denies jolitz any write to
 `authorized_keys` and any `chmod` or `chown` on
 `.ssh`, appends included. Hand this block to the
 user with the real key path; without a root login,
@@ -147,7 +147,7 @@ If the deploy user must restart a service after
 deployment, grant sudo for that specific command
 only. **Never grant general sudo.** The guard hook
 blocks every sudoers write until the operator
-starts the session with `HEINZEL_GUARD_DISABLE` set
+starts the session with `JOLITZ_GUARD_DISABLE` set
 to 1; ask for that only when this step is due.
 
 ```bash guard-off
@@ -243,7 +243,7 @@ Log the deployment user setup per
 `rules/changelog.md`:
 
 ```bash
-logger -t heinzel "Created deploy user 'deploy' \
+logger -t jolitz "Created deploy user 'deploy' \
 for CI/CD, key auth, target /var/www/myapp"
 ```
 

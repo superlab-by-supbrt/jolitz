@@ -24,7 +24,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "mkdir -p -m 700 \"$HOME/.cache/heinzel\"",
+            "command": "mkdir -p -m 700 \"$HOME/.cache/jolitz\"",
             "timeout": 5
           }
         ]

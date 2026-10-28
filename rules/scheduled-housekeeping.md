@@ -1,6 +1,6 @@
 # Scheduled Housekeeping
 
-How to run heinzel housekeeping on a schedule —
+How to run jolitz housekeeping on a schedule —
 nightly or weekly health reports delivered by email
 without a human at the keyboard. Read this when the
 user asks to "schedule housekeeping", "run a nightly
@@ -8,15 +8,15 @@ check", or "email me a weekly report automatically".
 
 ## Where the Scheduler Lives
 
-On the workstation or ops box that has the heinzel
+On the workstation or ops box that has the jolitz
 repo, the `claude` CLI, and the SSH keys — **never
 on the managed server itself**. The managed server
-needs no heinzel installation.
+needs no jolitz installation.
 
 ## The Command
 
 ```
-cd /path/to/heinzel && claude --permission-mode auto \
+cd /path/to/jolitz && claude --permission-mode auto \
   -p "Run housekeeping on server1.example.com and \
 email me the report"
 ```
@@ -25,7 +25,7 @@ email me the report"
   installed CLI before writing the crontab — flag
   names have changed across releases.
 - The `-p` prompt counts as the explicit user
-  request that the `heinzel-email` skill requires;
+  request that the `jolitz-email` skill requires;
   "never run automatically" means never
   self-initiated, not never scheduled by the user.
 
@@ -71,21 +71,21 @@ nothing left to ask.
   `~/.claude` (CLI credentials) and the SSH keys —
   not root's.
 - The SSH key must work without an interactive
-  agent or passphrase prompt (heinzel's standard
+  agent or passphrase prompt (jolitz's standard
   BatchMode requirement).
 
 ## Crontab Template
 
 ```
-17 6 * * * cd /path/to/heinzel && flock -n \
-  /tmp/heinzel-cron-server1.lock timeout 30m \
+17 6 * * * cd /path/to/jolitz && flock -n \
+  /tmp/jolitz-cron-server1.lock timeout 30m \
   /abs/path/to/claude --permission-mode auto \
   -p "Run housekeeping on server1.example.com and \
-email me the report" >> ~/heinzel-cron.log 2>&1
+email me the report" >> ~/jolitz-cron.log 2>&1
 ```
 
 - `flock -n` skips the run if the previous one is
-  still going — never two heinzel sessions on the
+  still going — never two jolitz sessions on the
   same host at once. (`flock` is Linux; on macOS,
   prefer the launchd alternative below, which
   serializes runs by itself.)
@@ -94,7 +94,7 @@ email me the report" >> ~/heinzel-cron.log 2>&1
 
 ## systemd Timer Alternative (Linux)
 
-A `heinzel-housekeeping.service` (Type=oneshot,
+A `jolitz-housekeeping.service` (Type=oneshot,
 `ExecStart` = the command above) plus a timer:
 
 ```
@@ -111,10 +111,10 @@ is the native equivalent; cron also works.
 ## Where Output Goes
 
 - **Delivery:** the report arrives by email via the
-  `heinzel-email` skill (that is what the prompt
+  `jolitz-email` skill (that is what the prompt
   asks for).
 - **Debug trail:** `claude -p` stdout lands in the
   log file from the template (or cron's `MAILTO`).
 - **Audit trail:** as in any session —
-  `journalctl -t heinzel` on the server and
+  `journalctl -t jolitz` on the server and
   `memory/servers/<host>/changelog.log` locally.

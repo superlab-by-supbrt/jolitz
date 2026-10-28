@@ -37,7 +37,7 @@ port (`rules/ssh-port.md` → Known port).
    the one the user named, else `- SSH port:` from
    the memory read in step 4; a new host without one
    goes through `rules/ssh-port.md` → first contact.
-6. **Server lock.** Read `/etc/heinzel.conf` and
+6. **Server lock.** Read `/etc/jolitz.conf` and
    switch to read-only mode if it locks the server.
    See `rules/access-control.md` → Server Lock.
 7. **OS detection.** See `rules/os-detection.md`.

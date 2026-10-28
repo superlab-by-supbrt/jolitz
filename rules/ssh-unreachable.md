@@ -2,7 +2,7 @@
 
 A host that suddenly stops accepting SSH is often
 fine: a filter on the way blocks the client,
-frequently because of heinzel's own connections (see
+frequently because of jolitz's own connections (see
 `rules/ssh-connections.md`).
 
 ## Login rejected

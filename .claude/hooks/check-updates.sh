@@ -1,7 +1,7 @@
 #!/bin/sh
-# SessionStart hook: auto-pull latest heinzel changes
+# SessionStart hook: auto-pull latest jolitz changes
 # with version awareness and pinning support. Also
-# runs bin/heinzel-migrate after every pull, which
+# runs bin/jolitz-migrate after every pull, which
 # migrates old user state and creates local
 # directories new versions need.
 
@@ -16,16 +16,16 @@ export GIT_TERMINAL_PROMPT=0
 GIT_ASKPASS=${GIT_ASKPASS:-true}
 export GIT_ASKPASS
 
-# Migration is implemented in bin/heinzel-migrate so
-# both the Claude Code hook and bin/heinzel-update
+# Migration is implemented in bin/jolitz-migrate so
+# both the Claude Code hook and bin/jolitz-update
 # use the same logic.
 run_migration() {
-  [ -f bin/heinzel-migrate ] && sh bin/heinzel-migrate
+  [ -f bin/jolitz-migrate ] && sh bin/jolitz-migrate
 }
 
 # Opt-out via environment variable.
-if [ "$HEINZEL_NO_UPDATE" = "1" ]; then
-  echo "heinzel auto-update disabled (HEINZEL_NO_UPDATE=1)"
+if [ "$JOLITZ_NO_UPDATE" = "1" ]; then
+  echo "jolitz auto-update disabled (JOLITZ_NO_UPDATE=1)"
   exit 0
 fi
 
@@ -36,15 +36,15 @@ if [ $? -ne 0 ]; then
   # Detached HEAD — likely pinned to a tag.
   TAG=$(git describe --tags --exact-match 2>/dev/null)
   if [ -n "$TAG" ]; then
-    echo "heinzel pinned to $TAG — skipping auto-update"
+    echo "jolitz pinned to $TAG — skipping auto-update"
   else
-    echo "heinzel on detached HEAD — skipping auto-update"
+    echo "jolitz on detached HEAD — skipping auto-update"
   fi
   exit 0
 fi
 
 if [ "$BRANCH" != "main" ]; then
-  echo "heinzel on branch '$BRANCH' — skipping auto-update"
+  echo "jolitz on branch '$BRANCH' — skipping auto-update"
   exit 0
 fi
 
@@ -61,7 +61,7 @@ OUTPUT=$(git pull --ff-only --quiet 2>&1)
 PULL_STATUS=$?
 
 if [ $PULL_STATUS -ne 0 ]; then
-  echo "heinzel auto-update failed: $OUTPUT"
+  echo "jolitz auto-update failed: $OUTPUT"
   echo "Likely causes: local changes, local commits on a"
   echo "diverged main, or no network. Run 'git status' to"
   echo "inspect."
@@ -87,7 +87,7 @@ fi
 if [ "$OLD_VERSION" != "$NEW_VERSION" ] \
    && [ -n "$OLD_VERSION" ] \
    && [ -n "$NEW_VERSION" ]; then
-  echo "heinzel updated: $OLD_VERSION -> $NEW_VERSION"
+  echo "jolitz updated: $OLD_VERSION -> $NEW_VERSION"
 
   # Extract changelog section for the new version.
   if [ -f CHANGELOG.md ]; then
@@ -109,5 +109,5 @@ if [ "$OLD_VERSION" != "$NEW_VERSION" ] \
     echo "BREAKING CHANGES — read CHANGELOG.md"
   fi
 elif [ -n "$OUTPUT" ]; then
-  echo "heinzel repo updated: $OUTPUT"
+  echo "jolitz repo updated: $OUTPUT"
 fi

@@ -1,7 +1,7 @@
 ---
-name: heinzel-security
+name: jolitz-security
 argument-hint: "[hostname]"
-description: Run a heinzel security audit on a server — SSH
+description: Run a jolitz security audit on a server — SSH
   hardening (password auth, weak algos, root login), firewall,
   user account hygiene, listening services, kernel hardening
   (ASLR, IP forwarding), file permissions, SUID/SGID audit,
@@ -12,18 +12,18 @@ description: Run a heinzel security audit on a server — SSH
   Fedora, SUSE) and macOS (SIP, FileVault, Gatekeeper).
 ---
 
-# heinzel-security
+# jolitz-security
 
 Security configuration audit for a server or the local machine.
 **Never run automatically** — only on explicit user request. The
-whole of the heinzel first-connection onboarding pipeline still
+whole of the jolitz first-connection onboarding pipeline still
 applies before any of this runs.
 
 ## Workflow
 
 1. **Load overrides.** Before running any check, apply the full
-   heinzel rule-override chain (later wins):
-   - `memory/custom-rules/heinzel-security.md` if present (global
+   jolitz rule-override chain (later wins):
+   - `memory/custom-rules/jolitz-security.md` if present (global
      custom overrides for this skill — `## Add:`, `## Replace:`,
      `## Remove:` prefixes per `CLAUDE.md`).
    - `memory/servers/<hostname>/memory.md` for context (services,
@@ -53,7 +53,7 @@ applies before any of this runs.
 7. **Log the summary** to the system journal and mirror to the
    local changelog per `rules/changelog.md`:
 
-       logger -t heinzel "Security audit: 1 WARN, 1 INFO"
+       logger -t jolitz "Security audit: 1 WARN, 1 INFO"
 
 ## Scope and limits
 
@@ -70,7 +70,7 @@ applies before any of this runs.
 ## Cross-references
 
 **Automatic security updates** are checked during housekeeping
-(see `heinzel-housekeeping` skill). This audit does not duplicate
+(see `jolitz-housekeeping` skill). This audit does not duplicate
 that check.
 
 ## References

@@ -1,7 +1,7 @@
 # DNS Aliases
 
 The same physical server can have multiple DNS names.
-heinzel detects this automatically using the `- IP:`
+jolitz detects this automatically using the `- IP:`
 field in server memory files.
 
 **Canonical name** = the first hostname used for a

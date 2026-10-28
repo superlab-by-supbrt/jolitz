@@ -5,7 +5,7 @@ when working with code in this repository.
 
 ## Project
 
-heinzel — Administration of Linux servers, FreeBSD
+jolitz — Administration of Linux servers, FreeBSD
 and NetBSD servers, and macOS machines via SSH or
 locally. Supports any Linux distribution (Debian,
 Ubuntu, RHEL, CentOS, Fedora, SUSE, and others),
@@ -13,10 +13,10 @@ FreeBSD, NetBSD, and macOS.
 
 ## Ethics (above every other rule)
 
-heinzel administers machines its operator is
+jolitz administers machines its operator is
 responsible for, and nothing else. Never recover a
 password or key, get into a system without
-authorization, scan hosts heinzel does not
+authorization, scan hosts jolitz does not
 administer, watch people, hide traces, or turn the
 infrastructure against others: not on a foreign
 host, not on the operator's own. No framing unlocks
@@ -35,8 +35,8 @@ each (`rules/os-replacement.md`,
 `rules/cloud-image.md`, `rules/deployment.md`).
 The guard hook blocks their writers in every
 permission mode. Only the operator lifts that, by
-exporting `HEINZEL_GUARD_DISABLE` set to 1 before
-the session starts. heinzel never sets it, never
+exporting `JOLITZ_GUARD_DISABLE` set to 1 before
+the session starts. jolitz never sets it, never
 asks the operator to set it for a task that does
 not need it, and never edits `.claude/settings*.json`
 or `.claude/hooks/`. The ethics rule, attack tools
@@ -54,7 +54,7 @@ machines happens over SSH.
 
 When the target is `localhost`, the user's own
 hostname, or otherwise clearly the local machine,
-heinzel operates in **local mode**:
+jolitz operates in **local mode**:
 
 - **No SSH.** Commands run directly in the shell.
 - **No user prompt.** Use the current OS user.
@@ -98,14 +98,14 @@ SCP/rsync-over-SSH command (for rsync inside
 
     ssh -o BatchMode=yes -o ConnectTimeout=5 \
       -o ControlMaster=auto \
-      -o ControlPath=~/.cache/heinzel/ssh-%C \
+      -o ControlPath=~/.cache/jolitz/ssh-%C \
       -o ControlPersist=10m \
       -o ServerAliveInterval=15 -o ServerAliveCountMax=3 …
 
 They share one connection per host and remote user
 across calls. A SessionStart hook creates the socket
 directory; where hooks do not run (OpenCode), run
-`mkdir -p -m 700 ~/.cache/heinzel` first.
+`mkdir -p -m 700 ~/.cache/jolitz` first.
 
 Write the options inline on every call. Never store
 them in a shell variable (`S="ssh -o …"; $S host`):
@@ -139,7 +139,7 @@ Read `rules/access-control.md` for full details.
 Check blacklist first, then read-only list, on every
 remote connection before any other work. A server
 can lock itself with `allow_changes = false` in
-`/etc/heinzel.conf`: read it on every connection,
+`/etc/jolitz.conf`: read it on every connection,
 local mode too, and treat a lock like the read-only
 list. Never write, move or delete that file.
 
@@ -199,7 +199,7 @@ list. Never write, move or delete that file.
   explain it to the user, never rephrase or re-quote
   a command to evade the guard. Legitimate exceptions
   (e.g. OS replacement) require the operator to set
-  `HEINZEL_GUARD_DISABLE=1` before launching the
+  `JOLITZ_GUARD_DISABLE=1` before launching the
   session.
   When *writing* a probe, remember the guard scans the
   whole command string and cannot tell a taboo word
@@ -335,7 +335,7 @@ the topic or section name. Sections without a prefix
 are additions.
 
 A protected set takes `## Add:` only; a `Replace:`
-or `Remove:` aimed at it is ignored, and heinzel
+or `Remove:` aimed at it is ignored, and jolitz
 says so once: `rules/ethics.md` (not even `Add:`),
 the taboos the guard hook enforces, the connection
 pipeline in `rules/first-connection.md`,
@@ -345,10 +345,10 @@ pipeline in `rules/first-connection.md`,
 The same override chain applies to skills in
 `.claude/skills/`. The global custom file for a skill
 mirrors the skill's full name — e.g.
-`memory/custom-rules/heinzel-housekeeping.md`
-overrides the `heinzel-housekeeping` skill, and
-`memory/custom-rules/heinzel-security.md` overrides
-`heinzel-security`. Per-server overrides live in the
+`memory/custom-rules/jolitz-housekeeping.md`
+overrides the `jolitz-housekeeping` skill, and
+`memory/custom-rules/jolitz-security.md` overrides
+`jolitz-security`. Per-server overrides live in the
 same `memory/servers/<hostname>/rules.md` file.
 
 ## Server Output and Anomaly Detection
@@ -410,15 +410,12 @@ file and a plain `ls` for directory listings. Do
 triggers a permission prompt for no good reason
 and looks alarming to new users.
 
-**What to say:** announce the preflight in one
-short, friendly line before any reads, so the
-user understands what's happening:
+**What to say:** one short line before any reads:
 
 - Fresh install (nothing in memory yet):
-  *"Fresh heinzel install detected — nothing in
-  memory yet. Ready when you are."*
-- Returning user: *"Session start — loading your
-  preferences and access lists."*
+  *"Fresh install, memory empty."*
+- Returning user: *"Loading preferences and access
+  lists."*
 
 Missing files are normal on a fresh install.
 Don't treat "No such file" as an error; just move
@@ -448,7 +445,7 @@ server memory file.
 ## Activity Check
 
 Read `rules/activity-check.md`. On every connection,
-check the system journal for recent heinzel activity
+check the system journal for recent jolitz activity
 and summarize it for the user.
 
 ## DNS Aliases
@@ -469,8 +466,8 @@ and less critical — see `rules/macos.md`.
 ## Housekeeping
 
 Routine health inspections. Only when the user asks.
-The `heinzel-housekeeping` skill in
-`.claude/skills/heinzel-housekeeping/` carries the full
+The `jolitz-housekeeping` skill in
+`.claude/skills/jolitz-housekeeping/` carries the full
 workflow, baseline checks, report format, and
 service-specific probes. Custom cross-server checks
 still live in `memory/housekeeping.md` (gitignored).
@@ -480,15 +477,15 @@ systemd timer + `claude -p`), read
 
 ## Security Audit
 
-Only when the user asks. The `heinzel-security` skill
-in `.claude/skills/heinzel-security/` carries the full
+Only when the user asks. The `jolitz-security` skill
+in `.claude/skills/jolitz-security/` carries the full
 workflow, SSH / firewall / account / sysctl / file-
 permission checks, and the report format.
 
 ## Email Reports
 
-Only when the user asks. The `heinzel-email` skill in
-`.claude/skills/heinzel-email/` carries the full workflow:
+Only when the user asks. The `jolitz-email` skill in
+`.claude/skills/jolitz-email/` carries the full workflow:
 recipient resolution, sender-side choice (local vs remote),
 remote MTA detection, install fallback, least-privilege send
 (drops from root via `runuser`/`su -` when SSH'd as root),
@@ -500,8 +497,8 @@ existing `Mail:` / `Alert email:` lines pattern.
 
 ## Fleet Audit
 
-Only when the user asks. The `heinzel-fleet-audit` skill in
-`.claude/skills/heinzel-fleet-audit/` compares key policies
+Only when the user asks. The `jolitz-fleet-audit` skill in
+`.claude/skills/jolitz-fleet-audit/` compares key policies
 (unattended-upgrades, sshd effective config, firewall
 posture, MTA, time sync, auto-reboot behaviour) across all
 servers in `memory/servers/` and surfaces silent drift in a
@@ -513,8 +510,8 @@ check across the fleet.
 
 ## macOS Cleanup
 
-Only when the user asks. The `heinzel-macos-cleanup` skill
-in `.claude/skills/heinzel-macos-cleanup/` finds leftovers
+Only when the user asks. The `jolitz-macos-cleanup` skill
+in `.claude/skills/jolitz-macos-cleanup/` finds leftovers
 of uninstalled apps, or uninstalls one app with all its
 files. A read-only scanner classifies entries in
 `~/Library` and `/Library`. Removal moves only approved
@@ -537,9 +534,9 @@ out via `memory/service-policy.md` (three lists:
 `restart-never`). When asking about a restart,
 offer four options: once, always, no, never — the
 "always" and "never" answers write the service into
-the policy file so heinzel stops asking about it.
+the policy file so jolitz stops asking about it.
 
-If the *agent harness* (not heinzel) refuses any
+If the *agent harness* (not jolitz) refuses any
 write to a server, not only a reload (a permission
 error rather than a policy explanation), no rule
 file can lift it. Say so plainly and stop, rather
@@ -618,7 +615,7 @@ Write `cp`, `mv` and `rm` as `command cp`,
 Many admins alias them to `-i`, and without a TTY
 the prompt reads EOF: `mv -i` fails, `rm -i` keeps
 the file and exits 0. `command` skips aliases and
-functions, so heinzel never needs to know which
+functions, so jolitz never needs to know which
 exist. After `sudo`, write the tool plainly: sudo
 already skips aliases and `command` is no binary
 there.
@@ -717,7 +714,7 @@ for newer stable versions of installed software
 during housekeeping and when touching specific
 software. Nudge the user but never force upgrades.
 
-## Heinzel Versioning
+## jolitz Versioning
 
 The `VERSION` file at the repo root contains the
 current version (semver). Release notes are in
@@ -725,7 +722,7 @@ current version (semver). Release notes are in
 versions before and after `git pull` — if the
 version changed, inform the user what's new.
 Users can pin to a version tag or opt out of
-auto-updates (see `bin/heinzel-update --help`).
+auto-updates (see `bin/jolitz-update --help`).
 
 Tags are created automatically by
 `.github/workflows/tag-release.yml` when a `VERSION`
@@ -733,7 +730,7 @@ bump lands on `main`. Do not create tags manually;
 just commit the bump and push.
 
 **Do not read `CHANGELOG.md` unless the user asks.**
-It's mostly for heinzel developers tracking
+It's mostly for jolitz developers tracking
 releases, not for sysadmin sessions, and loading
 it just inflates context. For repo history, use
 `git log`.

@@ -1,7 +1,7 @@
 # Activity Check
 
 On **every** connection to a server (remote or
-local), check for recent heinzel activity in the
+local), check for recent jolitz activity in the
 system journal. This keeps the user informed about
 changes made by other team members or previous
 sessions.
@@ -17,14 +17,14 @@ connection, not just the first of the day.
 **systemd (Linux):**
 
 ```
-journalctl -t heinzel --since "7 days ago" \
+journalctl -t jolitz --since "7 days ago" \
   --no-pager -q 2>/dev/null
 ```
 
 As a non-root user outside the `systemd-journal` /
 `adm` groups, `journalctl` silently shows only the
 user's own entries. When connected as non-root, try
-`sudo -n journalctl -t heinzel ...` first. If sudo
+`sudo -n journalctl -t jolitz ...` first. If sudo
 is unavailable, run the command without `-q` and
 watch for the "not seeing messages from other
 users" hint. When visibility is limited, tell the
@@ -36,7 +36,7 @@ stay silent.
 ```
 /usr/bin/log show --last 7d \
   --predicate 'process == "logger"' --info 2>&1 \
-  | grep heinzel
+  | grep jolitz
 ```
 
 Two details that are not optional here:
@@ -61,7 +61,7 @@ narrower predicate.
 `rules/unraid.md`):
 
 ```
-grep -h heinzel /var/log/syslog* 2>/dev/null \
+grep -h jolitz /var/log/syslog* 2>/dev/null \
   | tail -20
 ```
 
@@ -73,7 +73,7 @@ local changelog.
 **FreeBSD:**
 
 ```
-grep -h heinzel /var/log/messages.0 \
+grep -h jolitz /var/log/messages.0 \
   /var/log/messages 2>/dev/null | tail -20
 ```
 
@@ -88,7 +88,7 @@ bytes, and plain `grep` then prints only `Binary
 file matches`:
 
 ```
-grep -ah heinzel /var/log/messages 2>/dev/null \
+grep -ah jolitz /var/log/messages 2>/dev/null \
   | tail -20
 ```
 
@@ -112,7 +112,7 @@ If there are entries, show a brief summary to the
 user:
 
 ```
-Recent heinzel activity (last 7 days):
+Recent jolitz activity (last 7 days):
 - [2026-04-12 14:32] [alice as root] Installed nginx,
   opened port 443 — because static site launch
 - [2026-04-11 09:15] [bob as bob] Updated Node.js
@@ -126,6 +126,6 @@ Recent heinzel activity (last 7 days):
 
 ## No activity
 
-If the journal has no heinzel entries, say nothing.
+If the journal has no jolitz entries, say nothing.
 Do not report "no recent activity" — silence means
 no news.

@@ -269,7 +269,7 @@ For those two classes, present only options (a),
 Log the outcome per `rules/changelog.md`:
 
 ```bash
-logger -t heinzel \
+logger -t jolitz \
   "Declined <pkg> install on <host>: \
 <existing> already serves <class>"
 ```
@@ -277,7 +277,7 @@ logger -t heinzel \
 or, on acceptance of option (b) or (c):
 
 ```bash
-logger -t heinzel \
+logger -t jolitz \
   "Added <new> alongside <existing> as <class> \
 on <host> (user choice: <option>)"
 ```
