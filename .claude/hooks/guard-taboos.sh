@@ -752,11 +752,52 @@ case "$LC_CMD" in
 esac
 # HFS+ skips zero-width characters and APFS folds a long s onto
 # s, so .clau<U+200B>de and ſettings.local.json reach the same
-# files. With the non-ASCII bytes removed, either name in the
-# rest puts the command in scope. An umlaut elsewhere does not.
-case $(printf '%s' "$LC_CMD" | LC_ALL=C tr -d '\200-\377') in
+# files. The shell drops quotes and backslashes (.cla""ude). With
+# all of those removed, either name in the rest puts the command
+# in scope. An umlaut elsewhere does not.
+UQ_CMD=$(printf '%s' "$LC_CMD" | LC_ALL=C tr -d '\200-\377"'\''\\')
+case $UQ_CMD in
   *.claude*|*ettings.local.json*) IN_CLAUDE=1 ;;
 esac
+# A glob, brace or expansion in a path component can resolve to
+# .claude when the literal text before it still could: .c*,
+# .?laude, .{c,}laude, .$x, {.cl,}aude; .bash_profile.$(date)
+# cannot. Comments are skipped, as the shell skips them.
+# Only unquoted ones expand: inside quotes and after a backslash
+# they become _, so sed "s/ .*//" stays out of scope while
+# ".cl"* does not. A $ expands inside double quotes too, and an
+# unclosed quote counts as in scope. Accepted false positive:
+# such a command may only read. Not closable: a name built in a
+# variable first (d=.cla; ${d}ude).
+GLOBBED=$(printf '%s\n' "$LC_CMD" | LC_ALL=C awk '
+  BEGIN { q = "" }
+  {
+    out = ""
+    for (i = 1; i <= length($0); i++) {
+      ch = substr($0, i, 1)
+      if (q == "" && ch == "#" \
+        && (i == 1 || index(" \t;&|(", substr($0, i - 1, 1)))) break
+      # An escaped character is literal: still part of the name,
+      # but no longer a glob.
+      if ((q == "" && ch == "\\") \
+        || (q == "\"" && ch == "\\" && index("\"\\$`", substr($0, i + 1, 1)))) {
+        i++; c = substr($0, i, 1)
+        out = out (index("*?[]{$", c) ? "_" : c); continue
+      }
+      if (q == "" && (ch == "\"" || ch == "\047")) { q = ch; continue }
+      if (q != "" && ch == q) { q = ""; continue }
+      if (q == "\047" && index("*?[]{$", ch)) ch = "_"
+      if (q == "\"" && index("*?[]{", ch)) ch = "_"
+      out = out ch
+    }
+    print out
+  }
+  END { if (q != "") print " .*" }')
+if printf '%s\n' "$GLOBBED" \
+  | LC_ALL=C grep -Eq \
+    '(^|[[:space:]/=<>:])(\.(c(l(a(u(de?)?)?)?)?)?[][*?{$]|\{[^[:space:]/]*\.)'; then
+  IN_CLAUDE=1
+fi
 if [ "$IN_CLAUDE" -eq 1 ]; then
   # Backslash continuations folded, blanks squeezed. Any newline
   # left separates a second command, so the scanner forms below
@@ -768,7 +809,9 @@ if [ "$IN_CLAUDE" -eq 1 ]; then
     | tr '\t' ' ' | tr -s ' ' | sed -e 's/^ //' -e 's/ $//')
   SCAN='\.claude/skills/jolitz-macos-cleanup/scripts/scan\.py'
   SARG='( ([A-Za-z0-9_.@:+-]+|"[A-Za-z0-9 _.@:+-]+"))*'
-  SSHOPT='( [^ ;&|`$()<>\\"'\''*?[]+)*'
+  # Only the options CLAUDE.md prescribes, so no ProxyCommand,
+  # LocalCommand, -F or -S runs or reads anything else.
+  SSHOPT='( -o (BatchMode|ConnectTimeout|ControlMaster|ControlPath|ControlPersist|ServerAliveInterval|ServerAliveCountMax|Port)=[A-Za-z0-9_.%~/:@+-]+)* [A-Za-z0-9_][A-Za-z0-9_.@:-]*'
   SOUT='( > [A-Za-z0-9_.-]+)?'
   [ "$CWD_IN_CLAUDE" -eq 1 ] && SOUT=''
   case "$FLAT" in
@@ -800,6 +843,9 @@ ls in a call of their own"
       | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
       | while IFS= read -r seg; do
           [ -n "$seg" ] || continue
+          # The flags as the shell sees them, quotes removed
+          # (-"delete", --"output").
+          uq=$(printf "%s" "$seg" | tr -d "\"'\\\\")
           # git log/diff/show --output writes a file, grep -O and
           # --ext-diff/--textconv run a program. git takes any
           # unique prefix of a long option, so the prefixes count
@@ -808,13 +854,13 @@ ls in a call of their own"
           # driver) runs without a flag; the guard is a backstop.
           if printf '%s\n' "$seg" | grep -Eq "$READONLY" \
             || { printf '%s\n' "$seg" | grep -Eq "$READGIT" \
-              && ! printf '%s\n' "$seg" | grep -Eq \
+              && ! printf '%s\n' "$uq" | grep -Eq \
                 '(^| )-[A-Za-z]*O|(^| )--(op|ou|ex|te)[-a-z]*(=| |$)'; }
           then
             continue
           fi
           if printf '%s\n' "$seg" | grep -Eq '^find( |$)' \
-            && ! printf '%s\n' "$seg" \
+            && ! printf '%s\n' "$uq" \
               | grep -Eq '(^| )-(delete|exec|execdir|ok|okdir|fprint0?|fprintf|fls)( |$)'
           then
             continue

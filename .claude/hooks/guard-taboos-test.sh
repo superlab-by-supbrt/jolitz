@@ -1025,6 +1025,37 @@ check deny 'git diff --ext .claude'
 check pass 'git diff -- .claude/hooks/guard-taboos.sh'
 check pass 'git grep -n GUARD .claude'
 check pass 'git show HEAD:.claude/settings.json'
+# The scanner over ssh takes only the prescribed -o options.
+check deny 'ssh -oProxyCommand=/tmp/x h /usr/bin/python3 - < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
+check deny 'ssh -o ProxyCommand=/tmp/x h /usr/bin/python3 - < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
+check deny 'ssh -o LocalCommand=/tmp/x -o PermitLocalCommand=yes h /usr/bin/python3 - < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
+check deny 'ssh -Fcfg /usr/bin/python3 - < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
+check deny 'ssh -o BatchMode=yes -Esettings.json /usr/bin/python3 - < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
+check deny 'ssh -F /tmp/cfg h /usr/bin/python3 - < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
+check pass 'ssh -o BatchMode=yes -o ConnectTimeout=5 -o ControlMaster=auto -o ControlPath=~/.cache/heinzel/ssh-%C -o ControlPersist=10m -o Port=2222 root@h.example.com /usr/bin/python3 - app Word < .claude/skills/heinzel-macos-cleanup/scripts/scan.py'
+# Quotes, globs and braces that the shell turns into .claude.
+check deny 'echo x > .cla""ude/settings.json'
+check deny "echo x > .cla'u'de/settings.json"
+check deny 'echo x > .cl\aude/settings.json'
+check deny 'echo x > ".cl"*/settings.json'
+check deny 'echo "\"" > .cl*/settings.json'
+check deny 'cp /tmp/s ".$x"/settings.json'
+check deny 'echo "x > .cl*/settings.json'
+check deny 'cp /tmp/s {.cl,}aude/settings.json'
+check deny 'cp /tmp/s .cl\au*/settings.json'
+check deny 'cp /tmp/s .c\l*/settings.json'
+check pass 'command cp ~/.bash_profile ~/.bash_profile.bak.$(date +%F)'
+check pass 'grep -i ed25519 /root/.ssh/authorized_keys | sed "s/ .*//" '
+check deny 'echo x > .cl*/settings.json'
+check deny 'cp /tmp/s .?laude/settings.json'
+check deny 'cp /tmp/s .{c,}laude/settings.json'
+check deny 'cp /tmp/s ./.*/hooks/guard-taboos.sh'
+check pass 'cp /etc/nginx/nginx.conf{,.bak}'
+check pass 'ls -d .c*'
+# Flags hidden in quotes.
+check deny 'find .claude -"delete"'
+check deny "find .claude -ex'ec' rm {} +"
+check deny 'git log --"output"=.claude/settings.json'
 if command -v jq >/dev/null 2>&1; then
   :
 fi
