@@ -15,6 +15,38 @@ In unprivileged mode, use `~/.jolitz-backups/` for
 user-owned files. System config files cannot be
 edited — defer those to the sysadmin report.
 
+## Show the diff before the write
+
+A config edit is two steps with a look in between.
+Write the new version next to the backup, never onto
+the live file first:
+
+```
+BACKUP_DIR="/var/backups/jolitz"
+NEW="$BACKUP_DIR/config.conf.new"
+# write the new content to "$NEW", then:
+diff -u "$BACKUP_DIR/config.conf.20260301-101500" "$NEW"
+```
+
+Show the user the `diff -u` output and, where the
+service has a config test that takes a file
+(`rules/service-reload.md` → Config Test Before
+Reload: `haproxy -c -f <file>`,
+`caddy validate --config <file>`), its result on
+`$NEW`. Only after that, and after the user's OK
+where the change asks, copy `$NEW` onto the live
+file and run the test again on the installed file. A
+test that only reads the installed path (`nginx -t`,
+`postfix check`) runs right after the copy; a
+failure restores the backup at once, before any
+reload.
+
+The diff is the change the user approves; the
+`Way back:` line names the backup
+(`rules/way-back.md`). Remove `$NEW` after the copy.
+In unprivileged mode the same happens under
+`~/.jolitz-backups/`.
+
 ## Never back up in place inside drop-in directories
 
 Several Linux config systems read **every** file in a
