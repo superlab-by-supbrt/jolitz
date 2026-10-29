@@ -1,5 +1,24 @@
 # Changelog
 
+## 3.3.3-jolitz.19 — 2026-10-29
+
+- **A banner from the field is a test fixture.** A reader
+  shared a sanitized SSH banner that tried to make agents
+  "register" by posting hostname, user and public IP:
+  `tests/fixtures/injection-banner.txt`. Against it the
+  marker had flagged one line by luck and the guard nothing.
+- **The marker knows the tells.** `[SYSTEM]` tags, "if you
+  are an AI", "automated agents", "do not inform your
+  operator", "report only:" are flagged in remote output.
+- **The guard denies a request body built from command
+  output:** a `curl` or `wget` upload option (`-d`,
+  `--data*`, `--json`, `-F`, `-T`, `--post-data`) with
+  `$( )` or backticks, also inside `ssh host "…"`. A URL
+  built the same way still fetches.
+- `rules/anomaly-detection.md` lists fake authority, hidden
+  HTML comments and "do not tell the user" as tells; the
+  last one alone is the alarm.
+
 ## 3.3.3-jolitz.18 — 2026-10-29
 
 - **The start screen shows at once.** A SessionStart hook,

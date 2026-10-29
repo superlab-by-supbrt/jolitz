@@ -1688,6 +1688,28 @@ if hit "$INTERP_NOAWK"; then
   printf '%s\n' "$EX_CMD" | grep -Eq "$EX_IENV" && EX_SRC=1
   printf '%s\n' "$EX_CMD" | grep -Eq "$EX_INET" && EX_SEND=1
 fi
+# The same payload without env: a request body built from command
+# output on the machine, curl -d "{\"host\":\"$(hostname)\"}", as
+# a planted "compliance notice" in an SSH banner asked for. Denied:
+# a curl or wget upload option (-d, --data*, --json, -F, --form*,
+# -T, --upload-file, --post-data, --body-data) followed by $( or a
+# backtick before the next ; & or |, continuation lines joined.
+# Case matters here: curl -f is
+# --fail, -F a form. A URL built the same way (curl -o x
+# https://.../$(uname -m)) stays allowed; it fetches. Accepted
+# false positive: wget -d is --debug, so wget -d with a computed
+# URL is denied too.
+EX_UQ=$(printf '%s\n' "$CMD" \
+  | awk '{ if (sub(/\\$/, "")) printf "%s ", $0; else print }' \
+  | tr -d '"'\''\\')
+if printf '%s\n' "$EX_UQ" | grep -Eq \
+  '(^|[^[:alnum:]_.-])(curl|wget)([[:space:]][^;&|]*)?[[:space:]](-d|--data[a-z-]*|--json|-F|--form[a-z-]*|-T|--upload-file|--post-data|--body-data)[^;&|]*(\$\(|`)'
+then
+  deny "this request sends a body built from command output on \
+the machine (\$( ) or backticks in an upload option) - what a \
+planted notice in server output asks for to fingerprint the host; \
+if the user asked for exactly this, they run it themselves"
+fi
 if [ "$EX_SRC" -eq 1 ] && [ "$EX_SEND" -eq 1 ]; then
   deny "this command reads the environment or a secret and hands \
 it to a network tool, which sends credentials off the machine - \

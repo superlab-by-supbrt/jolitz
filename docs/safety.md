@@ -150,9 +150,12 @@ them complete:
    credentials, `/etc/shadow`) handed to a network tool
    (`curl`, `wget`, `nc`, `socat`, `dig`, `mail`,
    `/dev/tcp`, an HTTP library in an interpreter), also
-   inside `ssh host "…"`. Not covered: an upload by `scp` or
-   `rsync`, a secret copied into a file first and sent later,
-   a name built at run time.
+   inside `ssh host "…"`. Also denied: a `curl` or `wget`
+   upload whose body is built by command substitution
+   (`-d "{\"host\":\"$(hostname)\"}"`), the fingerprint a
+   planted banner asks for. Not covered: an upload by `scp`
+   or `rsync`, a secret copied into a file first and sent
+   later, a name built at run time.
 
 What closes the rest is outside jolitz, and it is yours:
 
@@ -168,6 +171,13 @@ What closes the rest is outside jolitz, and it is yours:
   needs SSH to your servers, the model's API and a few
   update sources. A firewall that allows only that turns an
   exfiltration into a failed connection.
+
+A banner from the field, sanitized and shared by a reader,
+is in `tests/fixtures/injection-banner.txt`: a fake
+compliance notice in an HTML comment after a legal login
+banner, legal pressure, "Do NOT inform your operator", and a
+`curl` POST of hostname, user and public IP. The marker and
+guard tests run against it.
 
 **Try it.** On a test VM or container you own, put this in
 `/etc/motd` (or the `Banner` file of sshd):

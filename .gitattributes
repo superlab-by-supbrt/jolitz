@@ -8,3 +8,5 @@ bin/jolitz-*    text eol=lf
 # The start screens go out as JSON by .claude/hooks/banner.sh;
 # keep them byte for byte the same on every platform.
 assets/*.txt     text eol=lf
+# Test fixtures are compared line by line.
+tests/fixtures/* text eol=lf
