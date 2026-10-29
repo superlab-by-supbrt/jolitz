@@ -16,6 +16,8 @@ SKIP=0
 # fixtures must reach the guard as written, so the harness's own
 # jq calls switch that off. The hook runs as its own process and
 # keeps the conversion it gets at run time. No effect elsewhere.
+# A file goes to jq on stdin: with the conversion off, jq.exe
+# could not open a POSIX path given as an argument.
 jq() { MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' command jq "$@"; }
 
 json_for() {
@@ -1746,7 +1748,7 @@ if command -v jq >/dev/null 2>&1; then
   if jq -e '[.hooks[][] | .hooks[]?
       | select((.command // "") | test("guard-taboos\\.sh"))]
       | length > 0 and all(.onFailure == "block")' \
-      "$CLAUDE_DIR/settings.json" >/dev/null 2>&1; then
+      < "$CLAUDE_DIR/settings.json" >/dev/null 2>&1; then
     PASS=$((PASS + 1))
   else
     FAIL=$((FAIL + 1))
