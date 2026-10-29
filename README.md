@@ -166,15 +166,21 @@ the map of your fleet. Details and API: [hub/README.md](hub/README.md).
   (`journalctl -t jolitz`), the detail and the way back in
   memory.
 - **It keeps secrets out** of the conversation, memory, mails
-  and command lines, and ignores instructions hidden in
-  server output.
+  and command lines.
+- **Server output is data.** A rule tells the model so, a
+  hook marks text in output that addresses an AI or hides
+  from you, and the guard denies sending the environment or
+  a secret to a network tool. A rule and two string
+  matchers, not a guarantee: keep secrets out of the agent's
+  environment and read every command.
 - **It respects locks:** `memory/blacklist.md`,
   `memory/readonly.md`, and `/etc/jolitz.conf` on the server
   itself.
 - **The guard** (a Claude Code hook) blocks the absolute
   taboos in every permission mode: power off, filesystems,
   partition tables, boot loaders, SSH keys, `sshd_config`,
-  sudoers, accounts, the server lock. Lifted only by the
+  sudoers, accounts, the server lock, secrets sent off the
+  machine. Lifted only by the
   operator, for one session, with `JOLITZ_GUARD_DISABLE=1`.
   A backstop against mistakes, not a sandbox.
 
