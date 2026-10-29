@@ -37,8 +37,11 @@ detect, usually the SSH user, and keeps it in
 `memory/user.md`. To check the workstation:
 `bin/jolitz-doctor`.
 
-- **jq:** `brew install jq`, `sudo apt install jq`,
-  `sudo dnf install jq` or `pkg install jq`.
+- **jq:** the guard reads every command with it. jolitz
+  checks it at the start and names the install command for
+  your system when it is missing (`brew install jq`,
+  `sudo apt install jq`, `sudo dnf install jq`,
+  `pkg install jq`).
 - **Windows:** WSL 2, or [Git for Windows](https://gitforwindows.org/)
   plus `winget install jqlang.jq`; Claude Code then runs the
   shell and the guard in Git Bash. Without Git Bash the guard

@@ -515,6 +515,10 @@ deny() {
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse",'
   printf '"permissionDecision":"deny",'
   printf '"permissionDecisionReason":"jolitz guard: %s ' "$1"
+  # Without jq every rule ran on the raw hook input, so this
+  # denial may be one jq would have avoided. Say so.
+  command -v jq >/dev/null 2>&1 \
+    || printf '(jq is missing on this workstation, so the guard read the command only roughly; installing jq avoids such denials) '
   printf '(CLAUDE.md - Critical Safety Rules). Blocked in all '
   printf 'permission modes. Explain this to the user; do not '
   printf 'rephrase the command to evade the guard."}}\n'

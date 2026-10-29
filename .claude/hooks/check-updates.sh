@@ -149,5 +149,19 @@ auto_update() {
   fi
 }
 
+# jq first: the guard reads every command through it, and
+# without it the guard only scans the raw input and blocks far
+# more than it should. Said once per session, at the top, with
+# the command for this system; jolitz passes it on.
+jq_check() {
+  command -v jq >/dev/null 2>&1 && return 0
+  hint=$(sh lib/install-hint.sh jq 2>/dev/null)
+  echo "jolitz: jq is missing on this workstation. The guard"
+  echo "reads commands only roughly without it and will block"
+  echo "ordinary work. Install it: ${hint:-your package manager}"
+  echo "Tell the user this first, before anything else."
+}
+
+jq_check
 auto_update
 hub_sync
