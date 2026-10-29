@@ -375,6 +375,8 @@ fi
 awk -F "$TAB" -v mode="$MODE" -v today="$TODAY" -v now="$NOW" \
   -v days="$DAYS" -v tag="$TAG" -v out="$OUT" -v mem="$MEM" \
   -v jq="$HAVE_JQ" -v json="$JSON" -v prom="$PROM" \
+  -v cssfile="$REPO_DIR/hub/internal/ui/static/hub.css" \
+  -v version="$(cat "$REPO_DIR/VERSION" 2>/dev/null)" \
   -f "$REPO_DIR/lib/overview.awk" \
   "$WORK/hosts.tsv" "$WORK/todos.tsv" "$WORK/changes.tsv" \
   "$WORK/aliases.tsv" "$WORK/eol.tsv" "$WORK/audit-cur.tsv" \
