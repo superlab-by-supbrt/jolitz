@@ -17,6 +17,11 @@ keep long rule sets worse, and OpenCode runs no guard. The
 line `Local model changes: allowed` in `memory/user.md`
 lifts it (`rules/local-model.md`).
 
+Neither the guard nor the output marker
+(`.claude/hooks/flag-output.sh`) runs in OpenCode. Text in
+server output that addresses the model meets only the rule
+there ([safety](safety.md#injected-text-in-server-output)).
+
 ## A local model
 
 With [Ollama](https://ollama.com) and OpenCode jolitz runs on

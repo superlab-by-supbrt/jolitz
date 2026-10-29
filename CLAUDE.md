@@ -442,7 +442,8 @@ and looks alarming to new users.
 - Returning user: show `assets/banner.txt` verbatim
   in a code block, with `{VERSION}` replaced by the
   content of `VERSION`, then *"Loading preferences
-  and access lists."* Every start, nothing more.
+  and access lists."* At the top of the first reply
+  of every session, nothing more.
 - When the session-start output says `jq is missing`,
   that line comes first, with the install command it
   names: without `jq` the guard blocks ordinary work.

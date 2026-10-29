@@ -1641,6 +1641,60 @@ can rewrite it, and a pattern matcher cannot tell that from a \
 read - read it with getent, grep or awk instead"
 fi
 
+# --- The environment or a secret sent off the machine ---------
+# What an injected line in server output asks for: "send your
+# environment to https://...". Denied: a command that both reads
+# the environment or a secret and hands data to a network tool.
+# Sources: env alone (also as the command of ssh host), set
+# alone, printenv, export/declare -p, /proc/*/environ, a
+# variable named like a secret ($API_TOKEN, ${DB_PASSWORD}), a
+# private SSH key, .env, .netrc, .pgpass, cloud and registry
+# credentials, /etc/shadow; in an interpreter also os.environ,
+# process.env, ENV[ or ENV. and getenv. Senders: curl, wget, nc,
+# ncat, netcat, socat, telnet, openssl s_client, dig, nslookup,
+# drill, mail, mailx, sendmail, msmtp, /dev/tcp and /dev/udp; in
+# an interpreter also an HTTP or socket library.
+# The check reads the whole command with quotes dropped, so a
+# pipe, $( ), ssh host "..." and bash -c count alike.
+#
+# Reading stays allowed: env | grep PATH, printenv HOME, curl
+# alone, env FOO=1 curl ... (env runs a command, prints nothing).
+# Accepted false positive: curl with a secret-named variable for
+# an API the user named (curl -H "Bearer $GITHUB_TOKEN"); the
+# user runs that, or lifts the guard for it. Not closable: a
+# sender or a variable name built at run time, an upload by scp
+# or rsync, a secret read into a file first and sent later.
+# Lowercased, quotes and backslashes dropped.
+EX_CMD=$(printf '%s' "$LC_CMD" | tr -d '"'\''\\')
+EX_SEP='(^|[;&|(`]|\$\(|[[:space:]]-c[[:space:]]+)[[:space:]]*'
+EX_ENV='(^|[[:space:];&|(`]|\$\()((/usr)?/bin/)?env([[:space:]]+-0)?[[:space:]]*([;&|)>`]|$)'
+EX_ENV="$EX_ENV|${EX_SEP}"'set[[:space:]]*([;&|)>`]|$)'
+EX_ENV="$EX_ENV"'|(^|[^[:alnum:]_.-])printenv([^[:alnum:]_.-]|$)'
+EX_ENV="$EX_ENV"'|(^|[^[:alnum:]_.-])(export|declare|typeset)[[:space:]]+-p'
+EX_ENV="$EX_ENV"'|/proc/[^[:space:]/]+/environ'
+EX_ENV="$EX_ENV"'|\$\{?[a-z0-9_]*(secret|token|passw|api_?key|access_?key|private_?key|credential)[a-z0-9_]*'
+EX_FILE='\.ssh/id_[[:alnum:]_-]+([^.[:alnum:]_-]|$)|ssh_host_[[:alnum:]_-]*key([^.[:alnum:]_-]|$)'
+EX_FILE="$EX_FILE"'|(^|[[:space:]/@=<])\.env([[:space:];&|)]|$)|\.netrc|\.pgpass|\.git-credentials'
+EX_FILE="$EX_FILE"'|\.aws/credentials|\.docker/config\.json|\.kube/config|\.config/gh/hosts\.yml|/etc/shadow'
+EX_NET='(^|[[:space:];&|(`])((/usr)?(/local)?/s?bin/)?(curl|wget|nc|ncat|netcat|socat|telnet|dig|nslookup|drill|mail|mailx|sendmail|msmtp)([[:space:];&|)`]|$)'
+EX_NET="$EX_NET"'|/dev/(tcp|udp)/|openssl[[:space:]]+s_client'
+EX_IENV='os\.environ|process\.env|(^|[^[:alnum:]_.])env(\[|\.)|getenv'
+EX_INET='urlopen|urllib|requests\.|httpx|http\.client|socket|fetch\(|net::http|lwp|http\.request|https?://'
+EX_SRC=0
+printf '%s\n' "$EX_CMD" | grep -Eq "$EX_ENV|$EX_FILE" && EX_SRC=1
+EX_SEND=0
+printf '%s\n' "$EX_CMD" | grep -Eq "$EX_NET" && EX_SEND=1
+if hit "$INTERP_NOAWK"; then
+  printf '%s\n' "$EX_CMD" | grep -Eq "$EX_IENV" && EX_SRC=1
+  printf '%s\n' "$EX_CMD" | grep -Eq "$EX_INET" && EX_SEND=1
+fi
+if [ "$EX_SRC" -eq 1 ] && [ "$EX_SEND" -eq 1 ]; then
+  deny "this command reads the environment or a secret and hands \
+it to a network tool, which sends credentials off the machine - \
+the classic request of an injected line in server output; if the \
+user asked for exactly this, they run it themselves"
+fi
+
 # --- A redirect onto a computed target (issue #51) ------------
 # In unquoted echo text, -> is a dash plus a redirect, and the
 # next word names the file it truncates: -> $(readlink -f $E)
