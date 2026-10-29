@@ -1,5 +1,30 @@
 # Changelog
 
+## 3.3.3-jolitz.14 — 2026-10-29
+
+- **AIX 7.2 and 7.3.** `rules/aix.md` covers detection
+  (`oslevel -s`), filesets and the Toolbox, SRC services,
+  the error log, the IP security filter, LVM, the boot list,
+  shutdown and accounts. Written from IBM's documentation;
+  not yet run on a host, and the rule says which lines to
+  check there.
+- **The guard knows AIX.** Denied: `mkvg -f`, `extendvg -f`,
+  `rmlv`, `reducevg -d`, `rmfs`, `chpv -c/-C`, a write to
+  `/dev/rhdiskN`, `bootlist` without `-o`, `bosboot -a`,
+  `mkboot`, `alt_disk_copy`/`alt_disk_install`,
+  `alt_rootvg_op -X`, `stopsrc` on sshd, ssh, tcpip or all,
+  `fasthalt`, `shutdown` without `-r`, `rmuser`, `rmgroup`
+  and writes to `/etc/security/{passwd,group,user,limits}`.
+  `shutdown -Fr` is the reboot and passes. Linux PAM's
+  `/etc/security/*.conf` stay writable.
+- **A reboot flag before a closing quote counts.**
+  `ssh host "shutdown -r"` was denied because the flag ended
+  at the quote; it passes now, as with a trailing `now`.
+- **End of life per AIX technology level** in the overview,
+  from endoflife.date (`ibm-aix`). The demo has an AIX host.
+- README and screenshots in a browser frame; the fleet audit
+  skips AIX hosts until they have probes.
+
 ## 3.3.3-jolitz.13 — 2026-10-29
 
 - **A missing jq is said at the start.** The guard reads every

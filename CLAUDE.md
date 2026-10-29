@@ -5,11 +5,11 @@ when working with code in this repository.
 
 ## Project
 
-jolitz — Administration of Linux servers, FreeBSD
-and NetBSD servers, and macOS machines via SSH or
+jolitz — Administration of Linux servers, FreeBSD,
+NetBSD and AIX servers, and macOS machines via SSH or
 locally. Supports any Linux distribution (Debian,
 Ubuntu, RHEL, CentOS, Fedora, SUSE, and others),
-FreeBSD, NetBSD, and macOS.
+FreeBSD, NetBSD, AIX 7.2/7.3, and macOS.
 
 ## Ethics (above every other rule)
 
