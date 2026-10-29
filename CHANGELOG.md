@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.3.3-jolitz.17 — 2026-10-29
+
+- **A banner in every session.** After the first start,
+  jolitz's first reply in a session opens with
+  `assets/banner.txt`: the logo, its version and the most
+  used skills and commands. Claude Code lets the model speak
+  only after the first prompt, so it appears then, not on the
+  empty start screen. The full welcome with the first steps
+  stays on the first start.
+
 ## 3.3.3-jolitz.16 — 2026-10-29
 
 - **Server output that talks to the model is marked.** A new

@@ -1,0 +1,14 @@
+   _       _ _ _
+  (_) ___ | (_) |_ ____
+  | |/ _ \| | | __|_  /
+  | | (_) | | | |_ / /
+ _/ |\___/|_|_|\__/___|    {VERSION}
+|__/                       a sysadmin's habits for your AI
+
+  /jolitz-housekeeping <host>   health check
+  /jolitz-security <host>       security audit
+  /jolitz-updates <host|tag>    plan and run updates
+  /jolitz-incident <host>       triage a live problem
+  /jolitz-fleet-audit           compare all servers
+  bin/jolitz-overview           fleet overview as HTML
+  bin/jolitz-doctor             check this workstation
