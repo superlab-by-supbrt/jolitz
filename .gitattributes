@@ -5,3 +5,6 @@
 *.sh             text eol=lf
 bin/jolitz-*    text eol=lf
 .claude/hooks/*  text eol=lf
+# The start screens go out as JSON by .claude/hooks/banner.sh;
+# keep them byte for byte the same on every platform.
+assets/*.txt     text eol=lf

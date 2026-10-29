@@ -20,7 +20,8 @@ trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/assets" "$T/memory"
 cp "$REPO_DIR/assets/welcome.txt" "$REPO_DIR/assets/banner.txt" "$T/assets/"
 echo '3.3.3-jolitz.99' > "$T/VERSION"
-msg() { CLAUDE_PROJECT_DIR="$T" sh "$HOOK" | jq -r '.systemMessage'; }
+# jq.exe and a CRLF checkout may add \r; the text is compared.
+msg() { CLAUDE_PROJECT_DIR="$T" sh "$HOOK" | jq -r '.systemMessage' | tr -d '\r'; }
 
 # First start: no memory/user.md.
 OUT=$(CLAUDE_PROJECT_DIR="$T" sh "$HOOK")
@@ -28,7 +29,7 @@ printf '%s' "$OUT" | jq -e '.systemMessage | type == "string"' >/dev/null
 ok $? "first start: valid JSON with a systemMessage"
 msg | grep -q 'First steps'
 ok $? "first start: the welcome"
-[ "$(msg | sed 1d)" = "$(cat "$REPO_DIR/assets/welcome.txt")" ]
+[ "$(msg | sed 1d)" = "$(tr -d '\r' < "$REPO_DIR/assets/welcome.txt")" ]
 ok $? "first start: the welcome verbatim, backslashes and quotes intact"
 
 # Every later start.
@@ -41,7 +42,7 @@ msg | grep -q '^  /jolitz-housekeeping <host>'
 ok $? "later start: the commands"
 ! msg | grep -q 'First steps'
 ok $? "later start: not the welcome"
-[ "$(msg | sed 1d)" = "$(sed 's/{VERSION}/3.3.3-jolitz.99/' "$REPO_DIR/assets/banner.txt")" ]
+[ "$(msg | sed 1d)" = "$(sed 's/{VERSION}/3.3.3-jolitz.99/' "$REPO_DIR/assets/banner.txt" | tr -d '\r')" ]
 ok $? "later start: the banner verbatim, line for line"
 
 # A VERSION with odd characters cannot break the JSON.
