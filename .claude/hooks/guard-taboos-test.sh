@@ -1080,6 +1080,39 @@ else
   echo "FAIL: raw-input fallback did not deny mkfs"
 fi
 
+# --- a denial without jq says why ------------------------------
+# Without jq the rules run on the raw hook input and block more;
+# the reason must name the missing jq so the user can fix it. A
+# PATH of every tool on this system except jq, as symlinks.
+NOJQ=$(mktemp -d) || exit 1
+for d in $(printf '%s' "$PATH" | tr ':' ' '); do
+  for f in "$d"/*; do
+    n=${f##*/}
+    [ "$n" = jq ] && continue
+    [ -x "$f" ] && [ ! -e "$NOJQ/$n" ] && ln -s "$f" "$NOJQ/$n" 2>/dev/null
+  done
+done
+OUT=$(json_for 'mkfs.ext4 /dev/sda1' \
+  | env -u JOLITZ_GUARD_DISABLE PATH="$NOJQ" sh "$HOOK")
+if printf '%s' "$OUT" | grep -q '"permissionDecision":"deny"' \
+  && printf '%s' "$OUT" | grep -q 'jq is missing'; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  echo "FAIL: a denial without jq does not name the missing jq: $OUT"
+fi
+[ -n "$NOJQ" ] && [ -d "$NOJQ" ] && rm -rf "$NOJQ"
+if command -v jq >/dev/null 2>&1; then
+  OUT=$(json_for 'mkfs.ext4 /dev/sda1' \
+    | env -u JOLITZ_GUARD_DISABLE sh "$HOOK")
+  if printf '%s' "$OUT" | grep -q 'jq is missing'; then
+    FAIL=$((FAIL + 1))
+    echo "FAIL: a denial with jq present mentions a missing jq"
+  else
+    PASS=$((PASS + 1))
+  fi
+fi
+
 # --- the operator override -------------------------------------
 # JOLITZ_GUARD_DISABLE=1, exported by the operator, lifts the
 # taboos for a session. Attack tools, the server lock and a

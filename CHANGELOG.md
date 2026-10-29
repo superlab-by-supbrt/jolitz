@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.3.3-jolitz.13 — 2026-10-29
+
+- **A missing jq is said at the start.** The guard reads every
+  command through `jq`; without it the guard scans the raw
+  hook input and blocks ordinary work. The session-start hook
+  now checks for it and gives the install command for this
+  system (Homebrew, apt, dnf, zypper, apk, pacman, pkg, pkgin,
+  winget), and jolitz says it before anything else. A guard
+  denial on a workstation without `jq` says so too, and
+  `bin/jolitz-doctor` names the command. `lib/install-hint.sh`
+  picks it from `uname` and `/etc/os-release`.
+
 ## 3.3.3-jolitz.12 — 2026-10-29
 
 - **The static overview looks like the hub.**
