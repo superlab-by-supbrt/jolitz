@@ -5,11 +5,11 @@ when working with code in this repository.
 
 ## Project
 
-jolitz — Administration of Linux servers, FreeBSD
-and NetBSD servers, and macOS machines via SSH or
+jolitz — Administration of Linux servers, FreeBSD,
+NetBSD and AIX servers, and macOS machines via SSH or
 locally. Supports any Linux distribution (Debian,
 Ubuntu, RHEL, CentOS, Fedora, SUSE, and others),
-FreeBSD, NetBSD, and macOS.
+FreeBSD, NetBSD, AIX 7.2/7.3, and macOS.
 
 ## Ethics (above every other rule)
 
@@ -441,6 +441,11 @@ and looks alarming to new users.
   shown again only when the user asks for it.
 - Returning user: *"Loading preferences and access
   lists."*
+- When the session-start output says `jq is missing`,
+  that line comes first, with the install command it
+  names: without `jq` the guard blocks ordinary work.
+  A guard denial that mentions the missing `jq` is
+  explained the same way.
 
 Missing files are normal on a fresh install.
 Don't treat "No such file" as an error; just move

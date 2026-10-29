@@ -1089,6 +1089,39 @@ else
   echo "FAIL: raw-input fallback did not deny mkfs"
 fi
 
+# --- a denial without jq says why ------------------------------
+# Without jq the rules run on the raw hook input and block more;
+# the reason must name the missing jq so the user can fix it. A
+# PATH of every tool on this system except jq, as symlinks.
+NOJQ=$(mktemp -d) || exit 1
+for d in $(printf '%s' "$PATH" | tr ':' ' '); do
+  for f in "$d"/*; do
+    n=${f##*/}
+    [ "$n" = jq ] && continue
+    [ -x "$f" ] && [ ! -e "$NOJQ/$n" ] && ln -s "$f" "$NOJQ/$n" 2>/dev/null
+  done
+done
+OUT=$(json_for 'mkfs.ext4 /dev/sda1' \
+  | env -u JOLITZ_GUARD_DISABLE PATH="$NOJQ" sh "$HOOK")
+if printf '%s' "$OUT" | grep -q '"permissionDecision":"deny"' \
+  && printf '%s' "$OUT" | grep -q 'jq is missing'; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  echo "FAIL: a denial without jq does not name the missing jq: $OUT"
+fi
+[ -n "$NOJQ" ] && [ -d "$NOJQ" ] && rm -rf "$NOJQ"
+if command -v jq >/dev/null 2>&1; then
+  OUT=$(json_for 'mkfs.ext4 /dev/sda1' \
+    | env -u JOLITZ_GUARD_DISABLE sh "$HOOK")
+  if printf '%s' "$OUT" | grep -q 'jq is missing'; then
+    FAIL=$((FAIL + 1))
+    echo "FAIL: a denial with jq present mentions a missing jq"
+  else
+    PASS=$((PASS + 1))
+  fi
+fi
+
 # --- the operator override -------------------------------------
 # JOLITZ_GUARD_DISABLE=1, exported by the operator, lifts the
 # taboos for a session. Attack tools, the server lock and a
@@ -1751,6 +1784,105 @@ if grep '"command":.*\.sh' "$SETTINGS" \
 else
   PASS=$((PASS + 1))
 fi
+
+# --- AIX -------------------------------------------------------
+# sshd and the network under the System Resource Controller.
+check deny 'stopsrc -s sshd'
+check deny 'ssh root@aix1 "stopsrc -s sshd"'
+check deny 'stopsrc -g ssh'
+check deny 'stopsrc -g tcpip'
+check deny 'stopsrc -a'
+check deny 'stopsrc -s "sshd"'
+check deny "stopsrc -s 'sshd'"
+check deny 'stopsrc -fs sshd'
+check deny 'stopsrc -cs sshd'
+check deny 'stopsrc -g "tcpip"'
+check deny 'ssh root@aix1 "stopsrc -fs sshd"'
+check deny 'stopsrc -s ss""hd'
+check deny "stopsrc -s ''sshd"
+check deny 'stopsrc -s ss\\hd'
+check deny 'stopsrc -g "tcp"ip'
+check pass 'lssrc -g ssh'
+check pass 'lssrc -s sshd'
+check pass 'startsrc -s sshd'
+check pass 'refresh -s syslogd'
+check pass 'stopsrc -s xntpd'
+# Power: plain shutdown halts on AIX; -Fr is the reboot.
+check deny 'fasthalt'
+check deny 'shutdown -F'
+check deny 'shutdown -t 10291200'
+check deny 'shutdown -r -t 10301200'
+check deny 'shutdown -Fr -t 10301200'
+check deny 'shutdown -Frt10301200'
+check deny 'shutdown -r "-t" 10301200'
+check deny "shutdown -r -'t' 10301200"
+check deny 'ssh root@aix1 "shutdown -F"'
+check pass 'shutdown -Fr'
+check pass 'shutdown -rF now'
+check pass 'ssh root@aix1 "shutdown -Fr"'
+check pass 'ssh root@web1 "shutdown -r"'
+check deny 'ssh root@web1 "shutdown -h"'
+# The volume manager: what destroys data, and what reads.
+check deny 'mkvg -f -y datavg hdisk2'
+check deny 'extendvg -f datavg hdisk3'
+check deny 'rmlv -f lv01'
+check deny 'reducevg -d datavg hdisk3'
+check deny 'rmfs -r /data'
+check deny 'chpv -c hdisk0'
+check deny 'chpv -C hdisk2'
+check deny 'ssh root@aix1 "rmlv -f lv01"'
+check pass 'mkvg -y datavg hdisk2'
+check pass 'lspv'
+check pass 'lsvg -l rootvg'
+check pass 'lslv hd4'
+check pass 'lsfs'
+check pass 'chpv -v a hdisk1'
+# The raw disk device, also through an interpreter.
+check deny 'dd if=/dev/zero of=/dev/rhdisk1 bs=1m'
+check deny 'python3 -c "open(\"/dev/rhdisk1\",\"wb\").write(b\"x\")"'
+check deny 'ssh root@aix1 "dd if=/dev/zero of=/dev/rhdisk1"'
+check pass 'getconf DISK_SIZE /dev/hdisk0'
+# Boot list, boot image, boot record, rootvg clones.
+check deny 'bootlist -m normal hdisk0 hdisk1'
+check deny 'bootlist -m normal -i'
+check deny 'bosboot -ad /dev/hdisk0'
+check deny 'mkboot -c -d /dev/hdisk1'
+check deny 'alt_disk_copy -d hdisk1'
+check deny 'alt_disk_install -C -d hdisk1'
+check deny 'alt_rootvg_op -X altinst_rootvg'
+check deny 'ssh root@aix1 "bootlist -m normal hdisk1"'
+check deny 'bootlist -m normal -o hdisk1'
+check deny 'bootlist -o -m normal hdisk1'
+check deny 'bootlist -m normal hdisk1 -o'
+check deny 'bootlist -m normal -o; bootlist -m normal hdisk1'
+check pass 'bootlist -m normal -o'
+check deny 'bootlist -m normal -o" hdisk1"'
+check deny 'bootlist -m normal "-o" hdisk1'
+check deny "bootlist -m normal -o' 'hdisk1"
+check deny "$(printf 'bootlist -m normal -o \\\nhdisk1')"
+check deny "$(printf 'stopsrc -s ss\\\nhd')"
+check deny "$(printf 'shutdown -r \\\n-t 10301200')"
+check pass 'bootlist -o -m both'
+check pass "ssh root@aix1 'bootlist -m both -o'"
+check pass 'ssh root@aix1 "bootlist -m normal -o"'
+check pass 'bosboot -vd /dev/hdisk0'
+# Accounts and the files under /etc/security.
+check deny 'rmuser -p alice'
+check deny 'rmgroup staff2'
+check deny 'ssh root@aix1 "rmuser alice"'
+check deny 'cp /tmp/p /etc/security/passwd'
+check deny 'echo x >> /etc/security/user'
+check deny 'ssh root@aix1 "echo x >> /etc/security/user"'
+check deny 'perl -e "open(F, \">>/etc/security/user\")"'
+check pass 'cat /etc/security/user'
+check pass 'lsuser -a account_locked alice'
+check pass 'mkuser alice'
+# Linux PAM keeps its /etc/security files writable.
+check pass "echo '* soft nofile 4096' >> /etc/security/limits.conf"
+check pass 'cp /tmp/g /etc/security/group.conf'
+check_file deny Write file_path /etc/security/passwd x
+check_file deny Write file_path /dev/rhdisk0 x
+check_file pass Write file_path /etc/security/limits.conf x
 
 # --- denial log (JOLITZ_GUARD_LOG=1) ---------------------------
 # The log is opt-in, names the path but never the text of a file

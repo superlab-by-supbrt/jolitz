@@ -1,0 +1,11 @@
+# aix1.example.com
+- IP: 198.51.100.21
+- OS: AIX 7.3 TL2 SP3 (7300-02-03-2420)
+- Distro family: aix
+- Model: IBM,9009-42A · LPAR aix1
+- RAM: 64 GB
+- Owner: erp team
+- Tags: prod, erp
+- Services: db2 11.5, sshd, xntpd
+- Disks: rootvg on hdisk0, datavg on hdisk1-2
+- Last connected: 2026-10-24

@@ -201,7 +201,7 @@ has "$I" 'Upgrade to Debian 12' "open to-do listed"
 hasnt "$I" 'Back up pg_hba.conf' "done to-do not listed"
 has "$I" 'own rules.md' "rule override marked"
 has "$I" 'ssh port 2222' "ssh port shown"
-has "$I" '<code>sshd.PermitRootLogin</code> changed from <code>no</code> to <code>yes</code>' \
+has "$I" '<code>sshd.PermitRootLogin</code> <code>no</code> → <code>yes</code>' \
   "audit change since last snapshot"
 has "$I" '1 settings differ' "needs-root values are not drift"
 has "$I" 'endoflife.date, fetched debian 2026-10-28' "EOL source and date"
@@ -216,18 +216,54 @@ has "$W" '- Database password: in /etc/app/db.env (0600 root)' \
   "host page shows memory.md"
 has "$W" 'nftables only.' "host page shows rules.md"
 
+# --- AIX: end of life per technology level -------------------
+A="$T/aix"
+mkdir -p "$A/servers/aix1" "$A/servers/aix2" "$A/eol"
+printf '# aix1\n- OS: AIX 7.3 TL2 SP3 (7300-02-03-2420)\n- Last connected: %s\n' \
+  "$TODAY" > "$A/servers/aix1/memory.md"
+printf '# aix2\n- OS: AIX 7.2 TL5\n- Last connected: %s\n' \
+  "$TODAY" > "$A/servers/aix2/memory.md"
+cat > "$A/eol/ibm-aix.json" <<'EOF'
+{"result":{"name":"ibm-aix","releases":[
+ {"name":"7.3.2","eolFrom":"2001-11-30"},
+ {"name":"7.2.5","eolFrom":null}]}}
+EOF
+echo 2026-10-29 > "$A/eol/ibm-aix.fetched"
+"$OVERVIEW" -d "$A" --text > "$T/aix.out" 2>&1; rc=$?
+ok $(( rc != 0 )) "overview runs on AIX hosts (got $rc)"
+has "$T/aix.out" '  aix1: AIX 7.3 TL2 SP3 (7300-02-03-2420), ended 2001-11-30' \
+  "AIX: the TL from oslevel -s finds its cycle"
+hasnt "$T/aix.out" '  aix2:' "AIX: 7.2 TL5 has no end date and no warning"
+"$OVERVIEW" -d "$A" > /dev/null 2>&1
+has "$A/overview/hosts/aix2.html" 'no end date announced' \
+  "AIX: \"7.2 TL5\" finds its cycle"
+
+# --- overview: the hub's look -------------------------------
+has "$I" 'jolitz hub: the colour variables' "the page carries hub.css"
+has "$I" '<header class="top">' "the hub header bar"
+has "$I" 'index.html" class="on">fleet</a>' "fleet is the current nav item"
+has "$I" '<input id="q" type="search"' "the filter box"
+has "$I" '<tr data-row data-tags="prod web">' "host rows take part in the filter"
+has "$I" "jolitz-overview $(cat "$REPO_DIR/VERSION")" "the footer names the version"
+has "$W" '<section class="handover">' "the host page has the handover box"
+has "$W" 'Rollback: re-enable app.service, restore vhost backup from /var/backups/jolitz/.' \
+  "the handover box shows the way back"
+has "$W" '../index.html">fleet</a>' "a host page links back to the fleet"
+has "$M/overview/timeline.html" 'timeline.html" class="on">timeline</a>' \
+  "timeline is the current nav item there"
+
 # --- overview: owner, services, network -----------------------
-has "$I" '<th>Owner</th>' "index has an Owner column"
+has "$I" '<th>owner</th>' "index has an owner column"
 has "$I" '<td>alice</td>' "index shows the owner"
-has "$W" '<tr><th>Owner</th><td>alice</td></tr>' "host page shows the owner"
+has "$W" '<tr><th>owner</th><td>alice</td></tr>' "host page shows the owner"
 D="$M/overview/hosts/db1.example.com.html"
-hasnt "$D" '<th>Owner</th>' "a host without owner has no Owner row"
-has "$I" '<h2>Services</h2>' "services matrix present"
+hasnt "$D" '<th>owner</th>' "a host without owner has no owner row"
+has "$I" '<h2>services <span' "services matrix present"
 has "$I" '>postgresql</th>' "services matrix has a row per service"
 has "$I" '<td>17</td>' "services matrix cell holds the version"
-has "$W" '<tr><th>Services</th><td>nginx 1.26, postgresql 17</td></tr>' \
+has "$W" '<tr><th>services</th><td>nginx 1.26, postgresql 17</td></tr>' \
   "host page lists services"
-has "$I" '<h2>Network</h2>' "network section present"
+has "$I" '<h2>network <span' "network section present"
 has "$I" 'postgresql 5432' "network link label shown"
 has "$I" 'href="hosts/db1.example.com.html"' "network node links the host page"
 has "$I" 'href="timeline.html"' "index links the timeline"
@@ -310,8 +346,9 @@ mkdir -p "$HOME/.cache/jolitz"
 printf '%s\tbash\tpowering off a machine\thalt\n' "${TODAY}T10:00:00Z" \
   > "$HOME/.cache/jolitz/guard.log"
 "$OVERVIEW" -d "$M" > /dev/null 2>&1
-has "$I" 'Guard denials, last 30 days' "guard log section appears"
-has "$I" '<td>1</td><td>'"$TODAY"'</td><td>powering off a machine</td>' \
+has "$I" '<h2 id="guard">guard' "guard log section appears"
+has "$I" 'index.html#guard">guard</a>' "the header links the guard section"
+has "$I" '<td class="num">1</td><td>'"$TODAY"'</td><td>powering off a machine</td>' \
   "guard log counted by reason"
 "$OVERVIEW" -d "$M" --text > "$T/g.out"
 has "$T/g.out" '  1x powering off a machine' "text: guard denials"

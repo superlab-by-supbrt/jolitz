@@ -69,7 +69,8 @@ servers" — that maps to single-host housekeeping.
    The probe set follows the OS family from the pipeline:
    Linux runs sections 1 to 7 of `references/probes.md`,
    FreeBSD sections 2, 7 and 8, macOS sections 2, 7 and 9.
-   NetBSD hosts are skipped with "NetBSD not yet covered".
+   NetBSD and AIX hosts are skipped with "NetBSD not yet
+   covered" or "AIX not yet covered".
    Hosts that time out or refuse the connection go on a
    "skipped: unreachable" list.
 
@@ -129,8 +130,10 @@ Read on demand:
   `zypper` equivalents. FreeBSD and macOS have their own
   sections in `references/probes.md`; the sshd, firewall,
   time, reboot and certificate rows are shared with Linux,
-  so those tables hold every host. NetBSD hosts are skipped
-  with "NetBSD not yet covered".
+  so those tables hold every host. NetBSD and AIX hosts are
+  skipped as not yet covered; AIX needs its own probes
+  (SRC, `lsfilt`, `suma`, `xntpd`) once it has run on a
+  host.
 - Certificates do not drift between hosts. Their rows show
   the days left; the threshold, not a disagreement, makes
   the entry.

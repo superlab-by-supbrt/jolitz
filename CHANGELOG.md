@@ -1,5 +1,57 @@
 # Changelog
 
+## 3.3.3-jolitz.14 — 2026-10-29
+
+- **AIX 7.2 and 7.3.** `rules/aix.md` covers detection
+  (`oslevel -s`), filesets and the Toolbox, SRC services,
+  the error log, the IP security filter, LVM, the boot list,
+  shutdown and accounts. Written from IBM's documentation;
+  not yet run on a host, and the rule says which lines to
+  check there.
+- **The guard knows AIX.** Denied: `mkvg -f`, `extendvg -f`,
+  `rmlv`, `reducevg -d`, `rmfs`, `chpv -c/-C`, a write to
+  `/dev/rhdiskN`, `bootlist` without `-o`, `bosboot -a`,
+  `mkboot`, `alt_disk_copy`/`alt_disk_install`,
+  `alt_rootvg_op -X`, `stopsrc` on sshd, ssh, tcpip or all,
+  `fasthalt`, `shutdown` without `-r`, `rmuser`, `rmgroup`
+  and writes to `/etc/security/{passwd,group,user,limits}`.
+  `shutdown -Fr` is the reboot and passes. Linux PAM's
+  `/etc/security/*.conf` stay writable.
+- **A reboot flag before a closing quote counts.**
+  `ssh host "shutdown -r"` was denied because the flag ended
+  at the quote; it passes now, as with a trailing `now`.
+- **End of life per AIX technology level** in the overview,
+  from endoflife.date (`ibm-aix`). The demo has an AIX host.
+- README and screenshots in a browser frame; the fleet audit
+  skips AIX hosts until they have probes.
+
+## 3.3.3-jolitz.13 — 2026-10-29
+
+- **A missing jq is said at the start.** The guard reads every
+  command through `jq`; without it the guard scans the raw
+  hook input and blocks ordinary work. The session-start hook
+  now checks for it and gives the install command for this
+  system (Homebrew, apt, dnf, zypper, apk, pacman, pkg, pkgin,
+  winget), and jolitz says it before anything else. A guard
+  denial on a workstation without `jq` says so too, and
+  `bin/jolitz-doctor` names the command. `lib/install-hint.sh`
+  picks it from `uname` and `/etc/os-release`.
+
+## 3.3.3-jolitz.12 — 2026-10-29
+
+- **The static overview looks like the hub.**
+  `bin/jolitz-overview` reads `hub/internal/ui/static/hub.css`
+  at build time and writes the hub's markup: the header bar
+  with fleet, timeline, audit and guard, the counters in one
+  line, a filter box (`/`) next to the tag buttons, dense
+  tables, the handover box with each change's way back on the
+  host page. A style change to the hub now reaches both. Dark
+  by default, light with the system setting, as in the hub.
+- **The hub diagram shows SSH from every workstation.** The
+  SSH line in `assets/hub/hub.svg` started at Linux only;
+  macOS and Windows with Git Bash now join it.
+- New screenshots in `assets/overview/`.
+
 ## 3.3.3-jolitz.11 — 2026-10-28
 
 - **The hub runs on PostgreSQL too.** `db = "postgres"` with

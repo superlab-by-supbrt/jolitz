@@ -6,8 +6,8 @@ knows the way back before it changes anything, and does
 nothing without your OK.
 
 A rule set for [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
-or [OpenCode](https://opencode.ai). Linux, FreeBSD, NetBSD and
-macOS, over SSH or on the local machine. MIT, every feature
+or [OpenCode](https://opencode.ai). Linux, FreeBSD, NetBSD, AIX
+and macOS, over SSH or on the local machine. MIT, every feature
 included, no paid edition.
 
 jolitz runs commands, often as root, on production servers.
@@ -37,8 +37,11 @@ detect, usually the SSH user, and keeps it in
 `memory/user.md`. To check the workstation:
 `bin/jolitz-doctor`.
 
-- **jq:** `brew install jq`, `sudo apt install jq`,
-  `sudo dnf install jq` or `pkg install jq`.
+- **jq:** the guard reads every command with it. jolitz
+  checks it at the start and names the install command for
+  your system when it is missing (`brew install jq`,
+  `sudo apt install jq`, `sudo dnf install jq`,
+  `pkg install jq`).
 - **Windows:** WSL 2, or [Git for Windows](https://gitforwindows.org/)
   plus `winget install jqlang.jq`; Claude Code then runs the
   shell and the guard in Git Bash. Without Git Bash the guard
@@ -201,8 +204,17 @@ The long form: [docs/safety.md](docs/safety.md).
 | FreeBSD | all versions                      | `rules/freebsd.md` |
 | NetBSD  | 10.x and 11.x                     | `rules/netbsd.md`  |
 | Unraid  | observed on 7.3                   | `rules/unraid.md`  |
+| AIX     | 7.2 and 7.3 (new, see below)      | `rules/aix.md`     |
 
 Other distributions get the general rules.
+
+AIX is new: its rule file and guard blocks come from IBM's
+documentation and have not yet run on a host. The guard knows
+its disk, boot, shutdown, account and SRC commands
+(`rmlv`, `bootlist`, `shutdown -F`, `rmuser`, `stopsrc -s
+sshd` and more); `shutdown -Fr` stays the reboot. The fleet
+audit skips AIX hosts for now; the overview shows their end of
+life per technology level.
 
 ## Where it comes from
 
