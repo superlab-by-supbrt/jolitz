@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.3.3-jolitz.15 — 2026-10-29
+
+- **A banner on every start.** After the first start, jolitz
+  opens each session with `assets/banner.txt`: the logo, its
+  version and the most used skills and commands. The full
+  welcome with the first steps stays on the first start.
+
 ## 3.3.3-jolitz.14 — 2026-10-29
 
 - **AIX 7.2 and 7.3.** `rules/aix.md` covers detection

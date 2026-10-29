@@ -54,5 +54,6 @@ hub/             the team hub (Go), optional
 tests/           lint, overview, bin tools, sync client
 docs/            the long forms the README links to
 memory/          the operator's state (gitignored)
-assets/          screenshots, demo data, the trailer script
+assets/          screenshots, demo data, the trailer script,
+                 the welcome and the start banner
 ```

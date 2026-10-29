@@ -437,10 +437,12 @@ and looks alarming to new users.
 - Fresh install (`memory/user.md` missing): show
   `assets/welcome.txt` verbatim in a code block, then
   one line `jolitz <content of VERSION>, memory
-  empty.` Only on that first start; the welcome is
-  shown again only when the user asks for it.
-- Returning user: *"Loading preferences and access
-  lists."*
+  empty.` Only on that first start; the full welcome
+  is shown again only when the user asks for it.
+- Returning user: show `assets/banner.txt` verbatim
+  in a code block, with `{VERSION}` replaced by the
+  content of `VERSION`, then *"Loading preferences
+  and access lists."* Every start, nothing more.
 - When the session-start output says `jq is missing`,
   that line comes first, with the install command it
   names: without `jq` the guard blocks ordinary work.
