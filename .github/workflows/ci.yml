@@ -52,6 +52,9 @@ jobs:
       - name: Output marker tests
         run: sh tests/flag-output-test.sh
 
+      - name: Start screen tests
+        run: sh tests/start-banner-test.sh
+
       - name: Validate tracked JSON files
         run: |
           git ls-files '*.json' | while read -r f; do
@@ -134,6 +137,8 @@ jobs:
         run: sh tests/bin-tools-test.sh
       - name: Output marker tests (busybox)
         run: sh tests/flag-output-test.sh
+      - name: Start screen tests (busybox)
+        run: sh tests/start-banner-test.sh
 
   windows-git-bash:
     # Native Windows runs the hooks in Git Bash, as this job does.
@@ -172,6 +177,9 @@ jobs:
 
       - name: Output marker tests
         run: sh tests/flag-output-test.sh
+
+      - name: Start screen tests
+        run: sh tests/start-banner-test.sh
 
   windows-full-matrix:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
