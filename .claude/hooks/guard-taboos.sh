@@ -354,6 +354,24 @@ hit() {
   segments | grep -Eq "$1"
 }
 
+# The command as the shell hands its words over: quotes and
+# backslashes removed, split at ; & | and newlines. The shell
+# joins ss""hd into sshd and drops the quotes around "-t", so a
+# flag check that must see the real tokens reads this view.
+# Removing a quote can only join words, never hide one: it adds
+# matches.
+# A backslash at the end of a line continues the word on the
+# next one; those lines are joined first, or the split would cut
+# bootlist -m normal -o \<newline>hdisk1 in two.
+unquoted() {
+  printf '%s\n' "$CMD" \
+    | awk '{ while (sub(/\\$/, "")) { if ((getline n) > 0) $0 = $0 n; else break } print }' \
+    | tr -d '"'"'"'\\' | tr ';&|' '\n\n\n'
+}
+hit_unq() {
+  unquoted | grep -Eq "$1"
+}
+
 # Case-insensitive variant. diskutil accepts its verbs in any
 # case, so eraseDisk and erasedisk are the same command.
 hit_i() {
@@ -474,15 +492,18 @@ INTERP_NOAWK='(^|[^[:alnum:]_.-])(python[0-9.]*|perl|ruby|node|nodejs|deno|bun|p
 # a wrapper disarms the taboo, which is what issue #4 reported:
 # ssh -l root host "fdisk /dev/sda" and lsblk -l && fdisk /dev/sdb
 # were both waved through because a bare -l existed anywhere.
-hit_without() {
-  segments | grep -Eq "$1" || return 1
+hit_without() { _hit_without segments "$1" "$2"; }
+hit_without_unq() { _hit_without unquoted "$1" "$2"; }
+_hit_without() {
+  HW_SRC=$1; shift
+  "$HW_SRC" | grep -Eq "$1" || return 1
   # The command IS present. From here on the only question is
   # whether the exemption belongs to it, so every failure path
   # below must deny. If this awk cannot evaluate POSIX classes,
   # we cannot prove the exemption applies: block.
   printf 'x' | awk '{ exit(($0 ~ /[[:alnum:]]/) ? 0 : 1) }' \
     2>/dev/null || return 0
-  segments | awk -v cmd="$1" -v exempt="$2" '
+  "$HW_SRC" | awk -v cmd="$1" -v exempt="$2" '
     {
       line = $0
       while (match(line, cmd)) {
@@ -528,6 +549,10 @@ deny() {
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse",'
   printf '"permissionDecision":"deny",'
   printf '"permissionDecisionReason":"jolitz guard: %s ' "$1"
+  # Without jq every rule ran on the raw hook input, so this
+  # denial may be one jq would have avoided. Say so.
+  command -v jq >/dev/null 2>&1 \
+    || printf '(jq is missing on this workstation, so the guard read the command only roughly; installing jq avoids such denials) '
   printf '(CLAUDE.md - Critical Safety Rules). Blocked in all '
   printf 'permission modes. Explain this to the user; do not '
   printf 'rephrase the command to evade the guard."}}\n'
@@ -1032,7 +1057,7 @@ SSHSVC='(ssh|sshd)(\.service|\.socket)?'
 if hit "(^|[^[:alnum:]_.-])systemctl([[:space:]]+-[^[:space:]]+)*[[:space:]]+(stop|disable|mask)([[:space:]]+[^[:space:];&|]+)*[[:space:]]+$SSHSVC([^[:alnum:]_.-]|\$)" \
   || hit '((^|[^[:alnum:]_.-])(service|rc-service|invoke-rc\.d)[[:space:]]+|/etc/(init\.d|rc\.d)/)(ssh|sshd)[[:space:]]+(one)?stop([^[:alnum:]_-]|$)' \
   || hit '(^|[^[:alnum:]_.-])launchctl[[:space:]]+(unload|disable|bootout|remove)[[:space:]]+[^;&|]*(com\.openssh\.sshd|/ssh\.plist)' \
-  || hit '(^|[^[:alnum:]_.-])stopsrc[[:space:]]+([^;&|]*[[:space:]])?(-[[:alpha:]]*a([[:space:]"'\'']|$)|-[[:alpha:]]*s[[:space:]]*["'\'']?sshd([^[:alnum:]_.-]|$)|-[[:alpha:]]*g[[:space:]]*["'\'']?(ssh|tcpip)([^[:alnum:]_.-]|$))'
+  || hit_unq '(^|[^[:alnum:]_.-])stopsrc[[:space:]]+([^;&|]*[[:space:]])?(-[[:alpha:]]*a([[:space:]]|$)|-[[:alpha:]]*s[[:space:]]*sshd([^[:alnum:]_.-]|$)|-[[:alpha:]]*g[[:space:]]*(ssh|tcpip)([^[:alnum:]_.-]|$))'
 then
   deny "stopping, disabling or masking sshd cuts off the next \
 login (restart and reload are ordinary work that asks first)"
@@ -1060,7 +1085,7 @@ fi
 # shutting down now: the host is gone until then, so -t denies
 # before the -r exemption is looked at. The flag may also end at
 # the closing quote of ssh host "shutdown -r".
-if hit '(^|[^[:alnum:]_-])shutdown[[:space:]]+([^;&|]*[[:space:]])?-[[:alpha:]]*t([[:space:]"'\'']|$|[0-9])'; then
+if hit_unq '(^|[^[:alnum:]_-])shutdown[[:space:]]+([^;&|]*[[:space:]])?-[[:alpha:]]*t([[:space:]]|$|[0-9])'; then
   deny "shutdown -t shuts the server down now and brings it back \
 only at the given time"
 fi
@@ -1412,8 +1437,8 @@ fi
 # The exemption is the whole display form, -m <mode> and -o and
 # nothing after them: a device named next to -o is set, then
 # shown.
-if hit_without '(^|[^[:alnum:]_.-])bootlist([^[:alnum:]_.-]|$)' \
-     '^[^[:alnum:]_.-]?bootlist[[:space:]]+(-m[[:space:]]*(normal|service|both|prevboot)[[:space:]]+-o|-o[[:space:]]+-m[[:space:]]*(normal|service|both|prevboot))[[:space:]]*([;&|"'\'')]|$)' \
+if hit_without_unq '(^|[^[:alnum:]_.-])bootlist([^[:alnum:]_.-]|$)' \
+     '^[^[:alnum:]_.-]?bootlist[[:space:]]+(-m[[:space:]]*(normal|service|both|prevboot)[[:space:]]+-o|-o[[:space:]]+-m[[:space:]]*(normal|service|both|prevboot))[[:space:])]*$' \
   || hit '(^|[^[:alnum:]_.-])bosboot[[:space:]]+([^;&|]*[[:space:]])?-[[:alpha:]]*a' \
   || hit '(^|[^[:alnum:]_.-])(mkboot|alt_disk_copy|alt_disk_install)([^[:alnum:]_.-]|$)' \
   || hit '(^|[^[:alnum:]_.-])alt_rootvg_op[[:space:]]+([^;&|]*[[:space:]])?-X'

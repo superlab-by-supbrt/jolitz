@@ -51,7 +51,7 @@ chmod 755 "$T/bin1/claude" "$T/bin2/claude"
 # can be hidden without hiding the shell.
 for t in sh awk grep sed sort cut tr wc head tail date git \
     cat basename dirname mktemp uniq ls stat ssh-add rm env \
-    uname expr; do
+    uname expr mkdir printf; do
   p=$(command -v "$t" 2>/dev/null) || continue
   ln -s "$p" "$T/nojq/$t"
   ln -s "$p" "$T/noclaude/$t"
@@ -149,6 +149,40 @@ ok $(( rc != 2 )) "doctor exits 2 without jq (got $rc)"
 has "$T/d3.out" 'FAIL  jq' "doctor: missing jq fails"
 has "$T/d3.out" 'WARN  guard hooks' "doctor: hooks unchecked without jq"
 has "$T/d3.out" 'ssh agent' "doctor keeps going without jq"
+grep 'FAIL  jq' "$T/d3.out" | grep -q 'install: '
+ok $? "doctor names the install command for jq"
+
+# --- install hint --------------------------------------------
+HINT="$REPO_DIR/lib/install-hint.sh"
+hint_is() {
+  got=$(JOLITZ_UNAME=$1 JOLITZ_OS_RELEASE=$2 sh "$HINT" jq)
+  [ "$got" = "$3" ]; ok $? "install hint for $1 $4 is '$3' (got '$got')"
+}
+OSR="$T/os-release"
+hint_is Darwin /nonexistent 'brew install jq' ''
+hint_is FreeBSD /nonexistent 'pkg install jq' ''
+hint_is MINGW64_NT-10.0 /nonexistent 'winget install jqlang.jq' ''
+printf 'ID=linuxmint\nID_LIKE="ubuntu debian"\n' > "$OSR"
+hint_is Linux "$OSR" 'sudo apt install jq' '(mint)'
+printf 'ID="rocky"\nID_LIKE="rhel centos fedora"\n' > "$OSR"
+hint_is Linux "$OSR" 'sudo dnf install jq' '(rocky)'
+printf 'ID=gentoo\n' > "$OSR"
+hint_is Linux "$OSR" 'your package manager (package jq)' '(unknown)'
+
+# --- the session start says so -------------------------------
+# The hook runs from a copy without git history: no update,
+# only the jq line and the skip messages.
+HK="$T/hookrepo"
+mkdir -p "$HK/lib" "$HK/.claude/hooks"
+cp "$REPO_DIR/lib/install-hint.sh" "$HK/lib/"
+cp "$REPO_DIR/.claude/hooks/check-updates.sh" "$HK/.claude/hooks/"
+CLAUDE_PROJECT_DIR="$HK" PATH="$T/nojq" sh "$HK/.claude/hooks/check-updates.sh" > "$T/hk1.out" 2>&1
+has "$T/hk1.out" 'jq is missing' "session start says jq is missing"
+has "$T/hk1.out" 'Install it: ' "session start names the install command"
+CLAUDE_PROJECT_DIR="$HK" PATH="$T/noclaude" sh "$HK/.claude/hooks/check-updates.sh" > "$T/hk2.out" 2>&1
+if command -v jq >/dev/null 2>&1; then
+  hasnt "$T/hk2.out" 'jq is missing' "session start is quiet about jq when it is there"
+fi
 
 PATH="$T/noclaude" "$DOCTOR" -d "$M" > "$T/d4.out" 2>&1; rc=$?
 ok $(( rc != 2 )) "doctor exits 2 without claude (got $rc)"

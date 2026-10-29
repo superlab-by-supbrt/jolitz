@@ -153,7 +153,7 @@ fi
 if [ "$HAVE_JQ" -eq 1 ]; then
   ok "jq: $(command -v jq)"
 else
-  fail "jq: not in PATH (the guard fails closed without it)"
+  fail "jq: not in PATH (the guard fails closed without it); install: $(sh "$REPO_DIR/lib/install-hint.sh" jq 2>/dev/null)"
 fi
 if command -v curl >/dev/null 2>&1; then
   ok "curl: $(command -v curl)"
