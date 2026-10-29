@@ -8,6 +8,17 @@ CLAUDE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 HOOK="$CLAUDE_DIR/hooks/guard-taboos.sh"
 PASS=0
 FAIL=0
+SKIP=0
+
+# Git Bash rewrites arguments that look like POSIX paths when it
+# starts a native Windows program such as jq.exe: /dev/sda turns
+# into /Device/Harddisk0/Partition0, /tmp/x into a C:/ path. The
+# fixtures must reach the guard as written, so the harness's own
+# jq calls switch that off. The hook runs as its own process and
+# keeps the conversion it gets at run time. No effect elsewhere.
+# A file goes to jq on stdin: with the conversion off, jq.exe
+# could not open a POSIX path given as an argument.
+jq() { MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' command jq "$@"; }
 
 json_for() {
   # Wrap a raw command string as PreToolUse hook input.
@@ -1737,7 +1748,7 @@ if command -v jq >/dev/null 2>&1; then
   if jq -e '[.hooks[][] | .hooks[]?
       | select((.command // "") | test("guard-taboos\\.sh"))]
       | length > 0 and all(.onFailure == "block")' \
-      "$CLAUDE_DIR/settings.json" >/dev/null 2>&1; then
+      < "$CLAUDE_DIR/settings.json" >/dev/null 2>&1; then
     PASS=$((PASS + 1))
   else
     FAIL=$((FAIL + 1))
@@ -1892,8 +1903,20 @@ log_ok() {
 json_for 'halt' | log_run "$LOGHOME" 1 ""; log_ok $? "halt still denied"
 grep -q "	bash	.*	halt\$" "$GLOG" 2>/dev/null
 log_ok $? "a denial is logged with mode and command"
-[ "$(stat -c %a "$GLOG" 2>/dev/null || stat -f %Lp "$GLOG")" = 600 ]
-log_ok $? "the log is mode 0600"
+# File modes and symlinks are checked only where the file system
+# has them: Git Bash on NTFS keeps neither a chmod 600 nor, by
+# default, a symlink. Such a check is reported as SKIP, not as a
+# pass it never earned.
+mode_of() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
+PROBE="$LOGHOME/probe"
+: > "$PROBE"; chmod 600 "$PROBE"
+if [ "$(mode_of "$PROBE")" = 600 ]; then
+  [ "$(mode_of "$GLOG")" = 600 ]
+  log_ok $? "the log is mode 0600"
+else
+  SKIP=$((SKIP + 1)); echo "SKIP: guard log: no file modes here"
+fi
+rm -f "$PROBE"
 json_for 'ls /tmp' | log_run "$LOGHOME" 1 ""
 [ "$(wc -l < "$GLOG" | tr -d ' ')" = 1 ]
 log_ok $? "an allowed command is not logged"
@@ -1912,12 +1935,16 @@ printf x > "$NOLOG/.cache" 2>/dev/null || { rm -rf "$NOLOG/.cache"; printf x > "
 json_for 'halt' | log_run "$NOLOG" 1 ""
 log_ok $? "an unwritable log still denies"
 # A planted symlink is not followed.
-rm -f "$GLOG"; ln -s "$LOGHOME/elsewhere" "$GLOG"
-json_for 'halt' | log_run "$LOGHOME" 1 ""
-log_ok $? "a symlinked log still denies"
-[ ! -e "$LOGHOME/elsewhere" ]
-log_ok $? "the log does not write through a symlink"
+rm -f "$GLOG"
+if ln -s "$LOGHOME/elsewhere" "$GLOG" 2>/dev/null && [ -L "$GLOG" ]; then
+  json_for 'halt' | log_run "$LOGHOME" 1 ""
+  log_ok $? "a symlinked log still denies"
+  [ ! -e "$LOGHOME/elsewhere" ]
+  log_ok $? "the log does not write through a symlink"
+else
+  SKIP=$((SKIP + 1)); echo "SKIP: guard log: no symlinks here"
+fi
 rm -rf "$LOGHOME" "$NOLOG"
 
-echo "guard-taboos tests: $PASS passed, $FAIL failed"
+echo "guard-taboos tests: $PASS passed, $FAIL failed, $SKIP skipped"
 [ "$FAIL" -eq 0 ]
