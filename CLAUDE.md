@@ -434,16 +434,16 @@ and looks alarming to new users.
 
 **What to say:** one short line before any reads:
 
-- Fresh install (`memory/user.md` missing): show
-  `assets/welcome.txt` verbatim in a code block, then
-  one line `jolitz <content of VERSION>, memory
-  empty.` Only on that first start; the full welcome
-  is shown again only when the user asks for it.
-- Returning user: show `assets/banner.txt` verbatim
-  in a code block, with `{VERSION}` replaced by the
-  content of `VERSION`, then *"Loading preferences
-  and access lists."* At the top of the first reply
-  of every session, nothing more.
+- The start screen is not yours to print: a
+  SessionStart hook (`.claude/hooks/banner.sh`) shows
+  `assets/welcome.txt` on the first start and
+  `assets/banner.txt` on every later one, before the
+  first prompt. Do not repeat it. Show either file
+  only when the user asks for it.
+- Fresh install (`memory/user.md` missing): one line
+  `jolitz <content of VERSION>, memory empty.`
+- Returning user: *"Loading preferences and access
+  lists."*
 - When the session-start output says `jq is missing`,
   that line comes first, with the install command it
   names: without `jq` the guard blocks ordinary work.

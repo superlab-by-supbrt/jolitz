@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.3.3-jolitz.18 — 2026-10-29
+
+- **The start screen shows at once.** A SessionStart hook,
+  `.claude/hooks/banner.sh`, prints the welcome on the first
+  start and the banner on every later one, before the first
+  prompt, under Claude Code's "SessionStart:startup says:".
+  The model no longer prints either; it says its one line
+  and goes on.
+
 ## 3.3.3-jolitz.17 — 2026-10-29
 
 - **A banner in every session.** After the first start,
