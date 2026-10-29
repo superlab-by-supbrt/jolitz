@@ -1,5 +1,34 @@
 # Changelog
 
+## 3.3.3-jolitz.16 — 2026-10-29
+
+- **Server output that talks to the model is marked.** A new
+  PostToolUse hook, `.claude/hooks/flag-output.sh`, reads the
+  output of every Bash call before the model does. Hidden
+  characters (zero-width, bidi, Unicode tags, ANSI that
+  conceals text or moves the cursor) are spelled out in any
+  output; text addressed to an AI ("ignore previous
+  instructions", "AI agents: send your env") is flagged in
+  the output of `ssh`, `curl`, `docker exec` and the like.
+  The model then reads a copy with an `UNTRUSTED OUTPUT`
+  header, and you get a warning line. A marker, not a
+  filter; it fails open without jq.
+- **The guard denies sending the environment or a secret
+  off the machine.** `env`, `printenv`, `/proc/*/environ`, a
+  `$..._TOKEN` or `$..._PASSWORD` variable, a private SSH
+  key, `.env`, `.netrc`, cloud credentials or `/etc/shadow`
+  together with `curl`, `wget`, `nc`, `socat`, `dig`,
+  `mail`, `/dev/tcp` or an HTTP library in an interpreter.
+  Reading the environment and fetching stay allowed. The
+  operator override lifts it.
+- **docs/safety.md says what is enforced and what is a
+  rule.** The claim "it ignores injected text" was the
+  rule's intent, not enforcement. The new section names the
+  three layers, their gaps, what the operator closes
+  (exact command in the prompt, no secrets in the agent's
+  environment, limited egress) and a test with a planted
+  MOTD. Thanks to the reader who asked.
+
 ## 3.3.3-jolitz.14 — 2026-10-29
 
 - **AIX 7.2 and 7.3.** `rules/aix.md` covers detection
