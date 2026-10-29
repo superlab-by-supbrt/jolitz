@@ -1743,6 +1743,77 @@ else
   PASS=$((PASS + 1))
 fi
 
+# --- AIX -------------------------------------------------------
+# sshd and the network under the System Resource Controller.
+check deny 'stopsrc -s sshd'
+check deny 'ssh root@aix1 "stopsrc -s sshd"'
+check deny 'stopsrc -g ssh'
+check deny 'stopsrc -g tcpip'
+check deny 'stopsrc -a'
+check pass 'lssrc -g ssh'
+check pass 'lssrc -s sshd'
+check pass 'startsrc -s sshd'
+check pass 'refresh -s syslogd'
+check pass 'stopsrc -s xntpd'
+# Power: plain shutdown halts on AIX; -Fr is the reboot.
+check deny 'fasthalt'
+check deny 'shutdown -F'
+check deny 'shutdown -t 10291200'
+check deny 'ssh root@aix1 "shutdown -F"'
+check pass 'shutdown -Fr'
+check pass 'shutdown -rF now'
+check pass 'ssh root@aix1 "shutdown -Fr"'
+check pass 'ssh root@web1 "shutdown -r"'
+check deny 'ssh root@web1 "shutdown -h"'
+# The volume manager: what destroys data, and what reads.
+check deny 'mkvg -f -y datavg hdisk2'
+check deny 'extendvg -f datavg hdisk3'
+check deny 'rmlv -f lv01'
+check deny 'reducevg -d datavg hdisk3'
+check deny 'rmfs -r /data'
+check deny 'chpv -c hdisk0'
+check deny 'chpv -C hdisk2'
+check deny 'ssh root@aix1 "rmlv -f lv01"'
+check pass 'mkvg -y datavg hdisk2'
+check pass 'lspv'
+check pass 'lsvg -l rootvg'
+check pass 'lslv hd4'
+check pass 'lsfs'
+check pass 'chpv -v a hdisk1'
+# The raw disk device, also through an interpreter.
+check deny 'dd if=/dev/zero of=/dev/rhdisk1 bs=1m'
+check deny 'python3 -c "open(\"/dev/rhdisk1\",\"wb\").write(b\"x\")"'
+check deny 'ssh root@aix1 "dd if=/dev/zero of=/dev/rhdisk1"'
+check pass 'getconf DISK_SIZE /dev/hdisk0'
+# Boot list, boot image, boot record, rootvg clones.
+check deny 'bootlist -m normal hdisk0 hdisk1'
+check deny 'bootlist -m normal -i'
+check deny 'bosboot -ad /dev/hdisk0'
+check deny 'mkboot -c -d /dev/hdisk1'
+check deny 'alt_disk_copy -d hdisk1'
+check deny 'alt_disk_install -C -d hdisk1'
+check deny 'alt_rootvg_op -X altinst_rootvg'
+check deny 'ssh root@aix1 "bootlist -m normal hdisk1"'
+check pass 'bootlist -m normal -o'
+check pass 'bosboot -vd /dev/hdisk0'
+# Accounts and the files under /etc/security.
+check deny 'rmuser -p alice'
+check deny 'rmgroup staff2'
+check deny 'ssh root@aix1 "rmuser alice"'
+check deny 'cp /tmp/p /etc/security/passwd'
+check deny 'echo x >> /etc/security/user'
+check deny 'ssh root@aix1 "echo x >> /etc/security/user"'
+check deny 'perl -e "open(F, \">>/etc/security/user\")"'
+check pass 'cat /etc/security/user'
+check pass 'lsuser -a account_locked alice'
+check pass 'mkuser alice'
+# Linux PAM keeps its /etc/security files writable.
+check pass "echo '* soft nofile 4096' >> /etc/security/limits.conf"
+check pass 'cp /tmp/g /etc/security/group.conf'
+check_file deny Write file_path /etc/security/passwd x
+check_file deny Write file_path /dev/rhdisk0 x
+check_file pass Write file_path /etc/security/limits.conf x
+
 # --- denial log (JOLITZ_GUARD_LOG=1) ---------------------------
 # The log is opt-in, names the path but never the text of a file
 # edit, and can never turn a deny into a pass.

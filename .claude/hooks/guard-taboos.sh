@@ -42,10 +42,16 @@
 #     create, systemsetup -setstartupdisk, efivar -w, nvram
 #     in a write form, a write or delete under
 #     /sys/firmware/efi/efivars/
-#   - accounts and sudo: deleting an account or a group,
-#     visudo, vipw/vigr, any write to sudoers(.d/) or to the
-#     account files (/etc/passwd, shadow, group,
-#     master.passwd)
+#   - accounts and sudo: deleting an account or a group
+#     (rmuser and rmgroup on AIX), visudo, vipw/vigr, any
+#     write to sudoers(.d/) or to the account files
+#     (/etc/passwd, shadow, group, master.passwd, AIX's
+#     /etc/security/{passwd,group,user,limits})
+#   - AIX: the volume manager commands that destroy data
+#     (mkvg/extendvg -f, rmlv, reducevg -d, rmfs, chpv -c/-C),
+#     the boot list and image (bootlist without -o, bosboot -a,
+#     mkboot, alt_disk_copy/install), stopsrc on sshd, ssh,
+#     tcpip or everything, fasthalt
 #   - any write after a cd into /etc/ssh, sshd_config.d,
 #     /etc/sudoers.d, ~/.ssh or /conf/sshd, where the files
 #     are named bare, and find -delete with one of them as
@@ -354,7 +360,8 @@ hit_i() {
 # A raw disk device, as opposed to /dev/null, /dev/stderr,
 # /dev/shm or /dev/disk/by-id (all of which are ordinary and
 # must stay usable).
-DEV='/dev/(sd|vd|xvd|hd|nvme|mmcblk|nbd|loop|da|ada|nda|r?disk[0-9])'
+# AIX: /dev/hdiskN falls under hd, its raw twin is /dev/rhdiskN.
+DEV='/dev/(sd|vd|xvd|hd|nvme|mmcblk|nbd|loop|da|ada|nda|r?h?disk[0-9])'
 
 # Any SSH key file, OR the directory that holds them. The
 # directory belongs in here because re-permissioning or removing
@@ -417,7 +424,10 @@ EDITOR='(vi|vim|nvim|nano|emacs|ed|ex)'
 # passwd make; and the firmware variables, where a deleted entry
 # has bricked boards. All three stay readable.
 SUDOERS='/etc/sudoers(\.d(/[[:alnum:]_.-]*)?)?'
-ACCOUNTS='/etc/(passwd|shadow|gshadow|group|master\.passwd|s?pwd\.db)'
+# AIX keeps the hashes and the account attributes under
+# /etc/security, as files without an extension. The boundary
+# keeps Linux PAM's /etc/security/limits.conf and group.conf out.
+ACCOUNTS='/etc/(passwd|shadow|gshadow|group|master\.passwd|s?pwd\.db|security/(passwd|group|user|limits)([^[:alnum:]_.-]|$))'
 EFIVARS='/sys/firmware/efi/efivars'
 
 # The server lock. The machine's owner writes it to keep jolitz
@@ -1008,19 +1018,26 @@ fi
 # or rc.d script, launchctl unload/disable/bootout of
 # com.openssh.sshd or ssh.plist (macOS). status, restart and
 # reload stay ordinary work: a restart asks first
-# (rules/service-reload.md). Open, on purpose: pkill sshd and a
-# firewall rule, which the model layer weighs.
+# (rules/service-reload.md). AIX runs sshd under the System
+# Resource Controller: stopsrc -s sshd, -g ssh, -g tcpip (the
+# whole network) and -a (every subsystem) close the same door;
+# lssrc reads, startsrc and refresh stay ordinary work. Open, on
+# purpose: pkill sshd and a firewall rule, which the model layer
+# weighs.
 SSHSVC='(ssh|sshd)(\.service|\.socket)?'
 if hit "(^|[^[:alnum:]_.-])systemctl([[:space:]]+-[^[:space:]]+)*[[:space:]]+(stop|disable|mask)([[:space:]]+[^[:space:];&|]+)*[[:space:]]+$SSHSVC([^[:alnum:]_.-]|\$)" \
   || hit '((^|[^[:alnum:]_.-])(service|rc-service|invoke-rc\.d)[[:space:]]+|/etc/(init\.d|rc\.d)/)(ssh|sshd)[[:space:]]+(one)?stop([^[:alnum:]_-]|$)' \
-  || hit '(^|[^[:alnum:]_.-])launchctl[[:space:]]+(unload|disable|bootout|remove)[[:space:]]+[^;&|]*(com\.openssh\.sshd|/ssh\.plist)'
+  || hit '(^|[^[:alnum:]_.-])launchctl[[:space:]]+(unload|disable|bootout|remove)[[:space:]]+[^;&|]*(com\.openssh\.sshd|/ssh\.plist)' \
+  || hit '(^|[^[:alnum:]_.-])stopsrc[[:space:]]+([^;&|]*[[:space:]])?(-[[:alpha:]]*a([[:space:]]|$)|-s[[:space:]]*sshd([^[:alnum:]_.-]|$)|-g[[:space:]]*(ssh|tcpip)([^[:alnum:]_.-]|$))'
 then
   deny "stopping, disabling or masking sshd cuts off the next \
 login (restart and reload are ordinary work that asks first)"
 fi
 
 # --- Power off ------------------------------------------------
-if hit '(^|[^[:alnum:]_-])(halt|poweroff)([^[:alnum:]_-]|$)'; then
+# AIX fasthalt is halt without the shutdown scripts.
+if hit '(^|[^[:alnum:]_-])(fast)?halt([^[:alnum:]_-]|$)' \
+  || hit '(^|[^[:alnum:]_-])poweroff([^[:alnum:]_-]|$)'; then
   deny "halt/poweroff never runs without explicit user request"
 fi
 if hit '(^|[^[:alnum:]_.-])(tel)?init[[:space:]]+0([^0-9]|$)'; then
@@ -1033,8 +1050,13 @@ if hit 'sysrq-trigger'; then
   deny "sysrq-trigger powers off or resets the server without \
 shutting anything down cleanly"
 fi
+# AIX: shutdown without flags halts and, where the power supply
+# allows, powers off; -Fr (fast) is its everyday reboot, so -r
+# counts together with F. -t restarts at a later time only after
+# shutting down now, and stays denied. The flag may also end at
+# the closing quote of ssh host "shutdown -r".
 if hit_without '(^|[^[:alnum:]_-])shutdown([^[:alnum:]_-]|$)' \
-  '(^|[[:space:]])-(r|c)([[:space:]]|$)'; then
+  '(^|[[:space:]])-(r|c|Fr|rF)([[:space:]"'\'']|$)'; then
   deny "shutdown without -r powers off the server (reboots \
 use shutdown -r; -c cancels)"
 fi
@@ -1097,6 +1119,26 @@ then
   deny "this formats or erases the device by another name than \
 mkfs: the LUKS header, the ZFS label or the RAID superblock go, \
 and the data behind them with it"
+fi
+
+# --- AIX logical volume manager -------------------------------
+# IBM documents each of these as destroying data: mkvg -f and
+# extendvg -f ("previous contents of the physical volume are
+# lost"), rmlv ("destroys all data in the specified logical
+# volumes"), reducevg -d (deletes the logical volume data on the
+# disk), rmfs (removes the file system and its volume), chpv -c
+# (clears the boot record) and chpv -C (clears the owning volume
+# manager). mkvg and extendvg without -f refuse a disk that
+# belongs to a volume group and stay with the prompt, like
+# pvcreate; lspv, lsvg, lslv and lsfs read.
+if hit '(^|[^[:alnum:]_.-])(mkvg|extendvg)[[:space:]]+([^;&|]*[[:space:]])?-[[:alpha:]]*f' \
+  || hit '(^|[^[:alnum:]_.-])(rmlv|rmfs)([^[:alnum:]_.-]|$)' \
+  || hit '(^|[^[:alnum:]_.-])reducevg[[:space:]]+([^;&|]*[[:space:]])?-[[:alpha:]]*d' \
+  || hit '(^|[^[:alnum:]_.-])chpv[[:space:]]+([^;&|]*[[:space:]])?-[[:alpha:]]*[cC]'
+then
+  deny "this AIX volume manager command destroys the data on a \
+disk or a logical volume, or the disk's boot record (lspv, lsvg, \
+lslv and lsfs read)"
 fi
 
 # --- Partition table writers ----------------------------------
@@ -1351,6 +1393,24 @@ then
 host comes back as; boot work needs the \
 operator override JOLITZ_GUARD_DISABLE"
 fi
+# AIX: bootlist sets the boot order unless -o only displays it
+# (-i invalidates the list); bosboot -a writes the boot image
+# into hd5 (-v verifies, -q sizes); mkboot writes or with -c
+# zeroes a boot record and IBM supports it for nobody;
+# alt_disk_copy and alt_disk_install clone rootvg onto another
+# disk and point the bootlist at it; alt_rootvg_op -X removes an
+# alternate rootvg.
+if hit_without '(^|[^[:alnum:]_.-])bootlist([^[:alnum:]_.-]|$)' \
+     '(^|[[:space:]])-o([[:space:]]|$)' \
+  || hit '(^|[^[:alnum:]_.-])bosboot[[:space:]]+([^;&|]*[[:space:]])?-[[:alpha:]]*a' \
+  || hit '(^|[^[:alnum:]_.-])(mkboot|alt_disk_copy|alt_disk_install)([^[:alnum:]_.-]|$)' \
+  || hit '(^|[^[:alnum:]_.-])alt_rootvg_op[[:space:]]+([^;&|]*[[:space:]])?-X'
+then
+  deny "this rewrites the AIX boot list, boot image or boot \
+record, or clones rootvg onto another disk (bootlist -o and \
+bosboot -v read); boot work needs the \
+operator override JOLITZ_GUARD_DISABLE"
+fi
 # nvram (macOS): nvram name=value sets a firmware variable, -d
 # deletes one, -c clears them all, -f loads a file of them.
 # nvram -p and nvram name print.
@@ -1382,7 +1442,7 @@ fi
 # account (useradd, pw useradd) and resetting a password stay
 # with the prompt: nothing breaks, and a reset is jolitz's own
 # everyday work (rules/ethics.md).
-if hit '(^|[^[:alnum:]_.-])(userdel|deluser|luserdel|groupdel|delgroup|lgroupdel)([^[:alnum:]_.-]|$)' \
+if hit '(^|[^[:alnum:]_.-])(userdel|deluser|luserdel|groupdel|delgroup|lgroupdel|rmuser|rmgroup)([^[:alnum:]_.-]|$)' \
   || hit '(^|[^[:alnum:]_.-])pw[[:space:]]+(userdel|groupdel|user[[:space:]]+del|group[[:space:]]+del)([^[:alnum:]_-]|$)' \
   || hit '(^|[^[:alnum:]_.-])sysadminctl[[:space:]].*-deleteUser([^[:alnum:]_-]|$)' \
   || hit '(^|[^[:alnum:]_.-])dscl[[:space:]].*-delete[[:space:]]+/(Users|Groups)/'

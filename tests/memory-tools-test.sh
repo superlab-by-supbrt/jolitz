@@ -216,6 +216,28 @@ has "$W" '- Database password: in /etc/app/db.env (0600 root)' \
   "host page shows memory.md"
 has "$W" 'nftables only.' "host page shows rules.md"
 
+# --- AIX: end of life per technology level -------------------
+A="$T/aix"
+mkdir -p "$A/servers/aix1" "$A/servers/aix2" "$A/eol"
+printf '# aix1\n- OS: AIX 7.3 TL2 SP3 (7300-02-03-2420)\n- Last connected: %s\n' \
+  "$TODAY" > "$A/servers/aix1/memory.md"
+printf '# aix2\n- OS: AIX 7.2 TL5\n- Last connected: %s\n' \
+  "$TODAY" > "$A/servers/aix2/memory.md"
+cat > "$A/eol/ibm-aix.json" <<'EOF'
+{"result":{"name":"ibm-aix","releases":[
+ {"name":"7.3.2","eolFrom":"2001-11-30"},
+ {"name":"7.2.5","eolFrom":null}]}}
+EOF
+echo 2026-10-29 > "$A/eol/ibm-aix.fetched"
+"$OVERVIEW" -d "$A" --text > "$T/aix.out" 2>&1; rc=$?
+ok $(( rc != 0 )) "overview runs on AIX hosts (got $rc)"
+has "$T/aix.out" '  aix1: AIX 7.3 TL2 SP3 (7300-02-03-2420), ended 2001-11-30' \
+  "AIX: the TL from oslevel -s finds its cycle"
+hasnt "$T/aix.out" '  aix2:' "AIX: 7.2 TL5 has no end date and no warning"
+"$OVERVIEW" -d "$A" > /dev/null 2>&1
+has "$A/overview/hosts/aix2.html" 'no end date announced' \
+  "AIX: \"7.2 TL5\" finds its cycle"
+
 # --- overview: the hub's look -------------------------------
 has "$I" 'jolitz hub: the colour variables' "the page carries hub.css"
 has "$I" '<header class="top">' "the hub header bar"

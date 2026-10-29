@@ -11,7 +11,7 @@ its OS.
    (see `rules/dns-aliases.md`). If the hostname is
    an alias for a known server, skip OS detection.
 
-1. Determine Linux, macOS, FreeBSD or NetBSD:
+1. Determine Linux, macOS, FreeBSD, NetBSD or AIX:
    `uname -s`
 
 2. **If Linux** — detect distro and version:
@@ -58,7 +58,16 @@ its OS.
    hardware info (`sysctl hw.model hw.ncpu
    hw.physmem64`, `df -h`).
 
-6. Create a server memory file.
+6. **If AIX** — detect level and hardware:
+   ```
+   oslevel -s && uname -M
+   ```
+   Read `rules/aix.md` first: the base tools are not
+   GNU (`sed` has no `-i`, `df` has no `-h`, there
+   is no `stat`). Gather hardware info (`prtconf -m`,
+   `lsattr -E -l sys0`, `df -g`, `lsvg`).
+
+7. Create a server memory file.
 
 ## On subsequent connections
 
