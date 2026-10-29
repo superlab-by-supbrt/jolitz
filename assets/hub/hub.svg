@@ -7,7 +7,8 @@
 HTTPS with a token to the hub on a team host behind a reverse
 proxy; a browser reads the hub's UI; git remains the alternative
 for a team without a hub; the servers are reached only from the
-workstations over SSH. The hub never runs a command.</desc>
+workstations over SSH, from each of the three: Linux, macOS and
+Windows with Git Bash. The hub never runs a command.</desc>
   <style>
     :root {
       --bg: #fbfaf7;
@@ -136,9 +137,12 @@ workstations over SSH. The hub never runs a command.</desc>
   <text class="s mid" x="488" y="464">no SSH key, no connection to the servers</text>
 
   <!-- SSH: from the workstations, around the hub, to the servers -->
-  <path class="ssh" d="M135 48 V 34 H 22 V 540 H 760 V 568" marker-end="url(#ar-ok)"/>
+  <!-- one bus above all three workstations, so each of them
+       visibly reaches the servers -->
+  <path class="ssh" d="M615 48 V 34 H 22 V 540 H 760 V 568" marker-end="url(#ar-ok)"/>
+  <path class="ssh" d="M135 48 V 34"/>
   <path class="ssh" d="M375 48 V 34"/>
-  <path class="ssh" d="M615 48 V 34 H 375"/>
+  <text class="ok" x="150" y="27">SSH from every workstation: Linux, macOS, Windows</text>
   <path class="ssh" d="M120 540 V 568" marker-end="url(#ar-ok)"/>
   <path class="ssh" d="M440 540 V 568" marker-end="url(#ar-ok)"/>
   <text class="ok" x="30" y="300">SSH</text>
