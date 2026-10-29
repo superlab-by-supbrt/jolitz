@@ -340,7 +340,10 @@ fi
 # only ever block more, never less.
 segments() {
   printf '%s\n' "$CMD"
-  printf '%s' "$CMD" | tr ';&|"'"'"'\n' '\n'
+  # The newline closes the last piece. Without it the piece ran
+  # into the next line, and an exemption that must reach the end
+  # of the invocation (bootlist's display form) never could.
+  printf '%s\n' "$CMD" | tr ';&|"'"'"'\n' '\n'
   # Git Bash on Windows takes a quoted C:\Users\x\.ssh\id_rsa as a
   # path. With the backslashes as slashes the patterns below see
   # it; on Unix this can only add a match, never remove one.
@@ -1022,13 +1025,14 @@ fi
 # Resource Controller: stopsrc -s sshd, -g ssh, -g tcpip (the
 # whole network) and -a (every subsystem) close the same door;
 # lssrc reads, startsrc and refresh stay ordinary work. Open, on
-# purpose: pkill sshd and a firewall rule, which the model layer
-# weighs.
+# purpose: pkill sshd, stopsrc -p with sshd's PID (a number says
+# nothing about the subsystem) and a firewall rule, which the
+# model layer weighs.
 SSHSVC='(ssh|sshd)(\.service|\.socket)?'
 if hit "(^|[^[:alnum:]_.-])systemctl([[:space:]]+-[^[:space:]]+)*[[:space:]]+(stop|disable|mask)([[:space:]]+[^[:space:];&|]+)*[[:space:]]+$SSHSVC([^[:alnum:]_.-]|\$)" \
   || hit '((^|[^[:alnum:]_.-])(service|rc-service|invoke-rc\.d)[[:space:]]+|/etc/(init\.d|rc\.d)/)(ssh|sshd)[[:space:]]+(one)?stop([^[:alnum:]_-]|$)' \
   || hit '(^|[^[:alnum:]_.-])launchctl[[:space:]]+(unload|disable|bootout|remove)[[:space:]]+[^;&|]*(com\.openssh\.sshd|/ssh\.plist)' \
-  || hit '(^|[^[:alnum:]_.-])stopsrc[[:space:]]+([^;&|]*[[:space:]])?(-[[:alpha:]]*a([[:space:]]|$)|-s[[:space:]]*sshd([^[:alnum:]_.-]|$)|-g[[:space:]]*(ssh|tcpip)([^[:alnum:]_.-]|$))'
+  || hit '(^|[^[:alnum:]_.-])stopsrc[[:space:]]+([^;&|]*[[:space:]])?(-[[:alpha:]]*a([[:space:]"'\'']|$)|-[[:alpha:]]*s[[:space:]]*["'\'']?sshd([^[:alnum:]_.-]|$)|-[[:alpha:]]*g[[:space:]]*["'\'']?(ssh|tcpip)([^[:alnum:]_.-]|$))'
 then
   deny "stopping, disabling or masking sshd cuts off the next \
 login (restart and reload are ordinary work that asks first)"
@@ -1053,8 +1057,13 @@ fi
 # AIX: shutdown without flags halts and, where the power supply
 # allows, powers off; -Fr (fast) is its everyday reboot, so -r
 # counts together with F. -t restarts at a later time only after
-# shutting down now, and stays denied. The flag may also end at
+# shutting down now: the host is gone until then, so -t denies
+# before the -r exemption is looked at. The flag may also end at
 # the closing quote of ssh host "shutdown -r".
+if hit '(^|[^[:alnum:]_-])shutdown[[:space:]]+([^;&|]*[[:space:]])?-[[:alpha:]]*t([[:space:]"'\'']|$|[0-9])'; then
+  deny "shutdown -t shuts the server down now and brings it back \
+only at the given time"
+fi
 if hit_without '(^|[^[:alnum:]_-])shutdown([^[:alnum:]_-]|$)' \
   '(^|[[:space:]])-(r|c|Fr|rF)([[:space:]"'\'']|$)'; then
   deny "shutdown without -r powers off the server (reboots \
@@ -1400,8 +1409,11 @@ fi
 # alt_disk_copy and alt_disk_install clone rootvg onto another
 # disk and point the bootlist at it; alt_rootvg_op -X removes an
 # alternate rootvg.
+# The exemption is the whole display form, -m <mode> and -o and
+# nothing after them: a device named next to -o is set, then
+# shown.
 if hit_without '(^|[^[:alnum:]_.-])bootlist([^[:alnum:]_.-]|$)' \
-     '(^|[[:space:]])-o([[:space:]]|$)' \
+     '^[^[:alnum:]_.-]?bootlist[[:space:]]+(-m[[:space:]]*(normal|service|both|prevboot)[[:space:]]+-o|-o[[:space:]]+-m[[:space:]]*(normal|service|both|prevboot))[[:space:]]*([;&|"'\'')]|$)' \
   || hit '(^|[^[:alnum:]_.-])bosboot[[:space:]]+([^;&|]*[[:space:]])?-[[:alpha:]]*a' \
   || hit '(^|[^[:alnum:]_.-])(mkboot|alt_disk_copy|alt_disk_install)([^[:alnum:]_.-]|$)' \
   || hit '(^|[^[:alnum:]_.-])alt_rootvg_op[[:space:]]+([^;&|]*[[:space:]])?-X'
