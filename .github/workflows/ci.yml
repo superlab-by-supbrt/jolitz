@@ -5,10 +5,21 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # The full guard matrix under Git Bash takes over an hour; it
+  # runs nightly on main and on request, not after every merge.
+  schedule:
+    - cron: '23 2 * * *'
 
 # The tests read the checkout and nothing else.
 permissions:
   contents: read
+
+# A newer push to the same branch or pull request makes the
+# older run pointless: cancel it. Runs on main finish, so every
+# merge keeps its result.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   test:
@@ -145,7 +156,7 @@ jobs:
 
       # The guard as Claude Code starts it, with Windows hook
       # input. The full matrix takes too long under Git Bash for
-      # every pull request; windows-full-matrix runs it on main.
+      # every pull request; windows-full-matrix runs it nightly.
       - name: Guard smoke test
         run: sh tests/windows-smoke.sh
 
@@ -153,7 +164,7 @@ jobs:
         run: sh tests/memory-tools-test.sh
 
   windows-full-matrix:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     timeout-minutes: 300
     defaults:
@@ -165,6 +176,8 @@ jobs:
       - name: Tools
         run: command -v jq || choco install jq --no-progress -y
 
+      # Git Bash forks slowly; the matrix shards itself over the
+      # runner's cores (JOLITZ_TEST_JOBS, at most 8).
       - name: Guard test matrix
         run: sh .claude/hooks/guard-taboos-test.sh
 

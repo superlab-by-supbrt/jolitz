@@ -9,6 +9,69 @@ HOOK="$CLAUDE_DIR/hooks/guard-taboos.sh"
 PASS=0
 FAIL=0
 
+# Git Bash rewrites an argument that looks like a POSIX path
+# (/dev/sda) into a Windows path (C:/Program Files/Git/dev/sda)
+# when it calls a native program such as jq.exe, so the fixtures
+# would test other paths than they name. Off for the whole
+# matrix; no effect outside MSYS.
+MSYS_NO_PATHCONV=1
+MSYS2_ARG_CONV_EXCL='*'
+export MSYS_NO_PATHCONV MSYS2_ARG_CONV_EXCL
+
+# --- parallel runs ---------------------------------------------
+# The matrix forks a shell, jq, awk and grep per case, well over a
+# thousand times. Unless JOLITZ_TEST_JOBS=1, it starts itself in
+# JOLITZ_TEST_JOBS shards (default: the CPU count, at most 8),
+# each taking every n-th case, and adds their results up. The
+# cases are independent; the few checks written out inline (the
+# shims, the log, settings.json) run in shard 0 only.
+if [ -z "${JOLITZ_TEST_SHARD:-}" ]; then
+  JOBS=${JOLITZ_TEST_JOBS:-$(nproc 2>/dev/null \
+    || getconf _NPROCESSORS_ONLN 2>/dev/null \
+    || sysctl -n hw.ncpu 2>/dev/null || echo 1)}
+  case $JOBS in ''|*[!0-9]*) JOBS=1 ;; esac
+  [ "$JOBS" -gt 8 ] && JOBS=8
+  if [ "$JOBS" -gt 1 ]; then
+    DIR=$(mktemp -d) || exit 1
+    i=0
+    while [ "$i" -lt "$JOBS" ]; do
+      JOLITZ_TEST_SHARD="$i/$JOBS" sh "$0" > "$DIR/$i" 2>&1 &
+      i=$((i + 1))
+    done
+    wait
+    grep -hv '^guard-taboos tests: ' "$DIR"/* || true
+    P=0; F=0
+    for f in "$DIR"/*; do
+      s=$(grep '^guard-taboos tests: ' "$f")
+      if [ -z "$s" ]; then
+        F=$((F + 1)); echo "FAIL: shard ${f##*/} printed no summary"
+        continue
+      fi
+      set -- $s
+      P=$((P + $3)); F=$((F + $5))
+    done
+    [ -n "$DIR" ] && [ -d "$DIR" ] && rm -rf "$DIR"
+    echo "guard-taboos tests: $P passed, $F failed"
+    [ "$F" -eq 0 ]
+    exit
+  fi
+  JOLITZ_TEST_SHARD=0/1
+fi
+SHARD_I=${JOLITZ_TEST_SHARD%/*}
+SHARD_N=${JOLITZ_TEST_SHARD#*/}
+CASE=0
+
+# mine: true when the next case belongs to this shard.
+mine() {
+  CASE=$((CASE + 1))
+  [ $((CASE % SHARD_N)) -eq "$SHARD_I" ]
+}
+
+# first: true in shard 0, where the inline checks run.
+first() {
+  [ "$SHARD_I" -eq 0 ]
+}
+
 json_for() {
   # Wrap a raw command string as PreToolUse hook input.
   if command -v jq >/dev/null 2>&1; then
@@ -22,6 +85,7 @@ print(json.dumps({"tool_name":"Bash","tool_input":\
 }
 
 check() {
+  mine || return 0
   EXPECT=$1
   CMDSTR=$2
   OUT=$(json_for "$CMDSTR" \
@@ -696,6 +760,7 @@ fi
 # os-replacement.md has guard-off blocks by design, so finding
 # none means the search broke, not that all is well. Every file
 # with one must tell the operator how the guard is lifted.
+if first; then
 NGUARDOFF=0
 while read -r md; do
   [ -n "$md" ] || continue
@@ -752,6 +817,7 @@ else
   echo "FAIL: system-account probe reported [$GOT], want [$WANT]"
 fi
 
+fi
 # --- read-only forms of the newly covered tools (issue #5) -----
 check pass 'diskutil info disk0'
 check pass 'diskutil apfs list'
@@ -1054,6 +1120,7 @@ EOF'
 # Stripping must fail CLOSED when awk cannot run at all: the body
 # then stays in the scanned text, so a body that RUNS is caught
 # and a documentation body is merely blocked as before.
+if first; then
 SHIM2=$(mktemp -d)
 printf '#!/bin/sh\nexit 2\n' > "$SHIM2/awk"
 chmod +x "$SHIM2/awk"
@@ -1113,11 +1180,13 @@ if command -v jq >/dev/null 2>&1; then
   fi
 fi
 
+fi
 # --- the operator override -------------------------------------
 # JOLITZ_GUARD_DISABLE=1, exported by the operator, lifts the
 # taboos for a session. Attack tools, the server lock and a
 # second assignment of the variable stay blocked.
 check_off() {
+  mine || return 0
   EXPECT=$1
   OUT=$(json_for "$2" | JOLITZ_GUARD_DISABLE=1 sh "$HOOK")
   if printf '%s' "$OUT" \
@@ -1173,6 +1242,7 @@ check pass 'ls .claude 2>/dev/null'
 check pass 'ls -la .claude/hooks/ 2>&1'
 check pass 'python3 .claude/skills/jolitz-macos-cleanup/scripts/scan.py orphans > scan.json'
 check_cwd() {
+  mine || return 0
   # $1 expected, $2 cwd, $3 command
   OUT=$(jq -n --arg c "$2" --arg x "$3" \
     '{cwd:$c,tool_name:"Bash",tool_input:{command:$x}}' \
@@ -1301,6 +1371,7 @@ fi
 # is missing or cannot evaluate POSIX classes, the exemption
 # cannot be proven, and an unprovable exemption must block, not
 # pass. Simulated with an awk shim that only fails.
+if first; then
 SHIM=$(mktemp -d)
 printf '#!/bin/sh\nexit 2\n' > "$SHIM/awk"
 chmod +x "$SHIM/awk"
@@ -1315,6 +1386,7 @@ else
 fi
 rm -rf "$SHIM"
 
+fi
 # --- a redirect onto a computed target (issue #51) -------------
 check deny 'ssh root@h '\''bash -ic "echo sensible-editor would run: \$SELECTED_EDITOR -> \$(readlink -f \$SELECTED_EDITOR)"'\'''
 check deny 'echo editor -> $(readlink -f /usr/bin/editor)'
@@ -1373,6 +1445,7 @@ file_json() {
 }
 
 check_file() {
+  mine || return 0
   EXPECT=$1
   OUT=$(file_json "$2" "$3" "$4" "$5" \
     | env -u JOLITZ_GUARD_DISABLE sh "$HOOK" file)
@@ -1391,6 +1464,7 @@ check_file() {
 }
 
 check_file_off() {
+  mine || return 0
   EXPECT=$1
   OUT=$(file_json "$2" "$3" "$4" "$5" \
     | JOLITZ_GUARD_DISABLE=1 sh "$HOOK" file)
@@ -1518,6 +1592,7 @@ if command -v jq >/dev/null 2>&1; then
   # is judged there: the bare name sshd_config is a protected file
   # in /etc/ssh and an ordinary one anywhere else.
   rel_file() {
+    mine || return 0
     EXPECT=$1
     OUT=$(jq -n --arg c "$2" --arg p "$3" \
       '{cwd:$c,tool_name:"Write",tool_input:{file_path:$p}}' \
@@ -1544,6 +1619,7 @@ if command -v jq >/dev/null 2>&1; then
   rel_file deny /dev sda
   rel_file pass /home/alice/jolitz memory/servers/h/memory.md
   rel_file pass /home/alice/jolitz sshd_config
+  if first; then
   # No cwd in the input: the hook's own working directory counts.
   RELDIR=$(mktemp -d)
   mkdir "$RELDIR/.ssh"
@@ -1569,7 +1645,8 @@ if command -v jq >/dev/null 2>&1; then
   else
     FAIL=$((FAIL + 1))
     echo "FAIL: a second path key hid a protected target"
-  fi
+  fi  fi
+
   # The use case from PR #62: memory that NAMES the protected
   # paths and a few taboo commands is ordinary text.
   check_file pass Edit file_path \
@@ -1594,6 +1671,7 @@ if command -v jq >/dev/null 2>&1; then
   printf '#!/bin/sh\nexit 2\n' > "$SHIM3/jq"
   chmod +x "$SHIM3/jq"
   degraded_file() {
+    mine || return 0
     EXPECT=$1
     OUT=$(printf '%s' "$2" \
       | env -u JOLITZ_GUARD_DISABLE PATH="$SHIM3:$PATH" \
@@ -1644,6 +1722,7 @@ if command -v jq >/dev/null 2>&1; then
   # ~/.claude. Without jq that must not put every command next
   # to the guard's own files.
   degraded_bash() {
+    mine || return 0
     EXPECT=$1
     OUT=$(jq -nc --arg x "$2" '{session_id:"s",
         transcript_path:"/home/alice/.claude/projects/p/s.jsonl",
@@ -1674,6 +1753,7 @@ if command -v jq >/dev/null 2>&1; then
 
   # Windows: Claude Code hands over C:\ paths with backslashes.
   win_file() {
+    mine || return 0
     EXPECT=$1
     OUT=$(jq -nc --arg p "$2" --arg c "$3" '{
         transcript_path:"C:\\Users\\max\\.claude\\projects\\p\\s.jsonl",
@@ -1717,6 +1797,7 @@ fi
 # Every file-edit tool must be registered, and in file mode:
 # without the argument the guard would scan the written text as
 # a command line.
+if first; then
 for TOOL in Edit Write NotebookEdit; do
   if grep -A8 "\"matcher\": *\"[A-Za-z|]*${TOOL}[A-Za-z|]*\"" \
       "$CLAUDE_DIR/settings.json" \
@@ -1776,9 +1857,11 @@ else
   PASS=$((PASS + 1))
 fi
 
+fi
 # --- denial log (JOLITZ_GUARD_LOG=1) ---------------------------
 # The log is opt-in, names the path but never the text of a file
 # edit, and can never turn a deny into a pass.
+if first; then
 LOGHOME=$(mktemp -d "${TMPDIR:-/tmp}/guard-log-test.XXXXXX")
 GLOG="$LOGHOME/.cache/jolitz/guard.log"
 log_run() {
@@ -1793,8 +1876,14 @@ log_ok() {
 json_for 'halt' | log_run "$LOGHOME" 1 ""; log_ok $? "halt still denied"
 grep -q "	bash	.*	halt\$" "$GLOG" 2>/dev/null
 log_ok $? "a denial is logged with mode and command"
-[ "$(stat -c %a "$GLOG" 2>/dev/null || stat -f %Lp "$GLOG")" = 600 ]
-log_ok $? "the log is mode 0600"
+# NTFS has no Unix modes; Git Bash reports 644 whatever chmod
+# did. The mode is checked where it exists.
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) ;;
+  *)
+    [ "$(stat -c %a "$GLOG" 2>/dev/null || stat -f %Lp "$GLOG")" = 600 ]
+    log_ok $? "the log is mode 0600" ;;
+esac
 json_for 'ls /tmp' | log_run "$LOGHOME" 1 ""
 [ "$(wc -l < "$GLOG" | tr -d ' ')" = 1 ]
 log_ok $? "an allowed command is not logged"
@@ -1819,6 +1908,7 @@ log_ok $? "a symlinked log still denies"
 [ ! -e "$LOGHOME/elsewhere" ]
 log_ok $? "the log does not write through a symlink"
 rm -rf "$LOGHOME" "$NOLOG"
+fi
 
 echo "guard-taboos tests: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
