@@ -16,6 +16,7 @@
 #   links.tsv      from to label ("- Link:" in network.md)
 #
 # Variables: mode (html|text), today, now, days, tag, out,
+# cssfile (the hub's stylesheet), version,
 # mem, jq, json (0|1), prom (0|1). Plain POSIX awk: it
 # runs under the BWK awk of macOS and the mawk of Debian
 # and Ubuntu.
@@ -370,102 +371,105 @@ function text(   i, n, k, h, any) {
 }
 
 # --- html ---------------------------------------------------
-function css() {
-  return "<style>\n" \
-":root{--bg:#f7f7f5;--card:#fff;--fg:#1d1d1b;--muted:#6b6b66;" \
-"--line:#e3e2dd;--accent:#2f5d8a;--ok:#2e7d4f;--ok-bg:#e6f2ea;" \
-"--warn:#8a5a00;--warn-bg:#fbf0d9;--bad:#a12a2a;--bad-bg:#f9e3e1;" \
-"--code:#f0efea}\n" \
-"@media (prefers-color-scheme:dark){:root:not([data-theme=light]){" \
-"--bg:#141413;--card:#1e1e1c;--fg:#ecebe6;--muted:#9c9b94;" \
-"--line:#33322f;--accent:#8ab4e0;--ok:#7fcf9c;--ok-bg:#1d3326;" \
-"--warn:#f0c674;--warn-bg:#3a2f15;--bad:#f28b82;--bad-bg:#3d1f1d;" \
-"--code:#262624}}\n" \
-"*{box-sizing:border-box}body{margin:0;background:var(--bg);" \
-"color:var(--fg);font:15px/1.5 -apple-system,BlinkMacSystemFont," \
-"'Segoe UI',Roboto,sans-serif}main{max-width:1180px;margin:0 auto;" \
-"padding:24px 16px 64px}h1{font-size:24px;margin:0 0 4px}" \
-"h2{font-size:17px;margin:32px 0 10px}a{color:var(--accent)}" \
-".muted{color:var(--muted)}.sub{color:var(--muted);font-size:13px}" \
-".kpis{display:grid;grid-template-columns:repeat(auto-fit," \
-"minmax(140px,1fr));gap:10px;margin:20px 0}.kpi{background:var(--card);" \
-"border:1px solid var(--line);border-radius:8px;padding:12px 14px}" \
-".kpi b{display:block;font-size:24px;font-variant-numeric:tabular-nums}" \
-".kpi span{color:var(--muted);font-size:13px}" \
-".box{background:var(--card);border:1px solid var(--line);" \
-"border-radius:8px;overflow-x:auto}table{border-collapse:collapse;" \
-"width:100%}th,td{text-align:left;padding:8px 12px;" \
-"border-bottom:1px solid var(--line);vertical-align:top}" \
-"th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;" \
-"color:var(--muted);font-weight:600}tbody th{text-transform:none;" \
-"letter-spacing:0;font:500 13px ui-monospace,Menlo,monospace;" \
-"color:var(--fg);white-space:nowrap}tr:last-child td,tr:last-child th{" \
-"border-bottom:0}.facts th{font:600 13px/1.5 inherit;font-family:inherit;" \
-"color:var(--muted);width:11em}" \
-".pill{display:inline-block;padding:1px 8px;border-radius:999px;" \
-"font-size:12px;white-space:nowrap}.ok{background:var(--ok-bg);" \
-"color:var(--ok)}.warn{background:var(--warn-bg);color:var(--warn)}" \
-".bad{background:var(--bad-bg);color:var(--bad)}.tag{display:inline-block;" \
-"border:1px solid var(--line);border-radius:4px;padding:0 6px;" \
-"margin:0 4px 2px 0;font-size:12px}ul.list{margin:0;padding:0;" \
-"list-style:none}ul.list li{padding:8px 12px;border-bottom:1px solid " \
-"var(--line)}ul.list li:last-child{border-bottom:0}" \
-"details summary{cursor:pointer}pre{background:var(--code);" \
-"padding:10px 12px;border-radius:6px;overflow-x:auto;font-size:13px;" \
-"white-space:pre-wrap;word-break:break-word}" \
-".filters{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 0}" \
-".filters button{font:inherit;font-size:13px;border:1px solid var(--line);" \
-"background:var(--card);color:var(--fg);border-radius:999px;" \
-"padding:2px 12px;cursor:pointer}.filters button[aria-pressed=true]{" \
-"background:var(--accent);color:var(--bg);border-color:var(--accent)}" \
-"td.diff{font-weight:600}tr.drift th:first-child::before{content:'! '}" \
-"code{font-size:13px}.matrix td{text-align:center;white-space:nowrap}" \
-".matrix th.svc{font:500 13px ui-monospace,Menlo,monospace;" \
-"text-transform:none;letter-spacing:0;color:var(--fg)}" \
-"svg.chart{display:block;width:100%;height:auto;padding:8px}" \
-"svg.chart text{fill:var(--muted);font-size:12px}" \
-"svg.chart text.host,svg.chart text.node{fill:var(--fg);font-size:13px}" \
-"svg.chart .lane{stroke:var(--line)}svg.chart .tick{stroke:var(--line)}" \
-"svg.chart .dot{fill:var(--accent)}svg.chart .flag{fill:var(--warn)}" \
+# The pages wear the hub's clothes: hub/internal/ui/static/hub.css
+# is read at build time (cssfile) and the markup follows the hub
+# templates, so a style change to the hub reaches both. Only the
+# classes the hub has no use for are added here.
+function css(   line, s) {
+  s = ""
+  while ((getline line < cssfile) > 0) s = s line "\n"
+  close(cssfile)
+  return "<style>\n" s \
 "svg.chart .edge{stroke:var(--muted);stroke-width:1.2}" \
 "svg.chart text.lbl{paint-order:stroke;stroke:var(--card);" \
 "stroke-width:4px;stroke-linejoin:round}" \
 "svg.chart .nd{fill:var(--card);stroke:var(--accent);stroke-width:2}" \
+"svg.chart text.node{fill:var(--fg);font-size:12px}" \
 "svg.chart a text{fill:var(--accent)}" \
-"@media print{.filters,script{display:none}" \
-"body{background:#fff}.box{border-color:#ccc}}\n</style>"
+".matrix th.svc{color:var(--fg)}" \
+"svg.chart.net{max-width:760px;margin:0 auto}\n</style>"
 }
 
-function head(f, title) {
+# head(f, title, nav, up): up is "" for top-level pages and
+# "../" for a host page.
+function head(f, title, nav, up) {
   print "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">" > f
   print "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" > f
-  print "<title>" esc(title) "</title>" > f
+  print "<title>" esc(title) " · jolitz</title>" > f
   print css() > f
-  print "</head>\n<body>\n<main>" > f
+  print "</head>\n<body>\n<header class=\"top\">" > f
+  printf "<a class=\"brand\" href=\"%sindex.html\">jolitz</a>\n", up > f
+  printf "<span class=\"sep\">·</span><span><b>%d</b> hosts</span>\n", H > f
+  if (tag != "") printf "<span class=\"sep\">·</span><span>tag <b>%s</b></span>\n", esc(tag) > f
+  print "<nav>" > f
+  printf "<a href=\"%sindex.html\"%s>fleet</a>\n", up, (nav == "fleet" ? " class=\"on\"" : "") > f
+  printf "<a href=\"%stimeline.html\"%s>timeline</a>\n", up, (nav == "timeline" ? " class=\"on\"" : "") > f
+  if (AK) printf "<a href=\"%sindex.html#audit\">audit</a>\n", up > f
+  if (GN) printf "<a href=\"%sindex.html#guard\">guard</a>\n", up > f
+  print "</nav>" > f
+  printf "<span class=\"who muted\">%s</span>\n", esc(now) > f
+  print "</header>\n<main id=\"main\">" > f
 }
 
 function foot(f,   i) {
-  printf "<p class=\"sub\" style=\"margin-top:40px\">Built %s by " \
-    "<code>bin/jolitz-overview</code> from <code>memory/</code>. " \
-    "No server was contacted.", esc(now) > f
+  print "</main>" > f
+  printf "<footer class=\"foot\">jolitz-overview %s · %s · built from memory/, no server was contacted", \
+    esc(version), esc(now) > f
   if (EP) {
-    printf " End-of-life dates from endoflife.date, fetched" > f
+    printf " · end of life from endoflife.date, fetched" > f
     for (i = 1; i <= EP; i++)
       printf "%s %s %s", (i > 1 ? "," : ""), esc(eplist[i]), \
         esc(eolprod[eplist[i]]) > f
-    printf "." > f
   }
-  print "</p>\n</main>" > f
+  print "</footer>" > f
+  # The hub's filter: tag buttons toggle, "/" focuses the search,
+  # Escape clears it. Rows marked data-row take part.
+  print "<script>" > f
+  print "(function () {" > f
+  print "  function applyFilter() {" > f
+  print "    var q = ((document.getElementById('q') || {}).value || '').toLowerCase();" > f
+  print "    var tag = document.body.getAttribute('data-tag') || '';" > f
+  print "    document.querySelectorAll('[data-row]').forEach(function (el) {" > f
+  print "      var tags = ' ' + (el.getAttribute('data-tags') || '') + ' ';" > f
+  print "      el.hidden = !((!tag || tags.indexOf(' ' + tag + ' ') >= 0) &&" > f
+  print "        (!q || el.textContent.toLowerCase().indexOf(q) >= 0));" > f
+  print "    });" > f
+  print "    document.querySelectorAll('.filters button').forEach(function (b) {" > f
+  print "      b.setAttribute('aria-pressed', (b.getAttribute('data-filter') || '') === tag ? 'true' : 'false');" > f
+  print "    });" > f
+  print "  }" > f
+  print "  var q = document.getElementById('q');" > f
+  print "  if (q) q.addEventListener('input', applyFilter);" > f
+  print "  document.querySelectorAll('.filters button').forEach(function (b) {" > f
+  print "    b.addEventListener('click', function () {" > f
+  print "      var t = b.getAttribute('data-filter') || '';" > f
+  print "      document.body.setAttribute('data-tag', document.body.getAttribute('data-tag') === t ? '' : t);" > f
+  print "      applyFilter();" > f
+  print "    });" > f
+  print "  });" > f
+  print "  document.addEventListener('keydown', function (e) {" > f
+  print "    if (e.key === '/' && q && document.activeElement !== q &&" > f
+  print "        !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) {" > f
+  print "      e.preventDefault(); q.focus(); q.select();" > f
+  print "    }" > f
+  print "    if (e.key === 'Escape' && q && document.activeElement === q) { q.value = ''; applyFilter(); q.blur(); }" > f
+  print "  });" > f
+  print "  applyFilter();" > f
+  print "})();" > f
+  print "</script>\n</body>\n</html>" > f
+  close(f)
 }
 
-function change_item(f, i, link,   d, n, k) {
-  printf "<li data-tags=\"%s\"><details><summary><b>%s %s</b> ", \
+function change_item(f, i, link, up,   d, n, k) {
+  printf "<li data-row data-tags=\"%s\"><details><summary><b>%s %s</b> ", \
     esc(hosttags(ch[i, 3])), esc(ch[i, 1]), esc(ch[i, 2]) > f
-  if (link) printf "<a href=\"hosts/%s.html\">%s</a> ", \
+  if (link) printf "<a href=\"%shosts/%s.html\">%s</a> ", up, \
     esc(ch[i, 3]), esc(ch[i, 3]) > f
   if (ch[i, 4] != "") printf "<span class=\"muted\">[%s]</span> ", \
     esc(ch[i, 4]) > f
-  printf "%s</summary>", esc(ch[i, 5]) > f
+  printf "%s", esc(ch[i, 5]) > f
+  if (ch[i, 7] != "") printf " %s", pill("warn", "flags") > f
+  printf "</summary>" > f
   if (ch[i, 8] != "") {
     n = split(ch[i, 8], d, "\037")
     printf "<pre>" > f
@@ -476,24 +480,20 @@ function change_item(f, i, link,   d, n, k) {
 }
 
 function index_page(f,   i, k, h, n, cls, any, v, r, pa) {
-  head(f, "Fleet overview")
-  print "<h1>Fleet overview</h1>" > f
-  printf "<p class=\"sub\">%s%s</p>\n", esc(now), \
-    (tag != "" ? " &middot; tag " esc(tag) : "") > f
-  print "<div class=\"kpis\">" > f
-  printf "<div class=\"kpi\"><b>%d</b><span>servers</span></div>\n", H > f
-  printf "<div class=\"kpi\"><b>%d</b><span>not seen for 30+ days</span></div>\n", STALE > f
-  printf "<div class=\"kpi\"><b>%d</b><span>open to-dos</span></div>\n", TD > f
-  printf "<div class=\"kpi\"><b>%d</b><span>changes, %d days</span></div>\n", RECENT, days > f
-  printf "<div class=\"kpi\"><b>%d</b><span>EOL within 180 days</span></div>\n", EOLW > f
-  printf "<div class=\"kpi\"><b>%d</b><span>memory warnings</span></div>\n", L > f
-  print "</div>" > f
+  head(f, "fleet", "fleet", "")
+  print "<div class=\"bar\">\n<h1>fleet</h1>" > f
+  printf "<span class=\"kpi\"><b>%d</b> hosts</span>\n", H > f
+  printf "<span class=\"kpi\"><b>%d</b> not seen 30+ d</span>\n", STALE > f
+  printf "<span class=\"kpi\"><b>%d</b> open to-dos</span>\n", TD > f
+  printf "<span class=\"kpi\"><b>%d</b> changes, %d d</span>\n", RECENT, days > f
+  printf "<span class=\"kpi\"><b>%d</b> EOL within 180 d</span>\n", EOLW > f
+  printf "<span class=\"kpi\"><b>%d</b> memory warnings</span>\n", L > f
+  print "<input id=\"q\" type=\"search\" placeholder=\"filter  (/)\" autocomplete=\"off\">\n</div>" > f
 
   if (TG) {
-    print "<div class=\"filters\" role=\"group\" aria-label=\"Filter by tag\">" > f
-    print "<button type=\"button\" data-filter=\"*\" aria-pressed=\"true\">all</button>" > f
+    printf "<div class=\"filters\">" > f
     for (i = 1; i <= TG; i++)
-      printf "<button type=\"button\" data-filter=\"%s\" aria-pressed=\"false\">%s</button>\n", \
+      printf "<button type=\"button\" data-filter=\"%s\" aria-pressed=\"false\">%s</button>", \
         esc(tgl[i]), esc(tgl[i]) > f
     print "</div>" > f
   }
@@ -505,68 +505,66 @@ function index_page(f,   i, k, h, n, cls, any, v, r, pa) {
     if (E_STATE == "ended" || E_STATE == "soon" || age(i) == "stale") any = 1
   }
   if (any || DRIFT || AC || L) {
-    print "<h2>Needs attention</h2>\n<div class=\"box\"><ul class=\"list\">" > f
+    print "<h2>needs attention</h2>\n<ul class=\"list\">" > f
     for (k = 1; k <= H; k++) {
       i = ord[k]; eol(i)
       if (E_STATE == "ended" || E_STATE == "soon")
-        printf "<li data-tags=\"%s\">%s <a href=\"hosts/%s.html\">%s</a>: %s, support %s</li>\n", \
+        printf "<li data-row data-tags=\"%s\">%s <a href=\"hosts/%s.html\">%s</a>: %s, support %s</li>\n", \
           esc(hf[i, 6]), pill(E_STATE == "ended" ? "bad" : "warn", "EOL"), \
           esc(hf[i, 1]), esc(hf[i, 1]), esc(hf[i, 2]), esc(E_TEXT) > f
       if (age(i) == "stale")
-        printf "<li data-tags=\"%s\">%s <a href=\"hosts/%s.html\">%s</a>: last connected %s; the memory may be out of date</li>\n", \
+        printf "<li data-row data-tags=\"%s\">%s <a href=\"hosts/%s.html\">%s</a>: last connected %s; the memory may be out of date</li>\n", \
           esc(hf[i, 6]), pill("warn", "stale"), esc(hf[i, 1]), \
           esc(hf[i, 1]), esc(agetext(i)) > f
     }
     if (DRIFT)
-      printf "<li>%s Fleet audit %s: %d settings differ between servers (<a href=\"#audit\">below</a>)</li>\n", \
+      printf "<li>%s fleet audit %s: %d settings differ between servers (<a href=\"#audit\">audit</a>)</li>\n", \
         pill("warn", "drift"), esc(adate), DRIFT > f
     for (i = 1; i <= AC; i++) {
       split(acl[i], pa, SUBSEP)
-      printf "<li data-tags=\"%s\">%s <a href=\"hosts/%s.html\">%s</a>: <code>%s</code> changed from <code>%s</code> to <code>%s</code> between the audits of %s and %s</li>\n", \
+      printf "<li data-row data-tags=\"%s\">%s <a href=\"hosts/%s.html\">%s</a>: <code>%s</code> <code>%s</code> → <code>%s</code> <span class=\"muted\">since %s</span></li>\n", \
         esc(hosttags(pa[1])), pill("warn", "changed"), esc(pa[1]), esc(pa[1]), \
-        esc(pa[2]), esc(pv[pa[1], pa[2]]), esc(av[pa[1], pa[2]]), esc(pdate), \
-        esc(adate) > f
+        esc(pa[2]), esc(pv[pa[1], pa[2]]), esc(av[pa[1], pa[2]]), esc(pdate) > f
     }
     for (i = 1; i <= L; i++) {
       r = lint[i]; sub(/^WARN +/, "", r)
       printf "<li>%s %s</li>\n", pill("warn", "memory"), esc(r) > f
     }
-    print "</ul></div>" > f
+    print "</ul>" > f
   }
 
-  print "<h2>Servers</h2>\n<div class=\"box\"><table>" > f
-  print "<thead><tr><th>Server</th><th>Owner</th><th>Tags</th><th>OS</th><th>End of life</th><th>IP</th><th>Last connected</th><th>To-dos</th><th>Last change</th></tr></thead><tbody>" > f
+  print "<h2>hosts</h2>\n<table class=\"dense\">" > f
+  print "<thead><tr><th>host</th><th>owner</th><th>tags</th><th>os</th><th>end of life</th><th>ip</th><th>last contact</th><th class=\"num\">to-dos</th><th>last change</th></tr></thead>\n<tbody>" > f
   for (k = 1; k <= H; k++) {
     i = ord[k]; cls = age(i)
-    printf "<tr data-tags=\"%s\"><td><a href=\"hosts/%s.html\">%s</a>", \
+    printf "<tr data-row data-tags=\"%s\">\n<td><a href=\"hosts/%s.html\">%s</a>", \
       esc(hf[i, 6]), esc(hf[i, 1]), esc(hf[i, 1]) > f
     if (al[hf[i, 1]] != "") printf "<br><span class=\"sub\">also %s</span>", \
       esc(al[hf[i, 1]]) > f
     if (hf[i, 9] == 1) printf "<br><span class=\"sub\">own rules.md</span>" > f
-    printf "</td><td>%s</td><td>%s</td><td>%s", esc(hf[i, 14]), \
+    printf "</td>\n<td>%s</td>\n<td>%s</td>\n<td>%s", esc(hf[i, 14]), \
       taglist(hf[i, 6]), esc(hf[i, 2]) > f
     if (hf[i, 8] != "") printf " <span class=\"sub\">(%s)</span>", esc(hf[i, 8]) > f
-    printf "</td><td>%s</td><td>%s", eolcell(i), esc(hf[i, 3]) > f
+    printf "</td>\n<td>%s</td>\n<td>%s", eolcell(i), esc(hf[i, 3]) > f
     if (hf[i, 7] != "") printf "<br><span class=\"sub\">ssh port %s</span>", esc(hf[i, 7]) > f
-    printf "</td><td>%s</td>", \
+    printf "</td>\n<td>%s</td>\n", \
       (cls == "" ? esc(agetext(i)) : pill(cls == "stale" ? "bad" : "warn", agetext(i))) > f
-    printf "<td>%s</td><td>%s</td></tr>\n", \
+    printf "<td class=\"num\">%s</td>\n<td>%s</td>\n</tr>\n", \
       (hf[i, 10] > 0 ? hf[i, 10] : "<span class=\"muted\">0</span>"), \
       esc(hf[i, 11]) > f
   }
-  if (!H) print "<tr><td colspan=\"9\" class=\"muted\">No servers in memory/servers/ yet.</td></tr>" > f
-  print "</tbody></table></div>" > f
+  if (!H) print "<tr><td colspan=\"9\" class=\"muted\">No host in memory/servers/ yet.</td></tr>" > f
+  print "</tbody></table>" > f
 
   if (SV) {
-    print "<h2>Services</h2>" > f
-    print "<p class=\"sub\">From <code>- Services:</code> in memory.md. A cell shows the version, a dot a service without one.</p>" > f
-    print "<div class=\"box\"><table class=\"matrix\"><thead><tr><th>Service</th>" > f
+    print "<h2>services <span class=\"sub\">from memory.md; &bull; without a version</span></h2>" > f
+    print "<div class=\"box\"><table class=\"dense matrix\"><thead><tr><th>service</th>" > f
     for (k = 1; k <= H; k++)
       printf "<th><a href=\"hosts/%s.html\">%s</a></th>", esc(hf[ord[k], 1]), \
         esc(hf[ord[k], 1]) > f
     print "</tr></thead><tbody>" > f
     for (i = 1; i <= SV; i++) {
-      printf "<tr><th class=\"svc\">%s</th>", esc(svl[i]) > f
+      printf "<tr data-row><th class=\"svc\">%s</th>", esc(svl[i]) > f
       for (k = 1; k <= H; k++) {
         n = ord[k]
         if (!((svl[i] SUBSEP n) in svhas)) printf "<td></td>" > f
@@ -580,42 +578,52 @@ function index_page(f,   i, k, h, n, cls, any, v, r, pa) {
 
   if (LK) network(f)
 
-  print "<h2>Open to-dos</h2>\n<div class=\"box\"><ul class=\"list\">" > f
+  print "<h2>open to-dos</h2>\n<ul class=\"list\">" > f
   for (i = 1; i <= TD; i++)
-    printf "<li data-tags=\"%s\"><a href=\"hosts/%s.html\">%s</a>: %s</li>\n", \
+    printf "<li data-row data-tags=\"%s\"><a href=\"hosts/%s.html\">%s</a>: %s</li>\n", \
       esc(hosttags(td[i, 1])), esc(td[i, 1]), esc(td[i, 1]), esc(td[i, 2]) > f
   if (!TD) print "<li class=\"muted\">Nothing open.</li>" > f
-  print "</ul></div>" > f
+  print "</ul>" > f
 
-  printf "<h2>Changes, last %d days</h2>\n", days > f
-  print "<p class=\"sub\"><a href=\"timeline.html\">Timeline</a>: the same window, one lane per server.</p>" > f
-  print "<div class=\"box\"><ul class=\"list\">" > f
+  printf "<h2>changes, last %d days <span class=\"sub\"><a href=\"timeline.html\">timeline</a></span></h2>\n<ul class=\"list\">\n", days > f
   any = 0
   for (i = 1; i <= C; i++) {
     if (dnum(ch[i, 1]) < 0 || T - dnum(ch[i, 1]) > days + 0) continue
-    change_item(f, i, 1); any = 1
+    change_item(f, i, 1, ""); any = 1
   }
-  if (!any) print "<li class=\"muted\">No changes recorded in this window.</li>" > f
-  print "</ul></div>" > f
+  if (!any) print "<li class=\"muted\">No changes in this window.</li>" > f
+  print "</ul>" > f
 
   if (AK) {
-    printf "<h2 id=\"audit\">Fleet audit %s</h2>\n", esc(adate) > f
-    printf "<p class=\"sub\">%d settings differ. Values that need root are not counted.%s</p>\n", \
-      DRIFT, (pdate != "" ? " Previous audit: " esc(pdate) "." : "") > f
-    print "<div class=\"box\"><table><thead><tr><th>Setting</th>" > f
-    for (h = 1; h <= AH; h++) printf "<th>%s</th>", esc(ahl[h]) > f
-    print "</tr></thead><tbody>" > f
+    printf "<h2 id=\"audit\">fleet audit %s <span class=\"sub\"><b>%d</b> settings differ%s; values that need root are not counted</span></h2>\n", \
+      esc(adate), DRIFT, (pdate != "" ? ", compared with " esc(pdate) : "") > f
+    if (AC) {
+      print "<ul class=\"list\">" > f
+      for (i = 1; i <= AC; i++) {
+        split(acl[i], pa, SUBSEP)
+        printf "<li data-row data-tags=\"%s\">%s <a href=\"hosts/%s.html\">%s</a>: <code>%s</code> <code>%s</code> → <code>%s</code></li>\n", \
+          esc(hosttags(pa[1])), pill("warn", "changed"), esc(pa[1]), esc(pa[1]), \
+          esc(pa[2]), esc(pv[pa[1], pa[2]]), esc(av[pa[1], pa[2]]) > f
+      }
+      print "</ul>" > f
+    }
+    print "<div class=\"box\" style=\"margin-top:6px\"><table class=\"dense matrix\">\n<thead><tr><th>setting</th>" > f
+    for (h = 1; h <= AH; h++)
+      printf "<th>%s</th>", ((ahl[h] in hidx) ? "<a href=\"hosts/" esc(ahl[h]) ".html\">" esc(ahl[h]) "</a>" : esc(ahl[h])) > f
+    print "</tr></thead>\n<tbody>" > f
     for (r = 0; r <= 1; r++)
       for (k = 1; k <= AK; k++) {
         if (drift[k] != (r == 0)) continue
-        printf "<tr%s><th>%s</th>", (drift[k] ? " class=\"drift\"" : ""), \
+        printf "<tr data-row%s><th>%s</th>", (drift[k] ? " class=\"drift\"" : ""), \
           esc(akl[k]) > f
         for (h = 1; h <= AH; h++) {
           v = ((ahl[h] SUBSEP akl[k]) in av) ? av[ahl[h], akl[k]] : ""
-          if (v ~ /^unknown\(needs-root\)/) v = "needs root"
           n = (((ahl[h] SUBSEP akl[k]) in pv) && pv[ahl[h], akl[k]] != av[ahl[h], akl[k]])
-          printf "<td%s>%s%s</td>", (drift[k] ? " class=\"diff\"" : ""), \
-            esc(v), (n ? " " pill("warn", "was " pv[ahl[h], akl[k]]) : "") > f
+          if (v ~ /^unknown/)
+            printf "<td class=\"muted\">%s</td>", (v ~ /needs-root/ ? "needs root" : esc(v)) > f
+          else
+            printf "<td>%s%s</td>", esc(v), \
+              (n ? " " pill("warn", "was " pv[ahl[h], akl[k]]) : "") > f
         }
         print "</tr>" > f
       }
@@ -623,23 +631,15 @@ function index_page(f,   i, k, h, n, cls, any, v, r, pa) {
   }
 
   if (GN) {
-    print "<h2>Guard denials, last 30 days</h2>" > f
-    print "<p class=\"sub\">From <code>~/.cache/jolitz/guard.log</code>. A denial that blocks real work is a false positive worth reporting; the commands stay in the log, not on this page.</p>" > f
-    print "<div class=\"box\"><table><thead><tr><th>Count</th><th>Last</th><th>Reason</th></tr></thead><tbody>" > f
+    print "<h2 id=\"guard\">guard <span class=\"sub\">denials of the last 30 days from ~/.cache/jolitz/guard.log, by reason; the commands stay in the log</span></h2>" > f
+    print "<table class=\"dense\">\n<thead><tr><th class=\"num\">count</th><th>last</th><th>reason</th></tr></thead>\n<tbody>" > f
     for (i = 1; i <= GR; i++)
-      printf "<tr><td>%d</td><td>%s</td><td>%s</td></tr>\n", gcount[grl[i]], \
+      printf "<tr><td class=\"num\">%d</td><td>%s</td><td>%s</td></tr>\n", gcount[grl[i]], \
         esc(glast[grl[i]]), esc(grl[i]) > f
-    print "</tbody></table></div>" > f
+    print "</tbody></table>" > f
   }
 
   foot(f)
-  if (TG) {
-    print "<script>" > f
-    print "document.querySelectorAll('[data-filter]').forEach(function(b){b.addEventListener('click',function(){var t=b.getAttribute('data-filter');document.querySelectorAll('[data-filter]').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});document.querySelectorAll('[data-tags]').forEach(function(el){el.hidden=t!=='*'&&(' '+el.getAttribute('data-tags')+' ').indexOf(' '+t+' ')<0})})})" > f
-    print "</script>" > f
-  }
-  print "</body>\n</html>" > f
-  close(f)
 }
 
 function rawfile(f, path,   line, any) {
@@ -654,75 +654,98 @@ function rawfile(f, path,   line, any) {
   return any
 }
 
-function host_page(n,   f, h, i, any, k, v) {
+function host_page(n,   f, h, i, any, k, v, shown) {
   h = hf[n, 1]
   f = out "/hosts/" h ".html"
-  head(f, h)
-  print "<p class=\"sub\"><a href=\"../index.html\">Fleet overview</a></p>" > f
-  printf "<h1>%s</h1>\n", esc(h) > f
+  head(f, h, "", "../")
+  printf "<div class=\"bar\">\n<h1>%s</h1>\n%s\n</div>\n", esc(h), taglist(hf[n, 6]) > f
   print "<p class=\"sub\">Handover sheet: what runs here, what changed and why, what is open. Built from memory/, not from the live server.</p>" > f
-  print "<h2>Facts</h2>\n<div class=\"box\"><table class=\"facts\"><tbody>" > f
-  printf "<tr><th>OS</th><td>%s</td></tr>\n", esc(hf[n, 2]) > f
-  printf "<tr><th>End of life</th><td>%s</td></tr>\n", eolcell(n) > f
-  printf "<tr><th>IP</th><td>%s</td></tr>\n", esc(hf[n, 3]) > f
-  if (hf[n, 7] != "") printf "<tr><th>SSH port</th><td>%s</td></tr>\n", esc(hf[n, 7]) > f
-  if (hf[n, 8] != "") printf "<tr><th>Mode</th><td>%s</td></tr>\n", esc(hf[n, 8]) > f
-  printf "<tr><th>Last connected</th><td>%s</td></tr>\n", esc(agetext(n)) > f
-  if (hf[n, 6] != "") printf "<tr><th>Tags</th><td>%s</td></tr>\n", taglist(hf[n, 6]) > f
-  if (hf[n, 14] != "") printf "<tr><th>Owner</th><td>%s</td></tr>\n", esc(hf[n, 14]) > f
-  if (hf[n, 15] != "") printf "<tr><th>Services</th><td>%s</td></tr>\n", esc(hf[n, 15]) > f
-  if (al[h] != "") printf "<tr><th>Also known as</th><td>%s</td></tr>\n", esc(al[h]) > f
-  print "</tbody></table></div>" > f
 
-  print "<h2>Open to-dos</h2>\n<div class=\"box\"><ul class=\"list\">" > f
+  # The handover box of the hub, without presence and claims:
+  # what is open, and the last changes with their way back.
+  print "<section class=\"handover\">\n<h2>handover</h2>\n<table class=\"facts\">" > f
+  printf "<tr><th>open</th><td>" > f
   any = 0
   for (i = 1; i <= TD; i++)
-    if (td[i, 1] == h) { printf "<li>%s</li>\n", esc(td[i, 2]) > f; any = 1 }
+    if (td[i, 1] == h) { printf "<div>- [ ] %s</div>", esc(td[i, 2]) > f; any = 1 }
+  if (!any) printf "<span class=\"muted\">nothing open</span>" > f
+  print "</td></tr>" > f
+  printf "<tr><th>last changes</th><td>" > f
+  shown = 0
+  for (i = 1; i <= C && shown < 3; i++)
+    if (ch[i, 3] == h) {
+      printf "<div><b>%s %s</b> %s%s<br><span class=\"sub\">%s</span></div>", \
+        esc(ch[i, 1]), esc(ch[i, 2]), \
+        (ch[i, 4] != "" ? "<span class=\"muted\">[" esc(ch[i, 4]) "]</span> " : ""), \
+        esc(ch[i, 5]), \
+        (ch[i, 6] != "" ? "Rollback: " esc(ch[i, 6]) : "no way back recorded") > f
+      shown++
+    }
+  if (!shown) printf "<span class=\"muted\">no changelog yet</span>" > f
+  print "</td></tr>\n</table>\n</section>" > f
+
+  print "<h2>facts</h2>\n<table class=\"facts\">" > f
+  printf "<tr><th>os</th><td>%s</td></tr>\n", esc(hf[n, 2]) > f
+  printf "<tr><th>end of life</th><td>%s</td></tr>\n", eolcell(n) > f
+  printf "<tr><th>ip</th><td>%s</td></tr>\n", esc(hf[n, 3]) > f
+  if (hf[n, 4] != "") printf "<tr><th>distro family</th><td>%s</td></tr>\n", esc(hf[n, 4]) > f
+  if (hf[n, 7] != "") printf "<tr><th>ssh port</th><td>%s</td></tr>\n", esc(hf[n, 7]) > f
+  if (hf[n, 8] != "") printf "<tr><th>mode</th><td>%s</td></tr>\n", esc(hf[n, 8]) > f
+  k = age(n)
+  printf "<tr><th>last connected</th><td>%s</td></tr>\n", \
+    (k == "" ? esc(agetext(n)) : pill(k == "stale" ? "bad" : "warn", agetext(n))) > f
+  if (hf[n, 14] != "") printf "<tr><th>owner</th><td>%s</td></tr>\n", esc(hf[n, 14]) > f
+  if (hf[n, 15] != "") printf "<tr><th>services</th><td>%s</td></tr>\n", esc(hf[n, 15]) > f
+  if (al[h] != "") printf "<tr><th>also known as</th><td>%s</td></tr>\n", esc(al[h]) > f
+  print "</table>" > f
+
+  print "<h2>to-dos</h2>\n<ul class=\"list\">" > f
+  any = 0
+  for (i = 1; i <= TD; i++)
+    if (td[i, 1] == h) { printf "<li>- [ ] %s</li>\n", esc(td[i, 2]) > f; any = 1 }
   if (!any) print "<li class=\"muted\">Nothing open.</li>" > f
-  print "</ul></div>" > f
+  print "</ul>" > f
 
   # Flags are constraints a colleague must know.
   any = 0
   for (i = 1; i <= C; i++)
     if (ch[i, 3] == h && ch[i, 7] != "") {
-      if (!any) print "<h2>Standing constraints</h2>\n<div class=\"box\"><ul class=\"list\">" > f
+      if (!any) print "<h2>standing constraints</h2>\n<ul class=\"list\">" > f
       printf "<li>%s <span class=\"sub\">(since %s)</span></li>\n", \
         esc(ch[i, 7]), esc(ch[i, 1]) > f
       any = 1
     }
-  if (any) print "</ul></div>" > f
+  if (any) print "</ul>" > f
 
   if (hf[n, 9] == 1) {
-    print "<h2>Own rules (rules.md)</h2>" > f
+    print "<h2>own rules (rules.md)</h2>" > f
     rawfile(f, mem "/servers/" h "/rules.md")
   }
 
-  print "<h2>Changes</h2>\n<div class=\"box\"><ul class=\"list\">" > f
+  print "<h2>changes</h2>\n<ul class=\"list\">" > f
   any = 0
   for (i = 1; i <= C; i++)
-    if (ch[i, 3] == h) { change_item(f, i, 0); any = 1 }
+    if (ch[i, 3] == h) { change_item(f, i, 0, "../"); any = 1 }
   if (!any) print "<li class=\"muted\">No changelog yet.</li>" > f
-  print "</ul></div>" > f
+  print "</ul>" > f
 
   any = 0
   for (k = 1; k <= AK; k++)
     if ((h SUBSEP akl[k]) in av) {
       if (!any) {
-        printf "<h2>Fleet audit %s</h2>\n<div class=\"box\"><table><tbody>\n", esc(adate) > f
+        printf "<h2>fleet audit %s</h2>\n<table class=\"facts\">\n", esc(adate) > f
         any = 1
       }
       v = av[h, akl[k]]
       printf "<tr><th>%s</th><td>%s%s</td></tr>\n", esc(akl[k]), esc(v), \
         (drift[k] ? " " pill("warn", "differs in the fleet") : "") > f
     }
-  if (any) print "</tbody></table></div>" > f
+  if (any) print "</table>" > f
 
   print "<h2>memory.md</h2>" > f
   if (!rawfile(f, mem "/servers/" h "/memory.md"))
     print "<p class=\"muted\">No memory.md.</p>" > f
   foot(f)
-  print "</body>\n</html>" > f
-  close(f)
 }
 
 # --- network: hosts on a circle, labelled lines ----------------
@@ -737,10 +760,9 @@ function network(f,   i, cx, cy, r, w, h, a, pi, nx, ny, x1, y1, x2, y2, \
   w = 760; h = NN <= 2 ? 220 : 160 + 44 * NN
   if (h > 640) h = 640
   cx = w / 2; cy = h / 2; r = (h - 70) / 2
-  print "<h2>Network</h2>" > f
-  print "<p class=\"sub\">From <code>- Link:</code> lines in <code>memory/network.md</code>. Arrows point from the side that opens the connection.</p>" > f
+  print "<h2>network <span class=\"sub\">from memory/network.md; an arrow points away from the side that opens the connection</span></h2>" > f
   print "<div class=\"box\">" > f
-  printf "<svg class=\"chart\" viewBox=\"0 0 %d %d\" role=\"img\" aria-label=\"Network links\">\n", \
+  printf "<svg class=\"chart net\" viewBox=\"0 0 %d %d\" role=\"img\" aria-label=\"Network links\">\n", \
     w, h > f
   print "<defs><marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"10\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto\"><path d=\"M0 0 L10 5 L0 10 z\" style=\"fill:var(--muted)\"/></marker></defs>" > f
   for (i = 1; i <= NN; i++) {
@@ -775,11 +797,11 @@ function network(f,   i, cx, cy, r, w, h, a, pi, nx, ny, x1, y1, x2, y2, \
     print "" > f
   }
   print "</svg>" > f
-  print "<ul class=\"list\">" > f
+  print "</div>\n<ul class=\"list\" style=\"margin-top:6px\">" > f
   for (i = 1; i <= LK; i++)
     printf "<li>%s &rarr; %s%s</li>\n", hostlink(lk[i, 1]), hostlink(lk[i, 2]), \
       (lk[i, 3] != "" ? " <span class=\"muted\">" esc(lk[i, 3]) "</span>" : "") > f
-  print "</ul></div>" > f
+  print "</ul>" > f
 }
 
 # --- timeline: one lane per host, one mark per change ----------
@@ -788,11 +810,9 @@ function timeline_page(f,   i, k, n, w, h, left, right, top, lane, x, y, \
   w = 960; left = 210; right = 20; top = 30; lane = 30
   h = top + lane * (H > 0 ? H : 1) + 20
   start = T - days
-  head(f, "Timeline")
-  print "<p class=\"sub\"><a href=\"index.html\">Fleet overview</a></p>" > f
-  printf "<h1>Timeline, last %d days</h1>\n", days > f
-  printf "<p class=\"sub\">%s%s &middot; %d changes. A dot is a changelog entry, a square an entry with <code>Flags:</code>. Hover for the headline.</p>\n", \
-    esc(now), (tag != "" ? " &middot; tag " esc(tag) : ""), RECENT > f
+  head(f, "timeline", "timeline", "")
+  printf "<div class=\"bar\">\n<h1>timeline</h1>\n<span class=\"sub\">last %d days · %d changes · a dot is an entry, a square one with Flags:</span>\n<input id=\"q\" type=\"search\" placeholder=\"filter  (/)\" autocomplete=\"off\">\n</div>\n", \
+    days, RECENT > f
   print "<div class=\"box\">" > f
   printf "<svg class=\"chart\" viewBox=\"0 0 %d %d\" role=\"img\" aria-label=\"Changes per server over time\">\n", \
     w, h > f
@@ -828,17 +848,15 @@ function timeline_page(f,   i, k, n, w, h, left, right, top, lane, x, y, \
   if (!H) printf "<text x=\"%d\" y=\"%d\">No servers in memory/servers/ yet.</text>\n", \
     left, top + lane / 2 > f
   print "</svg></div>" > f
-  print "<h2>Changes</h2>\n<div class=\"box\"><ul class=\"list\">" > f
+  print "<h2>changes</h2>\n<ul class=\"list\">" > f
   any = 0
   for (i = 1; i <= C; i++) {
     if (dnum(ch[i, 1]) < 0 || T - dnum(ch[i, 1]) > days + 0) continue
-    change_item(f, i, 1); any = 1
+    change_item(f, i, 1, ""); any = 1
   }
-  if (!any) print "<li class=\"muted\">No changes recorded in this window.</li>" > f
-  print "</ul></div>" > f
+  if (!any) print "<li class=\"muted\">No changes in this window.</li>" > f
+  print "</ul>" > f
   foot(f)
-  print "</body>\n</html>" > f
-  close(f)
 }
 
 # --- json ---------------------------------------------------

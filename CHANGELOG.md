@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.3.3-jolitz.12 — 2026-10-29
+
+- **The static overview looks like the hub.**
+  `bin/jolitz-overview` reads `hub/internal/ui/static/hub.css`
+  at build time and writes the hub's markup: the header bar
+  with fleet, timeline, audit and guard, the counters in one
+  line, a filter box (`/`) next to the tag buttons, dense
+  tables, the handover box with each change's way back on the
+  host page. A style change to the hub now reaches both. Dark
+  by default, light with the system setting, as in the hub.
+- **The hub diagram shows SSH from every workstation.** The
+  SSH line in `assets/hub/hub.svg` started at Linux only;
+  macOS and Windows with Git Bash now join it.
+- New screenshots in `assets/overview/`.
+
 ## 3.3.3-jolitz.11 — 2026-10-28
 
 - **The hub runs on PostgreSQL too.** `db = "postgres"` with
