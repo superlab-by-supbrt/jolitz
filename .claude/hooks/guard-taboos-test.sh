@@ -8,15 +8,17 @@ CLAUDE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 HOOK="$CLAUDE_DIR/hooks/guard-taboos.sh"
 PASS=0
 FAIL=0
+SKIP=0
 
-# Git Bash rewrites an argument that looks like a POSIX path
-# (/dev/sda) into a Windows path (C:/Program Files/Git/dev/sda)
-# when it calls a native program such as jq.exe, so the fixtures
-# would test other paths than they name. Off for the whole
-# matrix; no effect outside MSYS.
-MSYS_NO_PATHCONV=1
-MSYS2_ARG_CONV_EXCL='*'
-export MSYS_NO_PATHCONV MSYS2_ARG_CONV_EXCL
+# Git Bash rewrites arguments that look like POSIX paths when it
+# starts a native Windows program such as jq.exe: /dev/sda turns
+# into /Device/Harddisk0/Partition0, /tmp/x into a C:/ path. The
+# fixtures must reach the guard as written, so the harness's own
+# jq calls switch that off. The hook runs as its own process and
+# keeps the conversion it gets at run time. No effect elsewhere.
+# A file goes to jq on stdin: with the conversion off, jq.exe
+# could not open a POSIX path given as an argument.
+jq() { MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' command jq "$@"; }
 
 # --- parallel runs ---------------------------------------------
 # The matrix forks a shell, jq, awk and grep per case, well over a
@@ -40,7 +42,7 @@ if [ -z "${JOLITZ_TEST_SHARD:-}" ]; then
     done
     wait
     grep -hv '^guard-taboos tests: ' "$DIR"/* || true
-    P=0; F=0
+    P=0; F=0; S=0
     for f in "$DIR"/*; do
       s=$(grep '^guard-taboos tests: ' "$f")
       if [ -z "$s" ]; then
@@ -48,10 +50,10 @@ if [ -z "${JOLITZ_TEST_SHARD:-}" ]; then
         continue
       fi
       set -- $s
-      P=$((P + $3)); F=$((F + $5))
+      P=$((P + $3)); F=$((F + $5)); S=$((S + ${7:-0}))
     done
     [ -n "$DIR" ] && [ -d "$DIR" ] && rm -rf "$DIR"
-    echo "guard-taboos tests: $P passed, $F failed"
+    echo "guard-taboos tests: $P passed, $F failed, $S skipped"
     [ "$F" -eq 0 ]
     exit
   fi
@@ -1150,12 +1152,13 @@ fi
 # --- a denial without jq says why ------------------------------
 # Without jq the rules run on the raw hook input and block more;
 # the reason must name the missing jq so the user can fix it. A
-# PATH of every tool on this system except jq, as symlinks.
+# PATH of every tool on this system except jq (jq.exe under Git
+# Bash), as symlinks.
 NOJQ=$(mktemp -d) || exit 1
 for d in $(printf '%s' "$PATH" | tr ':' ' '); do
   for f in "$d"/*; do
     n=${f##*/}
-    [ "$n" = jq ] && continue
+    case $n in jq|jq.exe) continue ;; esac
     [ -x "$f" ] && [ ! -e "$NOJQ/$n" ] && ln -s "$f" "$NOJQ/$n" 2>/dev/null
   done
 done
@@ -1818,7 +1821,7 @@ if command -v jq >/dev/null 2>&1; then
   if jq -e '[.hooks[][] | .hooks[]?
       | select((.command // "") | test("guard-taboos\\.sh"))]
       | length > 0 and all(.onFailure == "block")' \
-      "$CLAUDE_DIR/settings.json" >/dev/null 2>&1; then
+      < "$CLAUDE_DIR/settings.json" >/dev/null 2>&1; then
     PASS=$((PASS + 1))
   else
     FAIL=$((FAIL + 1))
@@ -1858,6 +1861,106 @@ else
 fi
 
 fi
+
+# --- AIX -------------------------------------------------------
+# sshd and the network under the System Resource Controller.
+check deny 'stopsrc -s sshd'
+check deny 'ssh root@aix1 "stopsrc -s sshd"'
+check deny 'stopsrc -g ssh'
+check deny 'stopsrc -g tcpip'
+check deny 'stopsrc -a'
+check deny 'stopsrc -s "sshd"'
+check deny "stopsrc -s 'sshd'"
+check deny 'stopsrc -fs sshd'
+check deny 'stopsrc -cs sshd'
+check deny 'stopsrc -g "tcpip"'
+check deny 'ssh root@aix1 "stopsrc -fs sshd"'
+check deny 'stopsrc -s ss""hd'
+check deny "stopsrc -s ''sshd"
+check deny 'stopsrc -s ss\\hd'
+check deny 'stopsrc -g "tcp"ip'
+check pass 'lssrc -g ssh'
+check pass 'lssrc -s sshd'
+check pass 'startsrc -s sshd'
+check pass 'refresh -s syslogd'
+check pass 'stopsrc -s xntpd'
+# Power: plain shutdown halts on AIX; -Fr is the reboot.
+check deny 'fasthalt'
+check deny 'shutdown -F'
+check deny 'shutdown -t 10291200'
+check deny 'shutdown -r -t 10301200'
+check deny 'shutdown -Fr -t 10301200'
+check deny 'shutdown -Frt10301200'
+check deny 'shutdown -r "-t" 10301200'
+check deny "shutdown -r -'t' 10301200"
+check deny 'ssh root@aix1 "shutdown -F"'
+check pass 'shutdown -Fr'
+check pass 'shutdown -rF now'
+check pass 'ssh root@aix1 "shutdown -Fr"'
+check pass 'ssh root@web1 "shutdown -r"'
+check deny 'ssh root@web1 "shutdown -h"'
+# The volume manager: what destroys data, and what reads.
+check deny 'mkvg -f -y datavg hdisk2'
+check deny 'extendvg -f datavg hdisk3'
+check deny 'rmlv -f lv01'
+check deny 'reducevg -d datavg hdisk3'
+check deny 'rmfs -r /data'
+check deny 'chpv -c hdisk0'
+check deny 'chpv -C hdisk2'
+check deny 'ssh root@aix1 "rmlv -f lv01"'
+check pass 'mkvg -y datavg hdisk2'
+check pass 'lspv'
+check pass 'lsvg -l rootvg'
+check pass 'lslv hd4'
+check pass 'lsfs'
+check pass 'chpv -v a hdisk1'
+# The raw disk device, also through an interpreter.
+check deny 'dd if=/dev/zero of=/dev/rhdisk1 bs=1m'
+check deny 'python3 -c "open(\"/dev/rhdisk1\",\"wb\").write(b\"x\")"'
+check deny 'ssh root@aix1 "dd if=/dev/zero of=/dev/rhdisk1"'
+check pass 'getconf DISK_SIZE /dev/hdisk0'
+# Boot list, boot image, boot record, rootvg clones.
+check deny 'bootlist -m normal hdisk0 hdisk1'
+check deny 'bootlist -m normal -i'
+check deny 'bosboot -ad /dev/hdisk0'
+check deny 'mkboot -c -d /dev/hdisk1'
+check deny 'alt_disk_copy -d hdisk1'
+check deny 'alt_disk_install -C -d hdisk1'
+check deny 'alt_rootvg_op -X altinst_rootvg'
+check deny 'ssh root@aix1 "bootlist -m normal hdisk1"'
+check deny 'bootlist -m normal -o hdisk1'
+check deny 'bootlist -o -m normal hdisk1'
+check deny 'bootlist -m normal hdisk1 -o'
+check deny 'bootlist -m normal -o; bootlist -m normal hdisk1'
+check pass 'bootlist -m normal -o'
+check deny 'bootlist -m normal -o" hdisk1"'
+check deny 'bootlist -m normal "-o" hdisk1'
+check deny "bootlist -m normal -o' 'hdisk1"
+check deny "$(printf 'bootlist -m normal -o \\\nhdisk1')"
+check deny "$(printf 'stopsrc -s ss\\\nhd')"
+check deny "$(printf 'shutdown -r \\\n-t 10301200')"
+check pass 'bootlist -o -m both'
+check pass "ssh root@aix1 'bootlist -m both -o'"
+check pass 'ssh root@aix1 "bootlist -m normal -o"'
+check pass 'bosboot -vd /dev/hdisk0'
+# Accounts and the files under /etc/security.
+check deny 'rmuser -p alice'
+check deny 'rmgroup staff2'
+check deny 'ssh root@aix1 "rmuser alice"'
+check deny 'cp /tmp/p /etc/security/passwd'
+check deny 'echo x >> /etc/security/user'
+check deny 'ssh root@aix1 "echo x >> /etc/security/user"'
+check deny 'perl -e "open(F, \">>/etc/security/user\")"'
+check pass 'cat /etc/security/user'
+check pass 'lsuser -a account_locked alice'
+check pass 'mkuser alice'
+# Linux PAM keeps its /etc/security files writable.
+check pass "echo '* soft nofile 4096' >> /etc/security/limits.conf"
+check pass 'cp /tmp/g /etc/security/group.conf'
+check_file deny Write file_path /etc/security/passwd x
+check_file deny Write file_path /dev/rhdisk0 x
+check_file pass Write file_path /etc/security/limits.conf x
+
 # --- denial log (JOLITZ_GUARD_LOG=1) ---------------------------
 # The log is opt-in, names the path but never the text of a file
 # edit, and can never turn a deny into a pass.
@@ -1876,14 +1979,20 @@ log_ok() {
 json_for 'halt' | log_run "$LOGHOME" 1 ""; log_ok $? "halt still denied"
 grep -q "	bash	.*	halt\$" "$GLOG" 2>/dev/null
 log_ok $? "a denial is logged with mode and command"
-# NTFS has no Unix modes; Git Bash reports 644 whatever chmod
-# did. The mode is checked where it exists.
-case "$(uname -s)" in
-  MINGW*|MSYS*|CYGWIN*) ;;
-  *)
-    [ "$(stat -c %a "$GLOG" 2>/dev/null || stat -f %Lp "$GLOG")" = 600 ]
-    log_ok $? "the log is mode 0600" ;;
-esac
+# File modes and symlinks are checked only where the file system
+# has them: Git Bash on NTFS keeps neither a chmod 600 nor, by
+# default, a symlink. Such a check is reported as SKIP, not as a
+# pass it never earned.
+mode_of() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
+PROBE="$LOGHOME/probe"
+: > "$PROBE"; chmod 600 "$PROBE"
+if [ "$(mode_of "$PROBE")" = 600 ]; then
+  [ "$(mode_of "$GLOG")" = 600 ]
+  log_ok $? "the log is mode 0600"
+else
+  SKIP=$((SKIP + 1)); echo "SKIP: guard log: no file modes here"
+fi
+rm -f "$PROBE"
 json_for 'ls /tmp' | log_run "$LOGHOME" 1 ""
 [ "$(wc -l < "$GLOG" | tr -d ' ')" = 1 ]
 log_ok $? "an allowed command is not logged"
@@ -1902,13 +2011,17 @@ printf x > "$NOLOG/.cache" 2>/dev/null || { rm -rf "$NOLOG/.cache"; printf x > "
 json_for 'halt' | log_run "$NOLOG" 1 ""
 log_ok $? "an unwritable log still denies"
 # A planted symlink is not followed.
-rm -f "$GLOG"; ln -s "$LOGHOME/elsewhere" "$GLOG"
-json_for 'halt' | log_run "$LOGHOME" 1 ""
-log_ok $? "a symlinked log still denies"
-[ ! -e "$LOGHOME/elsewhere" ]
-log_ok $? "the log does not write through a symlink"
+rm -f "$GLOG"
+if ln -s "$LOGHOME/elsewhere" "$GLOG" 2>/dev/null && [ -L "$GLOG" ]; then
+  json_for 'halt' | log_run "$LOGHOME" 1 ""
+  log_ok $? "a symlinked log still denies"
+  [ ! -e "$LOGHOME/elsewhere" ]
+  log_ok $? "the log does not write through a symlink"
+else
+  SKIP=$((SKIP + 1)); echo "SKIP: guard log: no symlinks here"
+fi
 rm -rf "$LOGHOME" "$NOLOG"
 fi
 
-echo "guard-taboos tests: $PASS passed, $FAIL failed"
+echo "guard-taboos tests: $PASS passed, $FAIL failed, $SKIP skipped"
 [ "$FAIL" -eq 0 ]

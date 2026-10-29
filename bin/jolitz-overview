@@ -147,12 +147,26 @@ function product(os,   l) {
   if (l ~ /netbsd/) return "netbsd"
   if (l ~ /mac ?os/) return "macos"
   if (l ~ /alpine/) return "alpine-linux"
+  if (l ~ /(^|[^a-z])aix([^a-z]|$)/) return "ibm-aix"
   return ""
 }
 function version(os, p,   l, v, sp) {
   l = tolower(os)
   if (!match(l, /[0-9]+(\.[0-9]+)*/)) return ""
   v = substr(l, RSTART, RLENGTH)
+  # endoflife.date lists AIX by technology level: 7.3.2. Memory
+  # holds it as oslevel -s prints it (7300-02-03-2420) or as
+  # "7.3 TL2".
+  if (p == "ibm-aix") {
+    if (match(l, /[0-9][0-9]00-[0-9][0-9]/))
+      return substr(l, RSTART, 1) "." substr(l, RSTART + 1, 1) "." \
+        (substr(l, RSTART + 5, 2) + 0)
+    if (match(l, /[0-9]\.[0-9][ ]*tl[ ]*[0-9]+/)) {
+      v = substr(l, RSTART, RLENGTH); sp = v
+      sub(/[ ]*tl.*/, "", v); sub(/.*tl[ ]*/, "", sp)
+      return v "." (sp + 0)
+    }
+  }
   if (p == "sles" && match(l, /sp[0-9]+/)) {
     sp = substr(l, RSTART + 2, RLENGTH - 2)
     sub(/\..*/, "", v)
