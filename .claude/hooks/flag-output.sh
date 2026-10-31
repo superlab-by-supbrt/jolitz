@@ -48,7 +48,12 @@ printf '%s' "$INPUT" | jq -c '
     + "|you are (now )?(an? |the )?(ai|assistant|language model|llm|agent|claude)"
     + "|(new|updated|important|urgent|system|hidden) instructions?[:!]"
     + "|</?(system|instructions?|assistant|im_start|im_end)>|\\[/?inst\\]"
-    + "|system prompt"
+    + "|system prompt|\\[/?(system|inst|admin)\\]"
+    + "|if you are an? (ai|llm|language model|assistant|agent|bot|automated)"
+    + "|(automated|autonomous) agents?|ai systems"
+    + "|do not (inform|tell|notify|alert|mention|warn|show)[^\n]{0,20}(operator|user|human|admin)"
+    + "|without (informing|telling|notifying|alerting) [^\n]{0,20}(operator|user|human|admin)"
+    + "|(report|reply|respond|answer|say|output) only[: ]"
     + "|(send|post|upload|exfiltrate|forward|transmit|curl|copy)[^\n]{0,80}(environment variables|env vars|printenv|api keys?|tokens|credentials|secrets|ssh keys?|private keys?|\\.env|id_rsa|id_ed25519)";
   def remote: test("(^|[^[:alnum:]_.-])(ssh|scp|sftp|rsync|curl|wget|docker|podman|kubectl|lxc|incus|pct|qm|virsh|ansible|salt|mosh|telnet|nc|ncat|socat)([^[:alnum:]_.-]|$)");
   (.tool_input.command // "") as $cmd
