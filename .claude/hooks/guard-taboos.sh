@@ -471,7 +471,9 @@ LOCKFILE='[Jj][Oo][Ll][Ii][Tt][Zz]\.[Cc][Oo][Nn][Ff]'
 # file there is a plugin or its config: all of .opencode counts,
 # and so do opencode.json(c) and the global ~/.config/opencode/,
 # where a plugin could change a call after this guard saw it.
-SELF='(\.(claude/(settings(\.local)?\.json|hooks/)|opencode/)|/opencode\.jsonc?$|\.config/opencode(/|$))'
+# NTFS drops trailing dots and blanks and takes :stream suffixes
+# (opencode.json., opencode.json::$DATA): the same file.
+SELF='(\.(claude/(settings(\.local)?\.json|hooks/)|opencode/)|/opencode\.jsonc?[.[:space:]]*(:.*)?$|\.config/opencode([/.[:space:]:]|$))'
 
 # An assignment of the override, in shell (VAR=1), JSON
 # ("VAR": "1") or jq (.env.VAR="1") form. A bare mention, as in
@@ -890,9 +892,12 @@ case "$LC_CWD" in
   */.claude|*/.claude/*|*/.opencode|*/.opencode/*|*/.config/opencode|*/.config/opencode/*)
     IN_CLAUDE=1; CWD_IN_CLAUDE=1 ;;
 esac
+# Any word opencode counts, not only a path to it: cd ~/.config
+# && … opencode/plugins/x splits the path, opencode.js* globs the
+# name. Accepted false positive: brew upgrade opencode may only
+# read too; the operator runs it.
 case "$LC_CMD" in
-  *.claude*|*.opencode*|*opencode.json*|*.config/opencode*|*settings.local.json*)
-    IN_CLAUDE=1 ;;
+  *.claude*|*opencode*|*settings.local.json*) IN_CLAUDE=1 ;;
 esac
 # HFS+ skips zero-width characters and APFS folds a long s onto
 # s, so .clau<U+200B>de and ſettings.local.json reach the same
@@ -901,8 +906,7 @@ esac
 # in scope. An umlaut elsewhere does not.
 UQ_CMD=$(printf '%s' "$LC_CMD" | LC_ALL=C tr -d '\200-\377"'\''\\')
 case $UQ_CMD in
-  *.claude*|*.opencode*|*opencode.json*|*.config/opencode*|*ettings.local.json*)
-    IN_CLAUDE=1 ;;
+  *.claude*|*opencode*|*ettings.local.json*) IN_CLAUDE=1 ;;
 esac
 # A glob, brace or expansion in a path component can resolve to
 # .claude or .opencode when the literal text before it still
@@ -916,7 +920,9 @@ esac
 # such a command may only read. Not closable: a name built at run
 # time, in a variable (d=.cla; ${d}ude) or a command substitution
 # ($(printf .cla)ude). Every $( cannot count, or cp f
-# f.bak.$(date +%F) could not run. The guard is a backstop.
+# f.bak.$(date +%F) could not run. Nor can a bare * in the
+# repository root, which matches opencode.json among all else.
+# The guard is a backstop.
 GLOBBED=$(printf '%s\n' "$LC_CMD" | LC_ALL=C awk '
   BEGIN { q = "" }
   {
@@ -943,7 +949,7 @@ GLOBBED=$(printf '%s\n' "$LC_CMD" | LC_ALL=C awk '
   END { if (q != "") print " .*" }')
 if printf '%s\n' "$GLOBBED" \
   | LC_ALL=C grep -Eq \
-    '(^|[[:space:]/=<>:])(\.(c(l(a(u(de?)?)?)?)?|o(p(e(n(c(o(de?)?)?)?)?)?)?)?[][*?{$]|\{[^[:space:]/]*\.)'; then
+    '(^|[[:space:]/=<>:])(\.(c(l(a(u(de?)?)?)?)?|o(p(e(n(c(o(de?)?)?)?)?)?)?)?[][*?{$]|\.?op(e(n(c(o(de?)?)?)?)?)?[][*?{$]|\{[^[:space:]/]*\.)'; then
   IN_CLAUDE=1
 fi
 # ANSI-C quoting with a hex, octal or Unicode escape spells any
@@ -992,7 +998,9 @@ grep or ls in a call of their own" ;;
 overwrite the guard's own files - read them with cat, grep or \
 ls in a call of their own"
     fi
-    READONLY='^(cd|pushd|popd|ls|cat|head|tail|wc|stat|file|grep|egrep|fgrep|diff|cmp|readlink|realpath|sha256sum|shasum|md5|md5sum|echo|printf|true|test|\[|jq|less|more)( |$)'
+    # opencode --help and --version only print; any other opencode
+    # command next to its config is the operator's.
+    READONLY='^((cd|pushd|popd|ls|cat|head|tail|wc|stat|file|grep|egrep|fgrep|diff|cmp|readlink|realpath|sha256sum|shasum|md5|md5sum|echo|printf|true|test|\[|jq|less|more)( |$)|opencode (--help|-h|--version|-v)$)'
     READGIT='^git( -C [^ ]+)? (log|show|diff|status|blame|ls-files|grep|rev-parse|cat-file)( |$)'
     BAD=$(printf '%s\n' "$REDIR" | tr ';&|' '\n\n\n' \
       | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \

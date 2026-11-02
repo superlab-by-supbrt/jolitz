@@ -463,6 +463,8 @@ check deny 'ssh root@h "claude -p x"'
 check deny 'ssh root@h "opencode --dangerously-skip-permissions"'
 check pass 'claude --version'
 check pass 'opencode --help'
+check pass 'opencode --version'
+check deny 'opencode upgrade'
 check pass 'which claude'
 check pass 'ssh root@h "claude --version"'
 
@@ -2051,6 +2053,16 @@ check deny 'cp /tmp/p.js ~/.config/opencode/plugins/'
 check deny 'rm -rf /home/alice/.config/opencode'
 check deny "sed -i 's/deny/allow/' memory/opencode.json"
 check pass 'cat opencode.json'
+check deny 'echo {} > opencode.js*'
+check deny 'cd ~/.config && echo x > opencode/plugins/a.js'
+check deny 'echo x > ~/.config/op*/plugins/a.js'
+check deny 'echo x > "open"code.json'
+check pass 'ls ~/.config/opencode'
+check_file deny Write file_path '/home/alice/jolitz/opencode.json.' x
+check_file deny Write file_path '/home/alice/jolitz/opencode.json ' x
+check_file deny Write file_path '/home/alice/jolitz/opencode.json::$DATA' x
+check_file deny Write file_path /home/alice/.config/opencode./plugins/a.js x
+check_file pass Write file_path /home/alice/.config/opencode-old/notes.md x
 check pass 'cat memory/opencode.json.example'
 check_cwd deny /home/alice/.config/opencode 'echo x > plugins/a.js'
 check_file deny Write file_path /home/alice/jolitz/opencode.json x
