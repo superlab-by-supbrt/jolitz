@@ -5,11 +5,13 @@
 - **Globs that spell opencode put a command in scope.** `o*`,
   `?pencode`, `[o]pencode`, `{o,}pencode` and `*code` reach
   `opencode.json` or `~/.config/opencode` without the word in
-  them; such a command may only read now. A bare `*` stays
+  them, and so do bracket expressions (`[!x]pencode`,
+  `[a-z]pencode`); such a command may only read now. A bare `*` stays
   out, or every `rm -rf /tmp/build/*` would be denied.
 - **NTFS name forms in every path component.** `.claude./hooks/`,
-  `.opencode. /` and `.config./opencode/` are the guard's files
-  as much as the plain names.
+  `.opencode. /`, `.config./opencode/` and a directory stream
+  (`.claude::$INDEX_ALLOCATION/`) are the guard's files as much
+  as the plain names.
 
 ## 3.3.3-jolitz.20 — 2026-11-02
 

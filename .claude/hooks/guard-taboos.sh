@@ -472,9 +472,10 @@ LOCKFILE='[Jj][Oo][Ll][Ii][Tt][Zz]\.[Cc][Oo][Nn][Ff]'
 # and so do opencode.json(c) and the global ~/.config/opencode/,
 # where a plugin could change a call after this guard saw it.
 # NTFS drops trailing dots and blanks and takes :stream suffixes
-# (opencode.json., opencode.json::$DATA, .claude./hooks/): the
-# same file, in every component of the path.
-SELF='(\.(claude[.[:space:]]*/(settings(\.local)?\.json|hooks[.[:space:]]*/)|opencode[.[:space:]]*/)|/opencode\.jsonc?[.[:space:]]*(:.*)?$|\.config[.[:space:]]*/opencode([/.[:space:]:]|$))'
+# (opencode.json., opencode.json::$DATA, .claude./hooks/,
+# .claude::$INDEX_ALLOCATION/): the same file, in every
+# component of the path.
+SELF='(\.(claude[.[:space:]]*(:[^/]*)?/(settings(\.local)?\.json|hooks[.[:space:]]*(:[^/]*)?/)|opencode[.[:space:]]*(:[^/]*)?/)|/opencode\.jsonc?[.[:space:]]*(:.*)?$|\.config[.[:space:]]*(:[^/]*)?/opencode([/.[:space:]:]|$))'
 
 # An assignment of the override, in shell (VAR=1), JSON
 # ("VAR": "1") or jq (.env.VAR="1") form. A bare mention, as in
@@ -959,7 +960,10 @@ fi
 # with at least one of each, puts the command in scope. A bare *
 # or ? does not, nor *.json, nor a variable such as $c (see
 # above): the letters must stand in the name, not the suffix.
+# A bracket expression matches one character whatever it holds
+# ([!x], [^a], [a-z]), so it counts as a single ? first.
 if printf '%s\n' "$GLOBBED" \
+  | LC_ALL=C sed -E 's/\[[^]/[:space:]]*\]/?/g' \
   | LC_ALL=C grep -oE \
     '(^|[[:space:]/=<>:])\.?[][*?{},$opencd]+(\.jsonc?)?([/[:space:]"'\'';|&)]|$)' \
   | LC_ALL=C sed -E 's/(\.jsonc?)?[^][*?{},$opencd]*$//' \

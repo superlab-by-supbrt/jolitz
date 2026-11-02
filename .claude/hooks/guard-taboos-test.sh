@@ -2062,6 +2062,14 @@ check deny 'echo {} > o*.json'
 check deny 'echo {} > ?pencode.json'
 check deny 'echo {} > [o]pencode.json'
 check deny 'echo {} > {o,}pencode.json'
+check deny 'echo {} > [!x]pencode.json'
+check deny 'echo {} > [^a]pencode.json'
+check deny 'echo {} > [a-z]pencode.json'
+check deny 'echo x > ~/.config/[a-z]pencode/plugins/a.js'
+check pass 'rm -f /tmp/[0-9]*.tmp'
+check_file deny Write file_path '/home/alice/jolitz/.claude::$INDEX_ALLOCATION/hooks/guard-taboos.sh' x
+check_file deny Write file_path '/home/alice/jolitz/.opencode:x/plugins/a.js' x
+check_file deny Write file_path '/home/alice/.config::$INDEX_ALLOCATION/opencode/plugins/a.js' x
 check deny 'echo x > ~/.config/*code/plugins/a.js'
 check pass 'rm -rf /tmp/build/*'
 check pass 'ssh h "rm -f /var/backups/jolitz/*.old"'
