@@ -78,9 +78,13 @@ guard's JSON, the call is blocked, like
 
 ### What differs from Claude Code
 
-- The guard denies any write under `.opencode/`, as under
-  `.claude/hooks/`: the agent cannot rewrite or remove the
-  plugin. You edit it by hand.
+- The guard denies any write under `.opencode/`, to
+  `opencode.json` or `opencode.jsonc` (also
+  `memory/opencode.json`) and under `~/.config/opencode/`, as
+  under `.claude/hooks/`: the agent can neither rewrite the
+  plugin nor add one that changes a call after it, nor loosen
+  its own permission block. You edit those files by hand.
+- MCP tools pass unchecked, as under Claude Code.
 - The SessionStart hooks (update check, start screen, `jq`
   check, SSH socket directory) and the output marker
   (`.claude/hooks/flag-output.sh`) do not run. Create the

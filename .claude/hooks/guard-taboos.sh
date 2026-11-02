@@ -468,8 +468,10 @@ LOCKFILE='[Jj][Oo][Ll][Ii][Tt][Zz]\.[Cc][Oo][Nn][Ff]'
 # in any project, not only this one: the active checkout is
 # whichever one the session started in.
 # OpenCode runs the same guard from .opencode/plugins/, and every
-# file there is a plugin or its config: all of .opencode counts.
-SELF='\.(claude/(settings(\.local)?\.json|hooks/)|opencode/)'
+# file there is a plugin or its config: all of .opencode counts,
+# and so do opencode.json(c) and the global ~/.config/opencode/,
+# where a plugin could change a call after this guard saw it.
+SELF='(\.(claude/(settings(\.local)?\.json|hooks/)|opencode/)|/opencode\.jsonc?$|\.config/opencode(/|$))'
 
 # An assignment of the override, in shell (VAR=1), JSON
 # ("VAR": "1") or jq (.env.VAR="1") form. A bare mention, as in
@@ -885,11 +887,12 @@ LC_CMD=$(printf '%s' "$CMD" | LC_ALL=C tr '[:upper:]' '[:lower:]')
 IN_CLAUDE=0
 CWD_IN_CLAUDE=0
 case "$LC_CWD" in
-  */.claude|*/.claude/*|*/.opencode|*/.opencode/*)
+  */.claude|*/.claude/*|*/.opencode|*/.opencode/*|*/.config/opencode|*/.config/opencode/*)
     IN_CLAUDE=1; CWD_IN_CLAUDE=1 ;;
 esac
 case "$LC_CMD" in
-  *.claude*|*.opencode*|*settings.local.json*) IN_CLAUDE=1 ;;
+  *.claude*|*.opencode*|*opencode.json*|*.config/opencode*|*settings.local.json*)
+    IN_CLAUDE=1 ;;
 esac
 # HFS+ skips zero-width characters and APFS folds a long s onto
 # s, so .clau<U+200B>de and ſettings.local.json reach the same
@@ -898,7 +901,8 @@ esac
 # in scope. An umlaut elsewhere does not.
 UQ_CMD=$(printf '%s' "$LC_CMD" | LC_ALL=C tr -d '\200-\377"'\''\\')
 case $UQ_CMD in
-  *.claude*|*.opencode*|*ettings.local.json*) IN_CLAUDE=1 ;;
+  *.claude*|*.opencode*|*opencode.json*|*.config/opencode*|*ettings.local.json*)
+    IN_CLAUDE=1 ;;
 esac
 # A glob, brace or expansion in a path component can resolve to
 # .claude or .opencode when the literal text before it still

@@ -13,9 +13,14 @@
   is caught by its arguments. Nothing to install: OpenCode
   loads it when started in the checkout, unless
   `OPENCODE_DISABLE_PROJECT_CONFIG` is set.
-- **`.opencode/` is protected like `.claude/hooks/`.** A
-  command that touches it may only read, a file edit there is
-  denied, so the agent cannot rewrite the plugin.
+- **`.opencode/` is protected like `.claude/hooks/`, and so are
+  `opencode.json(c)` and `~/.config/opencode/`.** A command
+  that touches them may only read, a file edit there is
+  denied: the agent can neither rewrite the plugin, add a
+  plugin that changes a call after it, nor loosen its own
+  permission block. A patch or an unknown writer hands its
+  whole text to the guard, so an override assignment in it is
+  found.
 - `docs/opencode.md` says what to set up and how to check that
   the plugin runs; README, `docs/safety.md` and
   `rules/local-model.md` no longer say OpenCode runs no guard.

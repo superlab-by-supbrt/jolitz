@@ -70,6 +70,12 @@ await check("deny", "apply_patch", { patchText: patch(["*** Update File: /tmp/a.
 await check("deny", "apply_patch", { patchText: patch(["*** Delete File: /root/.ssh/authorized_keys"]) }, "patch deletes authorized_keys")
 await check("deny", "apply_patch", { patchText: "garbage without headers" }, "patch without a path")
 
+// the override assignment is found in any written text
+await check("deny", "apply_patch", { patchText: patch(["*** Add File: /tmp/run.sh", "+export JOLITZ_GUARD_DISABLE=1"]) }, "override written by a patch")
+await check("deny", "multiedit", { filePath: "/tmp/run.sh", edits: [{ newString: "JOLITZ_GUARD_DISABLE=1" }] }, "override written by an unknown writer")
+await check("deny", "write", { filePath: "opencode.json", content: "{}" }, "write opencode.json")
+await check("deny", "write", { filePath: "/home/alice/.config/opencode/plugins/a.js", content: "" }, "add a global plugin")
+
 // tools the hook is not registered for under Claude Code either
 await check("pass", "read", { filePath: "/etc/ssh/sshd_config" }, "read sshd_config")
 await check("pass", "grep", { pattern: "PermitRootLogin", path: "/etc/ssh" }, "grep /etc/ssh")

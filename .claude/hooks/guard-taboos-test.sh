@@ -2044,7 +2044,21 @@ check_file deny Write file_path /home/alice/jolitz/.opencode/plugins/jolitz-guar
 check_file deny Edit file_path /home/alice/jolitz/.opencode/opencode.json x
 check_file deny Write file_path /home/alice/jolitz/.OPENCODE/plugins/x.js x
 check_file pass Write file_path /home/alice/jolitz/docs/opencode.md x
-check_file pass Write file_path /home/alice/jolitz/memory/opencode.json x
+# OpenCode's config and its global plugin directory: a plugin
+# there could change a call after the guard saw it.
+check deny 'echo {} > opencode.json'
+check deny 'cp /tmp/p.js ~/.config/opencode/plugins/'
+check deny 'rm -rf /home/alice/.config/opencode'
+check deny "sed -i 's/deny/allow/' memory/opencode.json"
+check pass 'cat opencode.json'
+check pass 'cat memory/opencode.json.example'
+check_cwd deny /home/alice/.config/opencode 'echo x > plugins/a.js'
+check_file deny Write file_path /home/alice/jolitz/opencode.json x
+check_file deny Write file_path /home/alice/jolitz/opencode.jsonc x
+check_file deny Write file_path /home/alice/jolitz/memory/opencode.json x
+check_file deny Write file_path /home/alice/.config/opencode/plugins/a.js x
+check_file pass Write file_path /home/alice/jolitz/memory/opencode.json.example x
+check_file pass Write file_path /home/alice/jolitz/docs/opencode-notes.md x
 
 # --- denial log (JOLITZ_GUARD_LOG=1) ---------------------------
 # The log is opt-in, names the path but never the text of a file

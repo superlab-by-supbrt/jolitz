@@ -29,8 +29,11 @@
 //
 // Loaded automatically when OpenCode starts inside this checkout,
 // unless OPENCODE_DISABLE_PROJECT_CONFIG is set. The guard denies
-// the agent any write under .opencode/, so it cannot rewrite this
-// file. The guard is a backstop against mistakes, not a sandbox.
+// the agent any write under .opencode/, to opencode.json(c) and
+// under ~/.config/opencode/, so it can neither rewrite this file
+// nor add a plugin that changes a call after it. MCP tools pass,
+// as under Claude Code. The guard is a backstop against
+// mistakes, not a sandbox.
 
 import { spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
@@ -104,8 +107,17 @@ export const JolitzGuard = async ({ directory }) => {
         if (paths.length === 0 && String(args.patchText ?? "").trim() !== "") {
           throw new Error("jolitz guard: no file path found in the patch; the call is blocked")
         }
+        // The whole patch rides along as content, so the guard's
+        // scan for an override assignment sees every byte written.
         for (const p of paths) {
-          guard({ tool_name: "Write", cwd: base, tool_input: { file_path: abs(p) } }, "file")
+          guard(
+            {
+              tool_name: "Write",
+              cwd: base,
+              tool_input: { file_path: abs(p), content: String(args.patchText) },
+            },
+            "file",
+          )
         }
       } else if (tool === "edit" || tool === "write"
         || (typeof args.filePath === "string" && !READERS.has(tool))) {
@@ -115,7 +127,11 @@ export const JolitzGuard = async ({ directory }) => {
             cwd: base,
             tool_input: {
               file_path: abs(args.filePath),
-              content: args.content,
+              // An unknown writer may carry its text in any field.
+              content:
+                tool === "edit" || tool === "write"
+                  ? args.content
+                  : JSON.stringify(args),
               new_string: args.newString,
             },
           },
