@@ -11,10 +11,10 @@ read-only by default.
 
 Smaller models keep long rule sets worse: they skip
 a check, misread a taboo, invent a flag. Under
-OpenCode the guard hook does not run; the written
-rules are the only safety layer there. Reading
-breaks nothing, so reading is the default until the
-operator says otherwise.
+OpenCode the guard runs as a plugin, but the output
+marker does not, and the guard only catches the
+taboos. Reading breaks nothing, so reading is the
+default until the operator says otherwise.
 
 ## What applies
 

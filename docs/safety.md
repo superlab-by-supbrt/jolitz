@@ -110,8 +110,11 @@ reason. A denial that blocked real work is a false positive
 worth an issue. A command line can hold a secret, hence off
 by default. Writing it never changes a decision.
 
-OpenCode does not run it; there the written rules are the
-safety layer.
+In OpenCode the plugin `.opencode/plugins/jolitz-guard.js`
+runs the same script before every shell command and file
+write, and blocks on a deny or when the script fails
+([OpenCode](opencode.md#the-guard-in-opencode)). The output
+marker hook does not run there.
 
 ## Injected text in server output
 

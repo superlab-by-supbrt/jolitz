@@ -42,6 +42,11 @@ jobs:
       - name: Memory lint and overview tests
         run: sh tests/memory-tools-test.sh
 
+      # The OpenCode plugin, driven like OpenCode drives it, against
+      # the real guard script.
+      - name: OpenCode guard plugin tests
+        run: node tests/opencode-plugin-test.mjs
+
       # doctor, log search and guard report against fakes in
       # a temp HOME and PATH; no network, no server.
       - name: bin tools tests

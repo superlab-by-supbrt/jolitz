@@ -46,6 +46,12 @@ detect, usually the SSH user, and keeps it in
   plus `winget install jqlang.jq`; Claude Code then runs the
   shell and the guard in Git Bash. Without Git Bash the guard
   cannot run and every tool call is blocked.
+- **OpenCode:** start `opencode` in the checkout, as
+  `claude` above. The plugin `.opencode/plugins/jolitz-guard.js`
+  loads by itself and runs the same guard before every shell
+  command and file write. Leave `OPENCODE_DISABLE_PROJECT_CONFIG`
+  unset: with it, OpenCode loads no plugin and no guard runs.
+  Details and a check: [docs/opencode.md](docs/opencode.md).
 - **Language:** ask in any language; jolitz answers in yours.
   `Language: German` in `memory/user.md` sets the default.
 
@@ -176,7 +182,8 @@ the map of your fleet. Details and API: [hub/README.md](hub/README.md).
 - **It respects locks:** `memory/blacklist.md`,
   `memory/readonly.md`, and `/etc/jolitz.conf` on the server
   itself.
-- **The guard** (a Claude Code hook) blocks the absolute
+- **The guard** (a Claude Code hook, an OpenCode plugin)
+  blocks the absolute
   taboos in every permission mode: power off, filesystems,
   partition tables, boot loaders, SSH keys, `sshd_config`,
   sudoers, accounts, the server lock, secrets sent off the
@@ -195,7 +202,7 @@ The long form: [docs/safety.md](docs/safety.md).
 | Rules, the guard, the server lock, heavy work | [docs/safety.md](docs/safety.md) |
 | Auto mode, cron, unattended runs, updates and pinning | [docs/automation.md](docs/automation.md) |
 | `memory/`, backup, privacy, team use over git, your own rules, logs | [docs/data.md](docs/data.md) |
-| OpenCode and local models | [docs/opencode.md](docs/opencode.md) |
+| OpenCode: the guard plugin, local models | [docs/opencode.md](docs/opencode.md) |
 | Team hub: install, API, config, metrics | [hub/README.md](hub/README.md) |
 | What changed | [CHANGELOG.md](CHANGELOG.md) |
 

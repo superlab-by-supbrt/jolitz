@@ -1,5 +1,30 @@
 # Changelog
 
+## 3.3.3-jolitz.20 — 2026-11-02
+
+- **The guard runs under OpenCode.**
+  `.opencode/plugins/jolitz-guard.js` hands every shell
+  command, edit, write and patch to
+  `.claude/hooks/guard-taboos.sh` through OpenCode's
+  `tool.execute.before` and stops the call on a deny. One
+  guard for both tools. It fails closed: a script that does
+  not start, times out (15 s) or answers with anything but the
+  guard's JSON blocks the call. A tool OpenCode renames later
+  is caught by its arguments. Nothing to install: OpenCode
+  loads it when started in the checkout, unless
+  `OPENCODE_DISABLE_PROJECT_CONFIG` is set.
+- **`.opencode/` is protected like `.claude/hooks/`, and so are
+  `opencode.json(c)` and `~/.config/opencode/`.** A command
+  that touches them may only read, a file edit there is
+  denied: the agent can neither rewrite the plugin, add a
+  plugin that changes a call after it, nor loosen its own
+  permission block. A patch or an unknown writer hands its
+  whole text to the guard, so an override assignment in it is
+  found.
+- `docs/opencode.md` says what to set up and how to check that
+  the plugin runs; README, `docs/safety.md` and
+  `rules/local-model.md` no longer say OpenCode runs no guard.
+
 ## 3.3.3-jolitz.19 — 2026-10-29
 
 - **A banner from the field is a test fixture.** A reader

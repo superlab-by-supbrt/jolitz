@@ -463,6 +463,8 @@ check deny 'ssh root@h "claude -p x"'
 check deny 'ssh root@h "opencode --dangerously-skip-permissions"'
 check pass 'claude --version'
 check pass 'opencode --help'
+check pass 'opencode --version'
+check deny 'opencode upgrade'
 check pass 'which claude'
 check pass 'ssh root@h "claude --version"'
 
@@ -2020,6 +2022,55 @@ check pass 'grep -r curl /etc/cron.d'
 check pass 'ssh-keygen -lf ~/.ssh/id_ed25519.pub'
 check pass "python3 -c 'import os; print(os.environ[\"HOME\"])'"
 check pass "node -e 'fetch(\"https://example.com\")'"
+
+# --- .opencode: the OpenCode plugin that runs this guard -------
+# Protected like .claude/hooks: in scope a command may only read.
+check deny 'echo x > .opencode/plugins/jolitz-guard.js'
+check deny 'rm -f .opencode/plugins/jolitz-guard.js'
+check deny 'mv .opencode .opencode.off'
+check deny 'cp /tmp/p.js .opencode/plugins/'
+check deny "sed -i 's/throw/void/' .opencode/plugins/jolitz-guard.js"
+check deny 'rm -rf .op*'
+check deny "rm -rf '.open'code"
+check deny 'rm -rf .OpenCode'
+check deny 'python3 -c "open(\".opencode/plugins/a.js\",\"w\").write(\"\")"'
+check deny 'ssh root@h "rm -rf /home/alice/jolitz/.opencode"'
+check pass 'cat .opencode/plugins/jolitz-guard.js'
+check pass 'ls -la .opencode/plugins'
+check pass 'grep -n guard .opencode/plugins/jolitz-guard.js'
+check pass 'git log --oneline -- .opencode'
+check_cwd deny /home/alice/jolitz/.opencode/plugins 'echo x > jolitz-guard.js'
+check_cwd deny /home/alice/jolitz/.opencode 'rm -rf plugins'
+check_cwd pass /home/alice/jolitz/.opencode 'ls plugins'
+check_file deny Write file_path /home/alice/jolitz/.opencode/plugins/jolitz-guard.js x
+check_file deny Edit file_path /home/alice/jolitz/.opencode/opencode.json x
+check_file deny Write file_path /home/alice/jolitz/.OPENCODE/plugins/x.js x
+check_file pass Write file_path /home/alice/jolitz/docs/opencode.md x
+# OpenCode's config and its global plugin directory: a plugin
+# there could change a call after the guard saw it.
+check deny 'echo {} > opencode.json'
+check deny 'cp /tmp/p.js ~/.config/opencode/plugins/'
+check deny 'rm -rf /home/alice/.config/opencode'
+check deny "sed -i 's/deny/allow/' memory/opencode.json"
+check pass 'cat opencode.json'
+check deny 'echo {} > opencode.js*'
+check deny 'cd ~/.config && echo x > opencode/plugins/a.js'
+check deny 'echo x > ~/.config/op*/plugins/a.js'
+check deny 'echo x > "open"code.json'
+check pass 'ls ~/.config/opencode'
+check_file deny Write file_path '/home/alice/jolitz/opencode.json.' x
+check_file deny Write file_path '/home/alice/jolitz/opencode.json ' x
+check_file deny Write file_path '/home/alice/jolitz/opencode.json::$DATA' x
+check_file deny Write file_path /home/alice/.config/opencode./plugins/a.js x
+check_file pass Write file_path /home/alice/.config/opencode-old/notes.md x
+check pass 'cat memory/opencode.json.example'
+check_cwd deny /home/alice/.config/opencode 'echo x > plugins/a.js'
+check_file deny Write file_path /home/alice/jolitz/opencode.json x
+check_file deny Write file_path /home/alice/jolitz/opencode.jsonc x
+check_file deny Write file_path /home/alice/jolitz/memory/opencode.json x
+check_file deny Write file_path /home/alice/.config/opencode/plugins/a.js x
+check_file pass Write file_path /home/alice/jolitz/memory/opencode.json.example x
+check_file pass Write file_path /home/alice/jolitz/docs/opencode-notes.md x
 
 # --- denial log (JOLITZ_GUARD_LOG=1) ---------------------------
 # The log is opt-in, names the path but never the text of a file
