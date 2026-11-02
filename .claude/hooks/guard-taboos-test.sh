@@ -2021,6 +2021,31 @@ check pass 'ssh-keygen -lf ~/.ssh/id_ed25519.pub'
 check pass "python3 -c 'import os; print(os.environ[\"HOME\"])'"
 check pass "node -e 'fetch(\"https://example.com\")'"
 
+# --- .opencode: the OpenCode plugin that runs this guard -------
+# Protected like .claude/hooks: in scope a command may only read.
+check deny 'echo x > .opencode/plugins/jolitz-guard.js'
+check deny 'rm -f .opencode/plugins/jolitz-guard.js'
+check deny 'mv .opencode .opencode.off'
+check deny 'cp /tmp/p.js .opencode/plugins/'
+check deny "sed -i 's/throw/void/' .opencode/plugins/jolitz-guard.js"
+check deny 'rm -rf .op*'
+check deny "rm -rf '.open'code"
+check deny 'rm -rf .OpenCode'
+check deny 'python3 -c "open(\".opencode/plugins/a.js\",\"w\").write(\"\")"'
+check deny 'ssh root@h "rm -rf /home/alice/jolitz/.opencode"'
+check pass 'cat .opencode/plugins/jolitz-guard.js'
+check pass 'ls -la .opencode/plugins'
+check pass 'grep -n guard .opencode/plugins/jolitz-guard.js'
+check pass 'git log --oneline -- .opencode'
+check_cwd deny /home/alice/jolitz/.opencode/plugins 'echo x > jolitz-guard.js'
+check_cwd deny /home/alice/jolitz/.opencode 'rm -rf plugins'
+check_cwd pass /home/alice/jolitz/.opencode 'ls plugins'
+check_file deny Write file_path /home/alice/jolitz/.opencode/plugins/jolitz-guard.js x
+check_file deny Edit file_path /home/alice/jolitz/.opencode/opencode.json x
+check_file deny Write file_path /home/alice/jolitz/.OPENCODE/plugins/x.js x
+check_file pass Write file_path /home/alice/jolitz/docs/opencode.md x
+check_file pass Write file_path /home/alice/jolitz/memory/opencode.json x
+
 # --- denial log (JOLITZ_GUARD_LOG=1) ---------------------------
 # The log is opt-in, names the path but never the text of a file
 # edit, and can never turn a deny into a pass.
