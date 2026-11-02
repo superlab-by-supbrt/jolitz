@@ -2065,6 +2065,8 @@ check deny 'echo {} > {o,}pencode.json'
 check deny 'echo {} > [!x]pencode.json'
 check deny 'echo {} > [^a]pencode.json'
 check deny 'echo {} > [a-z]pencode.json'
+check deny 'echo {} > [o][p][e][n][c][o][d][e].json'
+check deny 'echo {} > [o]???????.json'
 check deny 'echo x > ~/.config/[a-z]pencode/plugins/a.js'
 check pass 'rm -f /tmp/[0-9]*.tmp'
 check_file deny Write file_path '/home/alice/jolitz/.claude::$INDEX_ALLOCATION/hooks/guard-taboos.sh' x

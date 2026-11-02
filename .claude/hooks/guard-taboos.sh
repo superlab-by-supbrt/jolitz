@@ -961,9 +961,14 @@ fi
 # or ? does not, nor *.json, nor a variable such as $c (see
 # above): the letters must stand in the name, not the suffix.
 # A bracket expression matches one character whatever it holds
-# ([!x], [^a], [a-z]), so it counts as a single ? first.
-if printf '%s\n' "$GLOBBED" \
-  | LC_ALL=C sed -E 's/\[[^]/[:space:]]*\]/?/g' \
+# ([!x], [^a], [a-z]): the test runs on the command as it is and
+# once more with each bracket expression as a single ?, and either
+# puts it in scope. The first keeps [o][p][e]..., the second
+# catches [!x]pencode. A run of bare ? (????????.json) stays out,
+# like a bare *.
+if { printf '%s\n' "$GLOBBED"
+     printf '%s\n' "$GLOBBED" | LC_ALL=C sed -E 's/\[[^]/[:space:]]*\]/?/g'
+   } \
   | LC_ALL=C grep -oE \
     '(^|[[:space:]/=<>:])\.?[][*?{},$opencd]+(\.jsonc?)?([/[:space:]"'\'';|&)]|$)' \
   | LC_ALL=C sed -E 's/(\.jsonc?)?[^][*?{},$opencd]*$//' \
