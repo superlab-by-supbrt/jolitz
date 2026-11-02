@@ -472,8 +472,9 @@ LOCKFILE='[Jj][Oo][Ll][Ii][Tt][Zz]\.[Cc][Oo][Nn][Ff]'
 # and so do opencode.json(c) and the global ~/.config/opencode/,
 # where a plugin could change a call after this guard saw it.
 # NTFS drops trailing dots and blanks and takes :stream suffixes
-# (opencode.json., opencode.json::$DATA): the same file.
-SELF='(\.(claude/(settings(\.local)?\.json|hooks/)|opencode/)|/opencode\.jsonc?[.[:space:]]*(:.*)?$|\.config/opencode([/.[:space:]:]|$))'
+# (opencode.json., opencode.json::$DATA, .claude./hooks/): the
+# same file, in every component of the path.
+SELF='(\.(claude[.[:space:]]*/(settings(\.local)?\.json|hooks[.[:space:]]*/)|opencode[.[:space:]]*/)|/opencode\.jsonc?[.[:space:]]*(:.*)?$|\.config[.[:space:]]*/opencode([/.[:space:]:]|$))'
 
 # An assignment of the override, in shell (VAR=1), JSON
 # ("VAR": "1") or jq (.env.VAR="1") form. A bare mention, as in
@@ -950,6 +951,19 @@ GLOBBED=$(printf '%s\n' "$LC_CMD" | LC_ALL=C awk '
 if printf '%s\n' "$GLOBBED" \
   | LC_ALL=C grep -Eq \
     '(^|[[:space:]/=<>:])(\.(c(l(a(u(de?)?)?)?)?|o(p(e(n(c(o(de?)?)?)?)?)?)?)?[][*?{$]|\.?op(e(n(c(o(de?)?)?)?)?)?[][*?{$]|\{[^[:space:]/]*\.)'; then
+  IN_CLAUDE=1
+fi
+# opencode needs no leading dot, so a glob can stand anywhere in
+# it: o*, ?pencode, [o]pencode, {o,}pencode, *code. A path
+# component made only of opencode's letters and glob characters,
+# with at least one of each, puts the command in scope. A bare *
+# or ? does not, nor *.json, nor a variable such as $c (see
+# above): the letters must stand in the name, not the suffix.
+if printf '%s\n' "$GLOBBED" \
+  | LC_ALL=C grep -oE \
+    '(^|[[:space:]/=<>:])\.?[][*?{},$opencd]+(\.jsonc?)?([/[:space:]"'\'';|&)]|$)' \
+  | LC_ALL=C sed -E 's/(\.jsonc?)?[^][*?{},$opencd]*$//' \
+  | LC_ALL=C grep -E '[][*?{]' | LC_ALL=C grep -Eq '[opencd]'; then
   IN_CLAUDE=1
 fi
 # ANSI-C quoting with a hex, octal or Unicode escape spells any

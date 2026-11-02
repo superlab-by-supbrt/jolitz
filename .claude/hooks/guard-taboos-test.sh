@@ -2058,6 +2058,19 @@ check deny 'cd ~/.config && echo x > opencode/plugins/a.js'
 check deny 'echo x > ~/.config/op*/plugins/a.js'
 check deny 'echo x > "open"code.json'
 check pass 'ls ~/.config/opencode'
+check deny 'echo {} > o*.json'
+check deny 'echo {} > ?pencode.json'
+check deny 'echo {} > [o]pencode.json'
+check deny 'echo {} > {o,}pencode.json'
+check deny 'echo x > ~/.config/*code/plugins/a.js'
+check pass 'rm -rf /tmp/build/*'
+check pass 'ssh h "rm -f /var/backups/jolitz/*.old"'
+check pass 'tar czf x.tgz src/*'
+check pass 'rm -f build/*.o'
+check_file deny Write file_path '/home/alice/jolitz/.claude./hooks/guard-taboos.sh' x
+check_file deny Write file_path '/home/alice/jolitz/.claude/hooks./x.sh' x
+check_file deny Write file_path '/home/alice/jolitz/.opencode. /plugins/a.js' x
+check_file deny Write file_path '/home/alice/.config./opencode/plugins/a.js' x
 check_file deny Write file_path '/home/alice/jolitz/opencode.json.' x
 check_file deny Write file_path '/home/alice/jolitz/opencode.json ' x
 check_file deny Write file_path '/home/alice/jolitz/opencode.json::$DATA' x
