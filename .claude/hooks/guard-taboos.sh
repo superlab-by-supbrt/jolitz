@@ -484,9 +484,11 @@ SELF='(\.(claude[.[:space:]]*(:[^/]*)?/(settings(\.local)?\.json|hooks[.[:space:
 # for file mode, where the target is a whole path; CMD form for
 # commands, where the name stands in a word.
 RULESFILE='/(agents|claude)\.md[.[:space:]]*(:.*)?$'
-RULES='(^|[/[:space:]="'\''<>])[Aa][Gg][Ee][Nn][Tt][Ss]\.[Mm][Dd]([^[:alnum:]_.-]|\.[[:space:]]|$)|(^|[/[:space:]="'\''<>])[Cc][Ll][Aa][Uu][Dd][Ee]\.[Mm][Dd]([^[:alnum:]_.-]|\.[[:space:]]|$)'
-# The bare name, for writes_to, which supplies the path before it.
-RULESNAME='([Aa][Gg][Ee][Nn][Tt][Ss]|[Cc][Ll][Aa][Uu][Dd][Ee])\.[Mm][Dd]'
+# The bare name, for ONTO and writes_to, which supply the path
+# before it. Trailing dots and blanks are the same file on NTFS.
+RULESNAME='([Aa][Gg][Ee][Nn][Tt][Ss]|[Cc][Ll][Aa][Uu][Dd][Ee])\.[Mm][Dd][.[:space:]]*'
+RULESEND='([^[:alnum:]_.-]|$)'
+RULES="(^|[/[:space:]=\"'<>])$RULESNAME$RULESEND"
 
 # An assignment of the override, in shell (VAR=1), JSON
 # ("VAR": "1") or jq (.env.VAR="1") form. A bare mention, as in
@@ -1082,18 +1084,19 @@ fi
 # --- The agent's own rules -------------------------------------
 # AGENTS.md (the rules) and CLAUDE.md (its import), in the same
 # write set as sudoers: a redirect, sed or perl in place, an
-# editor, a delete, move, re-permission or copy, tee, and an
-# interpreter next to the name. Reading (cat, grep, less, git
+# editor, a delete, move, re-permission or copy, tee, find
+# -delete, and an interpreter next to the name. Reading (cat, grep, less, git
 # diff) stays allowed. Accepted false positive: a file of either
 # name on a server, and cp with one as the source; the operator
 # lifts the guard for that.
 if hit "$RULES"; then
-  if hit "$ONTO($RULES)" \
+  if hit "$ONTO$RULESNAME$RULESEND" \
     || { hit '(^|[^[:alnum:]_-])(sed|perl)([^[:alnum:]_-]|$)' \
          && hit "$INPLACE"; } \
     || hit "(^|[^[:alnum:]_-])$EDITOR([^[:alnum:]_-]|\$)" \
     || hit "(^|[^[:alnum:]_-])($CLOBBER|cp)([^[:alnum:]_-]|\$)" \
     || hit "$INTERP" \
+    || hit '(^|[[:space:]])-delete([[:space:]]|$)' \
     || writes_to "$RULESNAME"
   then
     deny "AGENTS.md and CLAUDE.md are the agent's own rules; the \

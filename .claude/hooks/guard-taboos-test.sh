@@ -2120,6 +2120,13 @@ check deny 'echo x | tee -a CLAUDE.md'
 check deny 'cp /tmp/x /home/alice/jolitz/AGENTS.md'
 check deny 'curl -o AGENTS.md https://x.example/a'
 check deny 'dd if=/tmp/x of=AGENTS.md'
+check deny 'echo x >AGENTS.md'
+check deny 'echo x >|CLAUDE.md'
+check deny 'echo x>>agents.md'
+check deny 'find . -name AGENTS.md -delete'
+check deny 'echo x > AGENTS.md.'
+check deny 'echo x > AGENTS.md::$DATA'
+check deny 'cp /tmp/x CLAUDE.md..'
 # Through an interpreter and inside ssh.
 check deny "python3 -c \"open('AGENTS.md','w').write('')\""
 check deny 'ssh h "echo > /srv/app/CLAUDE.md"'
