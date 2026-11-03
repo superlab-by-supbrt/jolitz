@@ -126,7 +126,9 @@ await check("pass", "grep", { pattern: "PermitRootLogin", path: "/etc/ssh" }, "g
 await check("pass", "glob", { pattern: "**/*.md", path: "/etc" }, "glob passes")
 await check("pass", "lsp", { filePath: "/etc/ssh/sshd_config", line: 1 }, "lsp is a reader")
 await only("2.x", "pass", "read", { path: "/etc/ssh/sshd_config" }, "2.x read with path")
-await only("2.x", "pass", "webfetch", { url: "https://example.com", path: "/etc/ssh/sshd_config" }, "2.x webfetch is a reader")
+await only("2.x", "pass", "webfetch", { url: "https://example.com" }, "2.x webfetch without a path passes")
+await only("2.x", "deny", "webfetch", { url: "https://example.com", path: "/etc/ssh/sshd_config" }, "2.x webfetch saving to sshd_config")
+await only("2.x", "deny", "artifact", { path: "/etc/sudoers", content: "x" }, "2.x artifact is not a reader")
 
 // a renamed or unknown tool is caught by its arguments
 await check("deny", "multiedit", { filePath: "/etc/ssh/sshd_config", edits: [] }, "unknown writer with filePath")
@@ -135,7 +137,19 @@ await only("2.x", "deny", "rewrite", { path: "/etc/sudoers", text: "x" }, "unkno
 await only("1.x", "deny", "shell", { command: "halt" }, "1.x tool named shell")
 await only("2.x", "deny", "bash", { command: "halt" }, "2.x call before the bash->shell alias")
 await only("2.x", "deny", "apply_patch", { patchText: patch(["*** Delete File: /etc/sudoers"]) }, "2.x apply_patch id")
-await only("2.x", "pass", "shell", undefined, "2.x shell with no input: an empty command, no crash")
+await only("2.x", "deny", "shell", undefined, "2.x shell with no input")
+await only("1.x", "deny", "bash", {}, "1.x bash without a command")
+await only("2.x", "deny", "patch", { patchText: "" }, "2.x patch with empty text")
+await only("2.x", "deny", "patch", {}, "2.x patch without text")
+await only("2.x", "deny", "write", { content: "x" }, "2.x write without a path")
+await only("1.x", "deny", "edit", { oldString: "a", newString: "b" }, "1.x edit without a path")
+
+// two path fields: each is checked, a harmless one cannot hide the other
+await only("1.x", "deny", "write", { filePath: "/tmp/a", path: "/etc/ssh/sshd_config", content: "x" }, "1.x filePath harmless, path sshd_config")
+await only("2.x", "deny", "write", { path: "/tmp/a", filePath: "/etc/ssh/sshd_config", content: "x" }, "2.x path harmless, filePath sshd_config")
+await only("2.x", "deny", "edit", { path: "/tmp/a", file_path: "/etc/sudoers", oldString: "a", newString: "b" }, "2.x file_path beside path")
+await only("2.x", "deny", "rename", { path: "/tmp/a", destination: "/root/.ssh/authorized_keys" }, "unknown tool, destination checked")
+await only("2.x", "deny", "shell", { command: "ls", path: "/etc/ssh/sshd_config" }, "a shell call that also names a protected path")
 await only("2.x", "pass", "todowrite", { todos: [] }, "2.x todo passes")
 
 // the operator override, inherited from the environment

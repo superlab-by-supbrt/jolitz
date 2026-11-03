@@ -202,6 +202,10 @@ has "$T/d5.out" 'OK    Claude Code: not in PATH, OpenCode is' \
   "doctor: says OpenCode stands in"
 has "$T/d5.out" 'OK    OpenCode 2.2.5: guard plugin' \
   "doctor: OpenCode version and guard plugin"
+printf '#!/bin/sh\necho 1.14.2\n' > "$T/oconly/opencode"
+PATH="$T/oconly" "$DOCTOR" -d "$M" > "$T/d6.out" 2>&1
+has "$T/d6.out" 'WARN  OpenCode 1.14.2: below 1.15.0' \
+  "doctor: OpenCode before 1.15 does not load the plugin"
 
 chmod 755 "$HOME/.cache/jolitz"
 PATH="$T/bin1:$REAL_PATH" "$DOCTOR" -d "$M" > "$T/d5.out" 2>&1

@@ -13,7 +13,9 @@
 // cannot start, times out, exits non-zero or answers with
 // something that is not the guard's JSON, the call is stopped.
 //
-// Two plugin APIs, one default export:
+// Two plugin APIs, one default export (OpenCode 1.15 or newer;
+// older 1.x call every export as a function and would not load
+// this one):
 //   OpenCode 1.x reads default.server(input) and calls the
 //     "tool.execute.before"(input, output) hook it returns; the
 //     arguments are output.args.
@@ -32,8 +34,10 @@
 // where the hook is registered for Bash and the edit tools only.
 // A tool OpenCode renames later is still caught by its arguments:
 // any tool with a command string is checked as a shell command,
-// any with patchText as a patch, any with a filePath or path as a
-// write unless it is one of the known readers.
+// any with patchText as a patch, any with a path argument as a
+// write unless it is one of the known readers, every path
+// argument on its own. A known tool missing its argument is
+// denied.
 //
 // Loaded automatically when OpenCode starts inside this checkout
 // (.opencode/plugins/), unless OPENCODE_DISABLE_PROJECT_CONFIG is
@@ -94,19 +98,33 @@ function patchPaths(text) {
   return found
 }
 
-const READERS = new Set([
-  "read", "grep", "glob", "list", "lsp", "webfetch", "websearch",
-  "skill", "question", "todoread", "todowrite", "todo",
-  "mcp-resource", "artifact", "file-diff",
-])
+// Tools known to only read. Anything else that carries a path is
+// checked as a write; the guard passes ordinary paths anyway.
+const READERS = new Set(["read", "grep", "glob", "list", "lsp"])
+// Every argument that can name a file. A call that names two must
+// not slip one past the guard behind the other: each is checked.
+const PATH_KEYS = ["filePath", "path", "file_path", "file", "target", "destination"]
 
 // One tool call, either API: the tool id, its arguments, and the
-// directory relative paths start from.
+// directory relative paths start from. A known shell, patch or
+// file tool without the argument it needs is denied, not passed.
 function check(tool, args, base) {
   args = args && typeof args === "object" ? args : {}
   const abs = (p) => path.resolve(base, String(p ?? ""))
-  const file = typeof args.filePath === "string" ? args.filePath : args.path
-  if (tool === "bash" || tool === "shell" || typeof args.command === "string") {
+  const files = PATH_KEYS.filter((k) => typeof args[k] === "string").map((k) => args[k])
+  const shell = tool === "bash" || tool === "shell"
+  const patcher = tool === "apply_patch" || tool === "patch"
+  const writer = tool === "edit" || tool === "write"
+  if (shell && typeof args.command !== "string") {
+    throw new Error("jolitz guard: a shell call without a command string; the call is blocked")
+  }
+  if (patcher && (typeof args.patchText !== "string" || args.patchText.trim() === "")) {
+    throw new Error("jolitz guard: a patch call without patch text; the call is blocked")
+  }
+  if (writer && files.length === 0) {
+    throw new Error("jolitz guard: a file edit without a file path; the call is blocked")
+  }
+  if (shell || typeof args.command === "string") {
     guard(
       {
         tool_name: "Bash",
@@ -115,7 +133,8 @@ function check(tool, args, base) {
       },
       "bash",
     )
-  } else if (tool === "apply_patch" || tool === "patch" || typeof args.patchText === "string") {
+  }
+  if (patcher || typeof args.patchText === "string") {
     const paths = patchPaths(args.patchText ?? "")
     if (paths.length === 0 && String(args.patchText ?? "").trim() !== "") {
       throw new Error("jolitz guard: no file path found in the patch; the call is blocked")
@@ -132,24 +151,23 @@ function check(tool, args, base) {
         "file",
       )
     }
-  } else if (tool === "edit" || tool === "write"
-    || (typeof file === "string" && !READERS.has(tool))) {
-    guard(
-      {
-        tool_name: tool === "edit" ? "Edit" : "Write",
-        cwd: base,
-        tool_input: {
-          file_path: abs(file),
-          // An unknown writer may carry its text in any field.
-          content:
-            tool === "edit" || tool === "write"
-              ? args.content
-              : JSON.stringify(args),
-          new_string: args.newString,
+  }
+  if (writer || (files.length > 0 && !READERS.has(tool))) {
+    for (const f of files) {
+      guard(
+        {
+          tool_name: tool === "edit" ? "Edit" : "Write",
+          cwd: base,
+          tool_input: {
+            file_path: abs(f),
+            // An unknown writer may carry its text in any field.
+            content: writer ? args.content : JSON.stringify(args),
+            new_string: args.newString,
+          },
         },
-      },
-      "file",
-    )
+        "file",
+      )
+    }
   }
 }
 

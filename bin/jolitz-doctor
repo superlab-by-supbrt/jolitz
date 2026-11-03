@@ -107,10 +107,15 @@ days_since() {
 # plugin .opencode/plugins/jolitz-guard.js (OpenCode 1.x and 2.x).
 if command -v opencode >/dev/null 2>&1; then
   ov=$(opencode --version 2>/dev/null | head -n 1) || ov=""
-  if [ -f "$REPO_DIR/.opencode/plugins/jolitz-guard.js" ]; then
-    ok "OpenCode ${ov:-(version not readable)}: guard plugin .opencode/plugins/jolitz-guard.js"
-  else
+  ovn=$(printf '%s' "$ov" | sed -n 's/^[^0-9]*\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p')
+  if [ ! -f "$REPO_DIR/.opencode/plugins/jolitz-guard.js" ]; then
     warn "OpenCode ${ov:-(version not readable)}: guard plugin .opencode/plugins/jolitz-guard.js missing"
+  elif [ -n "$ovn" ] && [ "$(vercmp "$ovn" 1.15.0)" -lt 0 ]; then
+    # Before 1.15 OpenCode calls every export as a function and
+    # does not load the plugin's default object: no guard.
+    warn "OpenCode $ovn: below 1.15.0, the guard plugin does not load"
+  else
+    ok "OpenCode ${ov:-(version not readable)}: guard plugin .opencode/plugins/jolitz-guard.js"
   fi
 fi
 if ! command -v claude >/dev/null 2>&1; then
