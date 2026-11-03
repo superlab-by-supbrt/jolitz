@@ -136,7 +136,7 @@ guard hook denies a redirect onto a computed target.
    commands before the config file.
 
 6. **Confirm with a fresh login**, using the
-   fresh-login options from `CLAUDE.md`, to the
+   fresh-login options from `AGENTS.md`, to the
    address the host is reachable on now:
 
        ssh -o BatchMode=yes -o ConnectTimeout=5 \

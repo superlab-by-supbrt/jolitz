@@ -1,7 +1,7 @@
 # Incident Report Format
 
 One report per incident, in the user's language. Facts, one
-per line (`CLAUDE.md` → Talking to Humans). Nothing before
+per line (`AGENTS.md` → Talking to Humans). Nothing before
 the header, nothing after the last section.
 
 ```

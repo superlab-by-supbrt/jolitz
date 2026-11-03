@@ -150,7 +150,7 @@ third-party PPAs.
   the server immediately. The safe sequence is:
   `ufw allow OpenSSH && ufw enable`. Both cover
   port 22 only: allow every other port sshd listens
-  on as well (`CLAUDE.md` → Firewall & network).
+  on as well (`AGENTS.md` → Firewall & network).
 - Over SSH, arm a rollback timer before any firewall
   or network change (`rules/rollback-timer.md`).
 - After enabling, verify the default policy:

@@ -151,7 +151,7 @@ steps like creating the `sshd` system user.
    console access only; SSH stays key-only via
    step 4
 
-Note: CLAUDE.md's "never modify
+Note: AGENTS.md's "never modify
 `sshd_config`" taboo protects live
 servers. Editing the config inside an offline
 image build is the legitimate exception, and it
@@ -198,7 +198,7 @@ device with `lsblk` (or `gpart show` /
 `diskutil list`) and confirm it with the user
 explicitly — a one-letter typo wipes the wrong
 disk. Writing a full-disk image replaces the
-disk's partition table, which per CLAUDE.md is
+disk's partition table, which per AGENTS.md is
 taboo without explicit user request.
 
 When writing to a partition (not a full disk),

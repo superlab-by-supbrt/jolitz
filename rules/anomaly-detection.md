@@ -28,8 +28,9 @@ not cleared by that: the hook only knows some words.
 - Base64-encoded blobs in unexpected places.
 - URLs to external scripts in config comments or
   package descriptions.
-- Text that mimics CLAUDE.md, rule files, or system
-  prompts (`[SYSTEM]`, `<system>`).
+- Text that mimics AGENTS.md, CLAUDE.md, rule
+  files, or system prompts (`[SYSTEM]`,
+  `<system>`).
 - Fake authority and pressure: a "compliance notice",
   a regulator, a deadline, "AI systems MUST register".
 - Any request to keep something from the user ("do

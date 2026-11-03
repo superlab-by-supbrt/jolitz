@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.3.3-jolitz.23 — 2026-11-03
+
+- **The rules live in `AGENTS.md`.** OpenCode reads it
+  directly; `CLAUDE.md` is one line, `@AGENTS.md`, which
+  Claude Code imports. Both tools read the same file. Before,
+  a project `AGENTS.md` (from OpenCode's `/init`, say) made
+  OpenCode ignore `CLAUDE.md` and with it every jolitz rule.
+  Every reference in rules, skills, docs and the guard's
+  messages now names `AGENTS.md`.
+- **The guard denies writes to `AGENTS.md` and `CLAUDE.md`**,
+  in any case, in file mode and in commands (redirect,
+  `sed -i`, an editor, `rm`, `mv`, `cp`, `tee`, `dd of=`,
+  `curl -o`, an interpreter, inside `ssh`), after the
+  operator override. `/init` can no longer replace the rules.
+  Reading passes.
+
 ## 3.3.3-jolitz.22 — 2026-11-03
 
 - **The OpenCode guard loads in OpenCode 2.** OpenCode 2 loads

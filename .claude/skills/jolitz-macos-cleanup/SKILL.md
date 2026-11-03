@@ -47,7 +47,7 @@ jolitz first-connection pipeline still applies first.
        /usr/bin/python3 \
          .claude/skills/jolitz-macos-cleanup/scripts/scan.py orphans
 
-   Remote (script on stdin, SSH options from `CLAUDE.md`):
+   Remote (script on stdin, SSH options from `AGENTS.md`):
 
        ssh <options> user@host /usr/bin/python3 - orphans \
          < .claude/skills/jolitz-macos-cleanup/scripts/scan.py

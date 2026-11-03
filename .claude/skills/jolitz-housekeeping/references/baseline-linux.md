@@ -61,7 +61,7 @@ the security-only subset. Do not present the total as "security
 updates" — that overstates the finding.
 
 The security-filter syntax varies by distro release. Per "Verify
-Before Running" in `CLAUDE.md`, verify the flags with `--help` on
+Before Running" in `AGENTS.md`, verify the flags with `--help` on
 the target before relying on them.
 
 **Debian/Ubuntu:**

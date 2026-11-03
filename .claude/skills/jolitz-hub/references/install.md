@@ -2,7 +2,7 @@
 
 The hub host is a server like any other: pipeline, class and
 port check, backup, changelog, `Way back:`. The commands below
-run on the host over SSH with the options of `CLAUDE.md` → SSH
+run on the host over SSH with the options of `AGENTS.md` → SSH
 Options, as root or via `rules/privilege-escalation.md`. Example
 values throughout: host `ops.example.com`, URL
 `https://hub.example.com`, version `3.3.3-jolitz.8`, first admin
@@ -54,7 +54,7 @@ values throughout: host `ops.example.com`, URL
      reaches it through a VPN or an SSH tunnel with
      `http://127.0.0.1:7331` as the URL. The UI cookie is then
      not `Secure`; say so.
-4. **Firewall** (`CLAUDE.md` → Firewall Awareness). With a
+4. **Firewall** (`AGENTS.md` → Firewall Awareness). With a
    proxy: open 443 (and 80 for Caddy's certificate) to all, to
    the team's network only, or no change. Recommend the team
    network when the hub is not meant for the internet. Port
@@ -658,4 +658,4 @@ export` or `GET /api/v1/export` is the way to carry it
 elsewhere. A PostgreSQL database stays too; dropping it is the
 job of whoever runs that server. The account `jolitz-hub` stays too; deleting an
 account is the operator's job, the guard denies it to jolitz
-(`CLAUDE.md` → Critical Safety Rules).
+(`AGENTS.md` → Critical Safety Rules).

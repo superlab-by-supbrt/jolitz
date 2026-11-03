@@ -38,7 +38,7 @@ write the line when the file is created.
 
 With a stored port, add `-o Port=<port>` to the
 standard or the fresh-login options
-(`CLAUDE.md` → SSH Options) on every call:
+(`AGENTS.md` → SSH Options) on every call:
 
     ssh -o BatchMode=yes … -o Port=2222 user@host
     scp -o BatchMode=yes … -o Port=2222 file user@host:
@@ -154,4 +154,4 @@ The port jolitz connects to can also differ from
 the port sshd listens on: a router forwards 2222 to
 22 inside. The stored port is the connect port; a
 firewall on the host keeps open the ports sshd
-listens on (`CLAUDE.md` → Firewall & network).
+listens on (`AGENTS.md` → Firewall & network).

@@ -15,7 +15,7 @@ Rules for FreeBSD (all versions).
 - Check which pkg branch the host uses (`quarterly`
   or `latest`) in `/etc/pkg/FreeBSD.conf` before
   installing, and stick to the branch the host
-  already uses (CLAUDE.md: stable release tracks).
+  already uses (AGENTS.md: stable release tracks).
 
 ## Version Detection
 
@@ -40,7 +40,7 @@ Rules for FreeBSD (all versions).
   without an SSH rule locks you out immediately.
   The example below passes port 22 only: list every
   port sshd listens on (`to port { 22 2222 }`,
-  `CLAUDE.md` → Firewall & network).
+  `AGENTS.md` → Firewall & network).
 - Minimal safe `/etc/pf.conf`:
   ```
   ext_if = "vtnet0"  # set to the real interface, see ifconfig

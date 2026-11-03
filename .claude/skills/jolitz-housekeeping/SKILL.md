@@ -25,7 +25,7 @@ applies before any of this runs.
    jolitz rule-override chain (later wins):
    - `memory/custom-rules/jolitz-housekeeping.md` if present
      (global custom overrides for this skill — `## Add:`,
-     `## Replace:`, `## Remove:` prefixes per `CLAUDE.md`).
+     `## Replace:`, `## Remove:` prefixes per `AGENTS.md`).
    - `memory/housekeeping.md` if present (additional cross-
      server custom checks — free-form Markdown, gitignored by
      default).
@@ -34,7 +34,7 @@ applies before any of this runs.
    - `memory/servers/<hostname>/rules.md` if present (per-server
      rule overrides — same prefixes as above, highest precedence).
    Note: `memory/custom-rules/all.md` is already loaded by the
-   CLAUDE.md session-start preflight — do not re-read it.
+   AGENTS.md session-start preflight — do not re-read it.
 2. **Select checks.** Run all baseline checks for the detected OS
    plus any service-specific checks triggered by entries in the
    server's `memory.md` (e.g. PostgreSQL, nginx, Docker). The

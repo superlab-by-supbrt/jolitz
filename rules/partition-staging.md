@@ -56,7 +56,7 @@ table:
    planned partition layout and get the user's
    explicit approval before touching anything.
 3. **Confirm every partition-table command.**
-   Per CLAUDE.md, modifying the partition table
+   Per AGENTS.md, modifying the partition table
    is an absolute taboo without explicit user
    request. Ask before EVERY `gpart delete`,
    `gpart add`, `sgdisk`, `fdisk`, or equivalent

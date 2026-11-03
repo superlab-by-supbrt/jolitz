@@ -59,7 +59,7 @@ once is a fleet question first: `jolitz-fleet-audit`.
    "Changed since" entries for this host.
 6. **Service state.** The probes of the branch, in two or three
    parallel batches. A probe that merely mentions a guarded
-   path runs in a call of its own (`CLAUDE.md` → Critical
+   path runs in a call of its own (`AGENTS.md` → Critical
    Safety Rules).
 7. **Verify the finding** against the live system before
    writing it down (`rules/verify-before-reporting.md`): the

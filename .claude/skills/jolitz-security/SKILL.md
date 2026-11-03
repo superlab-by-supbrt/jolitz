@@ -25,13 +25,13 @@ applies before any of this runs.
    jolitz rule-override chain (later wins):
    - `memory/custom-rules/jolitz-security.md` if present (global
      custom overrides for this skill — `## Add:`, `## Replace:`,
-     `## Remove:` prefixes per `CLAUDE.md`).
+     `## Remove:` prefixes per `AGENTS.md`).
    - `memory/servers/<hostname>/memory.md` for context (services,
      legitimate external bindings, VPN role).
    - `memory/servers/<hostname>/rules.md` if present (per-server
      rule overrides — same prefixes as above, highest precedence).
    Note: `memory/custom-rules/all.md` is already loaded by the
-   CLAUDE.md session-start preflight — do not re-read it.
+   AGENTS.md session-start preflight — do not re-read it.
 2. **Run checks in 2–3 parallel batches** for speed — not one
    massive batch. If a single parallel tool call errors, Claude
    Code cancels sibling calls, so grouping limits blast radius.

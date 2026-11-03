@@ -110,6 +110,10 @@ await check("pass", "write", { filePath: "memory/servers/web1/memory.md", conten
 await check("deny", "write", { filePath: "opencode.json", content: "{}" }, "write opencode.json")
 await check("deny", "write", { filePath: "opencode.jsonc", content: "{}" }, "write opencode.jsonc")
 await check("deny", "write", { filePath: "/home/alice/.config/opencode/plugins/a.js", content: "" }, "add a global plugin")
+// /init writes AGENTS.md, the rules themselves
+await check("deny", "write", { filePath: "AGENTS.md", content: "# Project\n" }, "write AGENTS.md (OpenCode /init)")
+await check("deny", "edit", { filePath: "/home/alice/jolitz/CLAUDE.md", oldString: "@AGENTS.md", newString: "" }, "edit the CLAUDE.md import")
+await check("pass", "read", { filePath: "AGENTS.md" }, "read AGENTS.md")
 
 // apply_patch / patch: every path in the patch is checked
 const patch = (lines) => ["*** Begin Patch", ...lines, "*** End Patch"].join("\n")

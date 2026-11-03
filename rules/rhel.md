@@ -42,7 +42,7 @@ finding. See `rules/version-check.md`.
   cuts off the SSH session immediately. The `ssh`
   service covers port 22 only: add every other port
   sshd listens on with `--add-port=<port>/tcp`
-  (`CLAUDE.md` → Firewall & network).
+  (`AGENTS.md` → Firewall & network).
 - Over SSH, arm a rollback timer before any firewall
   or network change (`rules/rollback-timer.md`).
   Change the runtime config first and persist with

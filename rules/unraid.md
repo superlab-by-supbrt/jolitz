@@ -98,7 +98,7 @@ Unraid ships no host firewall: `iptables` INPUT
 policy is ACCEPT, plus the libvirt chains. Treat
 this as the expected state, flag it, and discuss it
 with the user before adding anything — see
-`CLAUDE.md` → Firewall & network.
+`AGENTS.md` → Firewall & network.
 
 ## Docker
 

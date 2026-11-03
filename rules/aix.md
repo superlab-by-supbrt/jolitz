@@ -156,7 +156,7 @@ firewall daemon. IPFilter was removed in 7.3.
   that runs `mkfilt -d`, and the permit for the SSH
   port goes in before any deny.
 - A host without the filter device has no packet
-  filter. Report it as missing (CLAUDE.md, Expected
+  filter. Report it as missing (AGENTS.md, Expected
   Software); enabling it is a change that asks first.
 
 ## Disks and LVM

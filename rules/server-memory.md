@@ -3,7 +3,7 @@
 Each server: `memory/servers/<hostname>/` with
 `memory.md`, `changelog.log`, optionally `todo.md`,
 and optionally `rules.md` (per-server rule
-overrides — see CLAUDE.md → Rule Overrides).
+overrides — see AGENTS.md → Rule Overrides).
 
 **On first connection:** create directory and
 `memory.md` with at least:

@@ -55,7 +55,7 @@ hand.
 ## How to check
 
 At session start, with the preflight
-(`CLAUDE.md` → Session Start Preflight): does one of
+(`AGENTS.md` → Session Start Preflight): does one of
 `memory/opencode.json`, `memory/opencode.jsonc`,
 `opencode.json`, `opencode.jsonc` exist, and does it
 hold a local provider? Read the file (`.jsonc` may

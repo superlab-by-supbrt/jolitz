@@ -5,7 +5,7 @@ reads; none restarts, deletes or writes. Bound every log
 read (`rules/log-queries.md`). Commands come from the
 loaded `rules/<family>.md` and the housekeeping baselines;
 where a flag is not named there, check `--help` on the host
-before relying on it (`CLAUDE.md` → Verify Before Running).
+before relying on it (`AGENTS.md` → Verify Before Running).
 
 ## Common batch (every symptom, Linux)
 
@@ -68,7 +68,7 @@ FreeBSD: `/var/log/messages` holds `pkg:` lines;
 
 The host does not answer SSH. Read
 `rules/ssh-unreachable.md` and follow it: a fresh-login
-attempt with the fresh-login options from `CLAUDE.md`, the
+attempt with the fresh-login options from `AGENTS.md`, the
 port from memory, then the distinction between "host down",
 "sshd down" and "firewall". Nothing in this skill scans
 ports or tries other accounts. Report what the user can
@@ -168,7 +168,7 @@ du -xh -d 1 DIR 2>/dev/null | sort -h | tail -n 10
 - The journal above its limit: `journalctl --disk-usage`
   against `SystemMaxUse` in `/etc/systemd/journald.conf`.
 - Never propose a bigger disk at the provider
-  (`CLAUDE.md` → Work with the disk the server has). The
+  (`AGENTS.md` → Work with the disk the server has). The
   proposed fix names what to delete or rotate, with its
   size, and asks.
 
