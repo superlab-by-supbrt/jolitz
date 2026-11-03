@@ -14,7 +14,7 @@ Plain text, gitignored:
 - `custom-rules/`: your global overrides
 - `network.md`, `housekeeping.md`: cross-server facts, your
   own checks
-- `opencode.json`: your OpenCode config
+- `opencode.json` or `opencode.jsonc`: your OpenCode config
 - `audits/`: one snapshot per fleet audit
 - `overview/`, `eol/`: pages and cached end-of-life dates
   from `bin/jolitz-overview`; safe to delete

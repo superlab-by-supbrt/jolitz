@@ -85,7 +85,8 @@ edited.
 change.** Keep it compact (~30 lines max). Remove
 outdated entries, merge related items.
 
-**Update `Last connected:` on every connection.**
+**Update `Last connected:` once per session**, on
+the first connection to the host.
 
 Memory files never hold credential values — see
 `rules/secrets.md`.

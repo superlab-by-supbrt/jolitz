@@ -1,5 +1,45 @@
 # Changelog
 
+## 3.3.3-jolitz.22 — 2026-11-03
+
+- **The OpenCode guard loads in OpenCode 2.** OpenCode 2 loads
+  a plugin only from a default export with `id` and `setup()`;
+  the plugin had none, so under 2.x nothing was guarded. It
+  now has one default export for both APIs: 1.x reads
+  `server()` and its `tool.execute.before` hook, 2.x reads
+  `setup()` and `tool.hook("execute.before")`. The 2.x tool
+  ids (`shell`, `patch`) and its `path` argument for `edit`
+  and `write` are mapped. Read from the 2.2.5 source; a
+  reader reported the `path` gap.
+- **Every path argument is checked; fewer readers.** A call
+  naming two paths (`filePath` and `path`) cannot hide one
+  behind the other; only `read`, `grep`, `glob`, `list` and
+  `lsp` pass as readers; a known shell, patch or file tool
+  without its argument is denied. Needs OpenCode 1.3.4 or
+  newer, which reads the default export; the doctor warns
+  below.
+- **Fails closed, tested.** The plugin test drives both APIs
+  with every case, plus a guard that cannot start, exits
+  non-zero, answers garbage or hangs past the timeout: each
+  denies.
+- **`bin/jolitz-doctor` accepts OpenCode alone.** No FAIL
+  without `claude` when `opencode` is installed; it checks
+  the guard plugin instead.
+- **`opencode.jsonc` counts.** The local-model rule reads
+  `memory/opencode.json(c)` and `opencode.json(c)` at the
+  checkout root.
+- **The connection pipeline runs in full once per host and
+  session.** Later connections check the access lists every
+  time, and the server lock, hub claims and recent activity
+  again before every change; DNS, SSH user, OS and memory
+  are not redone. Saves several SSH calls per command on
+  hosts used often in one session.
+- docs/opencode.md: the 2.x mapping, how to edit the
+  OpenCode config by hand, what the guard cannot stop (a
+  later plugin hook, the operator's own config). OpenCode 2
+  maps the old `permission` keys on load (`bash` to
+  `shell`), per its source.
+
 ## 3.3.3-jolitz.21 — 2026-11-02
 
 - **Globs that spell opencode put a command in scope.** `o*`,

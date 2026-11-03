@@ -1,7 +1,8 @@
 # Activity Check
 
-On **every** connection to a server (remote or
-local), check for recent jolitz activity in the
+On the **first** connection to a server in a
+session (remote or local), and again before every
+change, check for recent jolitz activity in the
 system journal. This keeps the user informed about
 changes made by other team members or previous
 sessions.
@@ -9,8 +10,11 @@ sessions.
 ## When to run
 
 After reading the server memory file and before
-starting any requested work. This applies to every
-connection, not just the first of the day.
+starting any requested work, on the first connection
+to the host in a session. Before every change on
+that host, run it again: a teammate may have started
+since (`rules/first-connection.md` → Later
+connections in the same session).
 
 ## How to check
 

@@ -70,10 +70,13 @@ detect, usually the SSH user, and keeps it in
 
 ![Fleet overview](assets/overview/overview.png)
 
-Every connection first runs the same checks, also for a quick
-`df -h`: access lists, server lock, DNS aliases, SSH user, OS,
-the server's memory, the last 7 days of jolitz activity. Then
-the rule file for that platform supplies the commands.
+The first connection to a host in a session runs the same
+checks, also for a quick `df -h`: access lists, server lock,
+DNS aliases, SSH user, OS, the server's memory, the last 7
+days of jolitz activity. Later connections in the session
+check the access lists, and before a change the lock and the
+activity again. Then the rule file for that platform supplies
+the commands.
 
 **Skills**, started by what you say:
 

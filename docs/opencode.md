@@ -25,18 +25,35 @@ runs, before every tool call that can change something. It
 hands over the call in the JSON Claude Code would send and
 stops it on a deny. It holds no rules of its own.
 
-What it checks, by OpenCode tool:
+What it checks, by OpenCode tool (1.x / 2.x):
 
 | Tool | Checked as |
 |---|---|
-| `bash` | the command, in its `workdir` |
-| `edit`, `write` | the target file |
-| `apply_patch` | every file the patch adds, updates, deletes or moves to |
+| `bash` / `shell` | the command, in its `workdir` |
+| `edit`, `write` (`filePath` / `path`) | the target file |
+| `apply_patch` / `patch` | every file the patch adds, updates, deletes or moves to |
 
 Reads, searches, web and MCP tools pass, as under Claude
 Code. A tool a later OpenCode renames is still caught by its
-arguments (`command`, `filePath`, `patchText`). Written
-against OpenCode 1.19.5.
+arguments (`command`, `filePath` or `path`, `patchText`).
+
+One file serves both plugin APIs. OpenCode 1.x reads
+`default.server()` and its `tool.execute.before` hook;
+OpenCode 2.x reads `default.setup()` and registers
+`tool.hook("execute.before")`. Each ignores the other's key.
+Needs OpenCode 1.3.4 or newer: older versions call every
+export as a function and do not load the default object, so
+no guard runs there (`bin/jolitz-doctor` warns). Written
+against OpenCode 1.19.5 and the 2.2.5 source; the tests drive
+both APIs with stand-ins, not a running OpenCode.
+
+Each argument that can name a file (`filePath`, `path`,
+`file_path`, `file`, `target`, `destination`) is checked on
+its own, and only `read`, `grep`, `glob`, `list` and `lsp`
+count as readers. A known shell, patch or file tool missing
+its argument is denied. Before 3.3.3-jolitz.22 the plugin had no default
+export, so OpenCode 2 did not load it and nothing was
+guarded there.
 
 ### What you set up
 
@@ -83,7 +100,15 @@ guard's JSON, the call is blocked, like
   `memory/opencode.json`) and under `~/.config/opencode/`, as
   under `.claude/hooks/`: the agent can neither rewrite the
   plugin nor add one that changes a call after it, nor loosen
-  its own permission block. You edit those files by hand.
+  its own permission block. You edit those files by hand, in
+  an editor or a shell outside the agent; asking jolitz to do
+  it is denied on purpose. `JOLITZ_GUARD_DISABLE=1` lifts this
+  with every other taboo for the session, so prefer the
+  editor.
+- A plugin hook that runs after this one can still change a
+  call's arguments, and anyone with the config can remove
+  the plugin. The guard protects against the agent, not
+  against the operator.
 - MCP tools pass unchecked, as under Claude Code.
 - The SessionStart hooks (update check, start screen, `jq`
   check, SSH socket directory) and the output marker

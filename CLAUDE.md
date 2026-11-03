@@ -139,14 +139,14 @@ Read `rules/access-control.md` for full details.
 Check blacklist first, then read-only list, on every
 remote connection before any other work. A server
 can lock itself with `allow_changes = false` in
-`/etc/jolitz.conf`: read it on every connection,
-local mode too, and treat a lock like the read-only
-list. Never write, move or delete that file.
+`/etc/jolitz.conf`: read it on the first connection
+in a session and again before every change, local
+mode too, and treat a lock like the read-only list. Never write, move or delete that file.
 
 ## Local Model
 
 Read `rules/local-model.md`. When
-`memory/opencode.json` names a local provider
+`memory/opencode.json(c)` names a local provider
 (Ollama or another on the operator's hardware),
 every host is read-only as in `memory/readonly.md`.
 The line `Local model changes: allowed` in
@@ -273,13 +273,17 @@ it.
 
 ## No Shortcuts for "Quick" Questions
 
-Every remote connection runs the full onboarding
-pipeline in `rules/first-connection.md` —
-blacklist/read-only check, path access control,
-DNS alias detection, SSH user lookup, OS detection,
-server memory file, and activity check — **before** any user-requested
+The first connection to a host in a session runs
+the full onboarding pipeline in
+`rules/first-connection.md` — blacklist/read-only
+check, path access control, DNS alias detection,
+SSH user lookup, OS detection, server memory file,
+and activity check — **before** any user-requested
 command, including trivial ones like `df -h`,
-`uptime`, or `uname -a`.
+`uptime`, or `uname -a`. Later connections to the
+same host in the session run its short form: the
+local lists every time, the server lock, hub claims
+and activity check again before every change.
 
 There is no "quick question" exception. Do not skip
 steps because the request seems small, because you
@@ -477,9 +481,10 @@ server memory file.
 
 ## Activity Check
 
-Read `rules/activity-check.md`. On every connection,
-check the system journal for recent jolitz activity
-and summarize it for the user.
+Read `rules/activity-check.md`. On the first
+connection to a host in a session, and again before
+every change, check the system journal for recent
+jolitz activity and summarize it for the user.
 
 ## DNS Aliases
 

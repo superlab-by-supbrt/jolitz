@@ -1,6 +1,6 @@
 #!/bin/sh
 # jolitz-doctor — check the workstation jolitz runs on:
-# Claude Code version, guard hooks, tools, cache, git
+# Claude Code or OpenCode, guard hooks, tools, cache, git
 # state, memory, logs, ssh agent, team hub. Reads local
 # files only; never connects to a server. Only --fetch
 # goes online, to the git remote of this checkout, and
@@ -20,10 +20,11 @@
 # columns, then "<check>: <detail>". A missing tool
 # fails its own line; the run continues.
 #
-# FAIL: claude missing or older than 2.1.295, jq
-# missing, memory lint errors.
+# FAIL: neither claude nor opencode in PATH, claude
+# older than 2.1.295, jq missing, memory lint errors.
 # WARN: a guard hook not registered or without
-# "onFailure": "block", curl missing, ~/.cache/jolitz
+# "onFailure": "block", the OpenCode guard plugin missing
+# or OpenCode older than 1.3.4, curl missing, ~/.cache/jolitz
 # missing or not mode 700, a branch other than main
 # or a pinned tag, main behind origin (--fetch),
 # uncommitted changes in tracked files, no
@@ -102,9 +103,28 @@ days_since() {
     END { if (a < 0 || b < 0) print -1; else print b - a }'
 }
 
-# --- Claude Code ---------------------------------------------
+# --- Claude Code or OpenCode ---------------------------------
+# One of the two is enough. Under OpenCode the guard runs as the
+# plugin .opencode/plugins/jolitz-guard.js (OpenCode 1.x and 2.x).
+if command -v opencode >/dev/null 2>&1; then
+  ov=$(opencode --version 2>/dev/null | head -n 1) || ov=""
+  ovn=$(printf '%s' "$ov" | sed -n 's/^[^0-9]*\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p')
+  if [ ! -f "$REPO_DIR/.opencode/plugins/jolitz-guard.js" ]; then
+    warn "OpenCode ${ov:-(version not readable)}: guard plugin .opencode/plugins/jolitz-guard.js missing"
+  elif [ -n "$ovn" ] && [ "$(vercmp "$ovn" 1.3.4)" -lt 0 ]; then
+    # Before 1.3.4 OpenCode calls every export as a function and
+    # does not load the plugin's default object: no guard.
+    warn "OpenCode $ovn: below 1.3.4, the guard plugin does not load"
+  else
+    ok "OpenCode ${ov:-(version not readable)}: guard plugin .opencode/plugins/jolitz-guard.js"
+  fi
+fi
 if ! command -v claude >/dev/null 2>&1; then
-  fail "Claude Code: claude not in PATH"
+  if command -v opencode >/dev/null 2>&1; then
+    ok "Claude Code: not in PATH, OpenCode is"
+  else
+    fail "Claude Code: claude not in PATH, nor opencode"
+  fi
 else
   v=$(claude --version 2>/dev/null \
     | sed -n 's/^[^0-9]*\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' \
