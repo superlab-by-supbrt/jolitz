@@ -41,9 +41,17 @@ One file serves both plugin APIs. OpenCode 1.x reads
 `default.server()` and its `tool.execute.before` hook;
 OpenCode 2.x reads `default.setup()` and registers
 `tool.hook("execute.before")`. Each ignores the other's key.
-Written against OpenCode 1.19.5 and the 2.2.5 source; the
-tests drive both APIs with stand-ins, not a running
-OpenCode. Before 3.3.3-jolitz.22 the plugin had no default
+Needs OpenCode 1.3.4 or newer: older versions call every
+export as a function and do not load the default object, so
+no guard runs there (`bin/jolitz-doctor` warns). Written
+against OpenCode 1.19.5 and the 2.2.5 source; the tests drive
+both APIs with stand-ins, not a running OpenCode.
+
+Each argument that can name a file (`filePath`, `path`,
+`file_path`, `file`, `target`, `destination`) is checked on
+its own, and only `read`, `grep`, `glob`, `list` and `lsp`
+count as readers. A known shell, patch or file tool missing
+its argument is denied. Before 3.3.3-jolitz.22 the plugin had no default
 export, so OpenCode 2 did not load it and nothing was
 guarded there.
 

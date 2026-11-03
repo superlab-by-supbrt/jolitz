@@ -11,6 +11,13 @@
   ids (`shell`, `patch`) and its `path` argument for `edit`
   and `write` are mapped. Read from the 2.2.5 source; a
   reader reported the `path` gap.
+- **Every path argument is checked; fewer readers.** A call
+  naming two paths (`filePath` and `path`) cannot hide one
+  behind the other; only `read`, `grep`, `glob`, `list` and
+  `lsp` pass as readers; a known shell, patch or file tool
+  without its argument is denied. Needs OpenCode 1.3.4 or
+  newer, which reads the default export; the doctor warns
+  below.
 - **Fails closed, tested.** The plugin test drives both APIs
   with every case, plus a guard that cannot start, exits
   non-zero, answers garbage or hangs past the timeout: each

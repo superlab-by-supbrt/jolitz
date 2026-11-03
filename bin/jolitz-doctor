@@ -23,7 +23,8 @@
 # FAIL: neither claude nor opencode in PATH, claude
 # older than 2.1.295, jq missing, memory lint errors.
 # WARN: a guard hook not registered or without
-# "onFailure": "block", curl missing, ~/.cache/jolitz
+# "onFailure": "block", the OpenCode guard plugin missing
+# or OpenCode older than 1.3.4, curl missing, ~/.cache/jolitz
 # missing or not mode 700, a branch other than main
 # or a pinned tag, main behind origin (--fetch),
 # uncommitted changes in tracked files, no
@@ -110,10 +111,10 @@ if command -v opencode >/dev/null 2>&1; then
   ovn=$(printf '%s' "$ov" | sed -n 's/^[^0-9]*\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p')
   if [ ! -f "$REPO_DIR/.opencode/plugins/jolitz-guard.js" ]; then
     warn "OpenCode ${ov:-(version not readable)}: guard plugin .opencode/plugins/jolitz-guard.js missing"
-  elif [ -n "$ovn" ] && [ "$(vercmp "$ovn" 1.15.0)" -lt 0 ]; then
-    # Before 1.15 OpenCode calls every export as a function and
+  elif [ -n "$ovn" ] && [ "$(vercmp "$ovn" 1.3.4)" -lt 0 ]; then
+    # Before 1.3.4 OpenCode calls every export as a function and
     # does not load the plugin's default object: no guard.
-    warn "OpenCode $ovn: below 1.15.0, the guard plugin does not load"
+    warn "OpenCode $ovn: below 1.3.4, the guard plugin does not load"
   else
     ok "OpenCode ${ov:-(version not readable)}: guard plugin .opencode/plugins/jolitz-guard.js"
   fi

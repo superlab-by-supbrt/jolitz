@@ -13,7 +13,7 @@
 // cannot start, times out, exits non-zero or answers with
 // something that is not the guard's JSON, the call is stopped.
 //
-// Two plugin APIs, one default export (OpenCode 1.15 or newer;
+// Two plugin APIs, one default export (OpenCode 1.3.4 or newer;
 // older 1.x call every export as a function and would not load
 // this one):
 //   OpenCode 1.x reads default.server(input) and calls the
