@@ -60,7 +60,7 @@ alias of that name):
      grep -E '^[0-9.]+$'
    ```
    Verify the syntax of the tool you use on the
-   machine running the query (see CLAUDE.md →
+   machine running the query (see AGENTS.md →
    Verify Before Running). If the blacklist or
    read-only check already resolved the name this
    way, reuse that result; otherwise resolve it

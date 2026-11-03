@@ -87,7 +87,7 @@ port (`rules/ssh-port.md` → Known port).
 In local mode (`localhost`, the user's own
 hostname), skip steps 1, 2, 4 and 5 — they are
 remote-only
-(see `CLAUDE.md` → How It Works → Local mode).
+(see `AGENTS.md` → How It Works → Local mode).
 Still run the server lock, OS detection, server
 memory, and activity check.
 

@@ -28,7 +28,7 @@ limits and IPS rules punish, and it keeps an existing
 block alive.
 
 1. Retry **once** with the fresh-login options
-   (`CLAUDE.md` → SSH Options) plus `-v`. A stale
+   (`AGENTS.md` → SSH Options) plus `-v`. A stale
    shared connection is the cheap explanation, and
    `-v` shows every address tried (see Dual-stack).
 2. If that fails too, stop. Wait several minutes
@@ -55,7 +55,7 @@ path blocks SSH. Wait, or tell the user. Do not
 chase routing, NAT or MTU. A check from inside the
 target's network sees a clean path and proves
 nothing about the client's. Firewall and IPS
-changes: `CLAUDE.md` → Firewall & network.
+changes: `AGENTS.md` → Firewall & network.
 
 ## Dual-stack
 

@@ -1,6 +1,6 @@
 # SSH — Password Authentication & Hardening
 
-**Note:** Reading `sshd_config` is safe. The CLAUDE.md taboo is
+**Note:** Reading `sshd_config` is safe. The AGENTS.md taboo is
 about *modifying* `/etc/ssh/sshd_config`, not reading it.
 
 ## SSH Password Authentication — Linux

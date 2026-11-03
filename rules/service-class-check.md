@@ -260,7 +260,7 @@ a real option and must be refused:
   or one silently wins.
 - **Firewall manager** — two frontends stomp each
   other's rules and can cut off SSH. Listed in
-  CLAUDE.md's "Firewall & network" warning for
+  AGENTS.md's "Firewall & network" warning for
   exactly this reason.
 
 For those two classes, present only options (a),

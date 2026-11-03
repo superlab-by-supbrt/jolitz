@@ -257,7 +257,7 @@ If neither file is sourced, fall back to:
 
 Install languages **as the SSH user** (not root).
 Web-search the current LTS/stable version first —
-never trust training data (see CLAUDE.md). Use
+never trust training data (see AGENTS.md). Use
 `mise use --global` to set a default version:
 
 ```

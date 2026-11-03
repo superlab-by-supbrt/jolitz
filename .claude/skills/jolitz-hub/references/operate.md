@@ -196,7 +196,7 @@ rm ~/.config/jolitz/hub.conf
 
 Remove the `Hub:` line from `memory/user.md`. `memory/` stays
 as it is; jolitz works on files again, solo or with git
-(`CLAUDE.md` → Team Usage). The token file stays until the
+(`AGENTS.md` → Team Usage). The token file stays until the
 user deletes it (`rm ~/.config/jolitz/hub-token`, their call)
 or the admin runs `user rm`. The hub keeps the person's files
 and sessions; ask the admin for `user rm` when the person

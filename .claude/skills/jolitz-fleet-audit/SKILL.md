@@ -63,7 +63,7 @@ servers" — that maps to single-host housekeeping.
 
 3. **Probe in parallel.** For each in-scope host, run the
    probes from `references/probes.md` in a single batched
-   SSH command, with the standard options from `CLAUDE.md` →
+   SSH command, with the standard options from `AGENTS.md` →
    SSH Options and the port from `- SSH port:` in the host's
    `memory.md`.
    The probe set follows the OS family from the pipeline:

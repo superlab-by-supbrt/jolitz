@@ -10,3 +10,7 @@ bin/jolitz-*    text eol=lf
 assets/*.txt     text eol=lf
 # Test fixtures are compared line by line.
 tests/fixtures/* text eol=lf
+# CLAUDE.md is one import line; a CR after @AGENTS.md would
+# name another file. The rules file stays LF with it.
+CLAUDE.md        text eol=lf
+AGENTS.md        text eol=lf

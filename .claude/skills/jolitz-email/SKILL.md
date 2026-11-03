@@ -234,7 +234,7 @@ the only root-privileged operation in the workflow.
      stdout/stderr inline in a fenced block in place of the
      report.
    - **Ceiling: 5 lines of your own text** around that block,
-     per "Talking to Humans" in `CLAUDE.md`. No cover sentence,
+     per "Talking to Humans" in `AGENTS.md`. No cover sentence,
      no restatement of the subject, no "as requested", no recap
      under the report. A report goes in exactly as its skill
      produced it — nothing added before or after it.

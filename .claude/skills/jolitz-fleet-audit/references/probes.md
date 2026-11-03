@@ -5,7 +5,7 @@ read-only. Group them into a single SSH invocation per host
 to minimise round-trips:
 
 ```bash
-ssh <standard options from CLAUDE.md → SSH Options> USER@HOST '
+ssh <standard options from AGENTS.md → SSH Options> USER@HOST '
 echo "###ua###"; <ua probe>
 echo "###sshd###"; <sshd probe>
 echo "###fw###"; <firewall probe>

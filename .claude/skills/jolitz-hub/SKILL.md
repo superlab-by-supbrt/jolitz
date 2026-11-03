@@ -124,7 +124,7 @@ admin removes the user with `jolitz-hub user rm <name>`.
 - Every change on the hub host asks first, with `Way back:`.
   The install is one plan with one OK; a step the plan did not
   name asks on its own.
-- The firewall change asks separately, as `CLAUDE.md` →
+- The firewall change asks separately, as `AGENTS.md` →
   Firewall Awareness requires, and arms a rollback timer
   (`rules/rollback-timer.md`).
 - `leave` asks once and names what it deletes (`hub.conf`) and

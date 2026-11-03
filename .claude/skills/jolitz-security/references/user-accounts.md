@@ -53,7 +53,7 @@ shell (`bash` with `/bin/bash`) cannot hide.
   recognize.
 - A regex of inert shell names writes `shutdown` and `halt`
   into the command, and `guard-taboos.sh` denies it (see
-  `CLAUDE.md`, Critical Safety Rules).
+  `AGENTS.md`, Critical Safety Rules).
 - awk's `!~` (and any `!`) does not survive SSH + zsh quoting:
   zsh reads `!` as history expansion, even inside quotes.
 

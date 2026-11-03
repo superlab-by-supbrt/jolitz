@@ -13,7 +13,7 @@ joined through the `jolitz-hub` skill
 `memory/` stays the working copy and the source. Every rule and
 skill reads `memory/`; the hub shows the same files to the whole
 team, live, with search and presence. The team mode over git
-(`CLAUDE.md` → Team Usage) is the alternative for a team without
+(`AGENTS.md` → Team Usage) is the alternative for a team without
 a hub; both can run side by side.
 
 ## What the hub holds

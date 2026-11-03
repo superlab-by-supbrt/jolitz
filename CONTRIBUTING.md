@@ -29,19 +29,26 @@ Bug reports, ideas and pull requests are welcome.
 
 ## Working on the code with an AI assistant
 
-`CLAUDE.md` in this repository is the product: the
-system prompt of the admin agent. It is not a guide
-for developing jolitz, and its guard hook gets in
-the way of editing the hook itself. Work on the code
-from a workspace one level up, with a CLAUDE.md of
-its own and this repository as a subdirectory, so
-the product's hooks do not run and its CLAUDE.md is
-read as content.
+`AGENTS.md` in this repository is the product: the
+system prompt of the admin agent. `CLAUDE.md` only
+imports it (`@AGENTS.md`), so Claude Code and OpenCode
+read the same rules. Neither is a guide for
+developing jolitz, and the guard hook gets in the way
+of editing the hook itself. Work on the code from a
+workspace one level up, with a CLAUDE.md of its own
+and this repository as a subdirectory, so the
+product's hooks do not run and its rules are read as
+content.
+
+Rules go into `AGENTS.md`, never into `CLAUDE.md`.
+Never run OpenCode's `/init` in the checkout: it
+rewrites `AGENTS.md`.
 
 ## Layout
 
 ```
-CLAUDE.md        instructions for the AI tool (the product)
+AGENTS.md        instructions for the AI tool (the product)
+CLAUDE.md        @AGENTS.md, the import Claude Code reads
 rules/           rule files per platform and topic
 .claude/skills/  housekeeping, security, email, fleet audit,
                  incident, updates, docker, macOS cleanup, hub

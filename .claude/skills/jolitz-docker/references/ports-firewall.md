@@ -67,7 +67,7 @@ Exposure).
 ## Proposed fixes (asked, never run by the inventory)
 
 Two shapes, in order of preference, both firewall changes
-under `CLAUDE.md` → Firewall & network:
+under `AGENTS.md` → Firewall & network:
 
 1. **Bind to loopback.** In the compose file,
    `ports: "127.0.0.1:8080:80"` instead of `"8080:80"`,

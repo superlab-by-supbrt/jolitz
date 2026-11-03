@@ -2,9 +2,12 @@
 
 Back to the [README](../README.md).
 
-Claude Code is what jolitz is developed with. OpenCode reads
-the same `CLAUDE.md` and `.claude/skills/` while
-`OPENCODE_DISABLE_CLAUDE_CODE` is unset. Other tools get the
+Claude Code is what jolitz is developed with. The rules live
+in `AGENTS.md`, which OpenCode reads directly; Claude Code
+reads `CLAUDE.md`, which imports it. OpenCode reads
+`.claude/skills/` while `OPENCODE_DISABLE_CLAUDE_CODE` is
+unset. Do not run OpenCode's `/init` in the checkout: it
+rewrites `AGENTS.md`, the rules themselves. Other tools get the
 rule layer; the skills (housekeeping, security, email, fleet
 audit, incident, updates, docker, macOS cleanup) need Skills
 support. `memory/opencode.json.example` carries a
@@ -95,6 +98,8 @@ guard's JSON, the call is blocked, like
 
 ### What differs from Claude Code
 
+- The guard denies any write to `AGENTS.md` and `CLAUDE.md`,
+  so `/init` cannot replace the rules.
 - The guard denies any write under `.opencode/`, to
   `opencode.json` or `opencode.jsonc` (also
   `memory/opencode.json`) and under `~/.config/opencode/`, as

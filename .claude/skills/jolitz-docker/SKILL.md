@@ -60,7 +60,7 @@ automatically** — only on explicit user request.
      `--volumes` without the volume list in the question.
      Way back for a pruned volume: none; say so.
    - Binding a port to `127.0.0.1` or a `DOCKER-USER` rule:
-     a firewall change, `CLAUDE.md` → Firewall & network.
+     a firewall change, `AGENTS.md` → Firewall & network.
 8. **Record.** `logger -t jolitz "read-only: docker
    inventory"` when nothing changed; otherwise the headline
    and the local changelog per `rules/changelog.md`.

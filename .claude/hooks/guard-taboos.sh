@@ -3,7 +3,7 @@
 # Edit|Write|NotebookEdit with the argument "file").
 #
 # Mechanically enforces jolitz's absolute taboos from
-# CLAUDE.md → Critical Safety Rules, below the model layer:
+# AGENTS.md → Critical Safety Rules, below the model layer:
 #
 #   - halt / poweroff / shutdown without -r / init 0 /
 #     telinit 0 / sysrq-trigger
@@ -477,6 +477,17 @@ LOCKFILE='[Jj][Oo][Ll][Ii][Tt][Zz]\.[Cc][Oo][Nn][Ff]'
 # component of the path.
 SELF='(\.(claude[.[:space:]]*(:[^/]*)?/(settings(\.local)?\.json|hooks[.[:space:]]*(:[^/]*)?/)|opencode[.[:space:]]*(:[^/]*)?/)|/opencode\.jsonc?[.[:space:]]*(:.*)?$|\.config[.[:space:]]*(:[^/]*)?/opencode([/.[:space:]:]|$))'
 
+# jolitz's own rules: AGENTS.md holds them, CLAUDE.md imports it.
+# A write to either rewrites the agent's system prompt, and
+# OpenCode's /init would replace AGENTS.md wholesale. Any file of
+# either name, in any case (APFS and NTFS fold case). FILE form
+# for file mode, where the target is a whole path; CMD form for
+# commands, where the name stands in a word.
+RULESFILE='/(agents|claude)\.md[.[:space:]]*(:.*)?$'
+RULES='(^|[/[:space:]="'\''<>])[Aa][Gg][Ee][Nn][Tt][Ss]\.[Mm][Dd]([^[:alnum:]_.-]|\.[[:space:]]|$)|(^|[/[:space:]="'\''<>])[Cc][Ll][Aa][Uu][Dd][Ee]\.[Mm][Dd]([^[:alnum:]_.-]|\.[[:space:]]|$)'
+# The bare name, for writes_to, which supplies the path before it.
+RULESNAME='([Aa][Gg][Ee][Nn][Tt][Ss]|[Cc][Ll][Aa][Uu][Dd][Ee])\.[Mm][Dd]'
+
 # An assignment of the override, in shell (VAR=1), JSON
 # ("VAR": "1") or jq (.env.VAR="1") form. A bare mention, as in
 # this file's documentation, stays allowed. The backslash is for
@@ -561,7 +572,7 @@ deny() {
   # denial may be one jq would have avoided. Say so.
   command -v jq >/dev/null 2>&1 \
     || printf '(jq is missing on this workstation, so the guard read the command only roughly; installing jq avoids such denials) '
-  printf '(CLAUDE.md - Critical Safety Rules). Blocked in all '
+  printf '(AGENTS.md - Critical Safety Rules). Blocked in all '
   printf 'permission modes. Explain this to the user; do not '
   printf 'rephrase the command to evade the guard."}}\n'
   exit 0
@@ -697,6 +708,11 @@ only the operator sets it, before the session"
   if target_hit "$SELF"; then
     deny "this file registers or implements the guard; the \
 operator edits it by hand"
+  fi
+  if target_hit "$RULESFILE"; then
+    deny "AGENTS.md and CLAUDE.md are the agent's own rules; the \
+operator edits them by hand, and OpenCode's /init must not run \
+in the jolitz checkout"
   fi
   if target_hit "$SSHD"; then
     deny "modifying sshd_config or a file merged into it is \
@@ -992,7 +1008,7 @@ if [ "$IN_CLAUDE" -eq 1 ]; then
     | tr '\t' ' ' | tr -s ' ' | sed -e 's/^ //' -e 's/ $//')
   SCAN='\.claude/skills/jolitz-macos-cleanup/scripts/scan\.py'
   SARG='( ([A-Za-z0-9_.@:+-]+|"[A-Za-z0-9 _.@:+-]+"))*'
-  # Only the options CLAUDE.md prescribes, so no ProxyCommand,
+  # Only the options AGENTS.md prescribes, so no ProxyCommand,
   # LocalCommand, -F or -S runs or reads anything else.
   SSHOPT='( -o (BatchMode|ConnectTimeout|ControlMaster|ControlPath|ControlPersist|ServerAliveInterval|ServerAliveCountMax|Port)=[A-Za-z0-9_.%~/:@+-]+)* [A-Za-z0-9_][A-Za-z0-9_.@:-]*'
   SOUT='( > [A-Za-z0-9_.-]+)?'
@@ -1063,6 +1079,28 @@ grep, ls, head, find without -exec or -delete, git log/show/diff) \
   fi
 fi
 
+# --- The agent's own rules -------------------------------------
+# AGENTS.md (the rules) and CLAUDE.md (its import), in the same
+# write set as sudoers: a redirect, sed or perl in place, an
+# editor, a delete, move, re-permission or copy, tee, and an
+# interpreter next to the name. Reading (cat, grep, less, git
+# diff) stays allowed. Accepted false positive: a file of either
+# name on a server, and cp with one as the source; the operator
+# lifts the guard for that.
+if hit "$RULES"; then
+  if hit "$ONTO($RULES)" \
+    || { hit '(^|[^[:alnum:]_-])(sed|perl)([^[:alnum:]_-]|$)' \
+         && hit "$INPLACE"; } \
+    || hit "(^|[^[:alnum:]_-])$EDITOR([^[:alnum:]_-]|\$)" \
+    || hit "(^|[^[:alnum:]_-])($CLOBBER|cp)([^[:alnum:]_-]|\$)" \
+    || hit "$INTERP" \
+    || writes_to "$RULESNAME"
+  then
+    deny "AGENTS.md and CLAUDE.md are the agent's own rules; the \
+operator edits them by hand (cat and grep read them)"
+  fi
+fi
+
 # --- A second agent session ------------------------------------
 # claude -p (or --print) and opencode -p start another session,
 # and one started from another cwd runs without this hook;
@@ -1080,7 +1118,7 @@ fi
 
 # --- The SSH service ------------------------------------------
 # Stopping, disabling or masking sshd closes the door the next
-# session comes in through, like removing its port (CLAUDE.md).
+# session comes in through, like removing its port (AGENTS.md).
 # systemctl stop/disable/mask on ssh or sshd (.service, .socket),
 # service and rc-service stop (FreeBSD onestop too), an init.d
 # or rc.d script, launchctl unload/disable/bootout of

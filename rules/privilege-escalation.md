@@ -3,7 +3,7 @@
 **Local mode:** when the target is the local
 machine, skip the root SSH fallback entirely. If
 sudo is unusable, go straight to unprivileged mode
-(see `CLAUDE.md` → Local mode).
+(see `AGENTS.md` → Local mode).
 
 ## Sudo
 
@@ -42,7 +42,7 @@ of a system file (`rules/verify-before-reporting.md`
 
 When sudo is unusable and a privileged action is
 needed, probe root SSH access once, with the
-fresh-login options (`CLAUDE.md` → SSH Options) — a
+fresh-login options (`AGENTS.md` → SSH Options) — a
 shared root connection opened earlier would answer
 even if root login has been disabled since:
 

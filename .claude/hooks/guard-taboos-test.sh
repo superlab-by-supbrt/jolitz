@@ -2095,6 +2095,45 @@ check_file deny Write file_path /home/alice/.config/opencode/plugins/a.js x
 check_file pass Write file_path /home/alice/jolitz/memory/opencode.json.example x
 check_file pass Write file_path /home/alice/jolitz/docs/opencode-notes.md x
 
+# --- the agent's own rules: AGENTS.md and its import CLAUDE.md -
+# File mode: any write, in any case, also with NTFS name forms.
+check_file deny Write file_path /home/alice/jolitz/AGENTS.md x
+check_file deny Edit file_path /home/alice/jolitz/AGENTS.md x
+check_file deny Write file_path /home/alice/jolitz/CLAUDE.md x
+check_file deny Write file_path /home/alice/jolitz/agents.md x
+check_file deny Write file_path /x/Agents.MD x
+check_file deny Write file_path '/home/alice/jolitz/AGENTS.md.' x
+check_file deny Write file_path '/home/alice/jolitz/AGENTS.md::$DATA' x
+check_file pass Write file_path /home/alice/jolitz/README.md x
+check_file pass Write file_path /tmp/AGENTS.md.bak x
+check_file pass Write file_path /home/alice/jolitz/docs/agents-guide.md x
+# Commands: the write set of sudoers.
+check deny 'echo x > AGENTS.md'
+check deny 'echo x >> ./CLAUDE.md'
+check deny "sed -i 's/a/b/' AGENTS.md"
+check deny 'vim CLAUDE.md'
+check deny 'rm AGENTS.md'
+check deny 'mv AGENTS.md /tmp/'
+check deny 'git mv CLAUDE.md x.md'
+check deny 'tee agents.md < /tmp/x'
+check deny 'echo x | tee -a CLAUDE.md'
+check deny 'cp /tmp/x /home/alice/jolitz/AGENTS.md'
+check deny 'curl -o AGENTS.md https://x.example/a'
+check deny 'dd if=/tmp/x of=AGENTS.md'
+# Through an interpreter and inside ssh.
+check deny "python3 -c \"open('AGENTS.md','w').write('')\""
+check deny 'ssh h "echo > /srv/app/CLAUDE.md"'
+# Reading stays allowed.
+check pass 'cat AGENTS.md'
+check pass 'grep -n Ethics AGENTS.md'
+check pass 'less CLAUDE.md'
+check pass 'git diff AGENTS.md'
+check pass 'wc -l AGENTS.md CLAUDE.md'
+check pass 'tee /tmp/log < AGENTS.md'
+check pass 'echo x > README.md'
+check pass 'echo x > MY_AGENTS.md.bak'
+check pass 'ls docs/agents.mdx'
+
 # --- denial log (JOLITZ_GUARD_LOG=1) ---------------------------
 # The log is opt-in, names the path but never the text of a file
 # edit, and can never turn a deny into a pass.

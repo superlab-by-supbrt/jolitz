@@ -66,7 +66,7 @@ Rules for macOS (Apple Silicon and Intel).
   that need a restart. Always run `--list` first,
   install OS updates only with explicit user
   approval, and never use `--restart`/`-R` without
-  asking (CLAUDE.md: ask before reboots). Some
+  asking (AGENTS.md: ask before reboots). Some
   updates remain incomplete until the Mac reboots.
 - Check auto-update preferences:
   ```
@@ -156,11 +156,11 @@ Rules for macOS (Apple Silicon and Intel).
     `sysctl -n machdep.cpu.brand_string` (model),
     `sysctl -n hw.ncpu` (core count)
   - `journalctl` does not exist — use `log show`
-    (see Changelog section in CLAUDE.md)
+    (see Changelog section in AGENTS.md)
   - `df -h` works the same.
 - `logger` works on macOS and writes to the unified
   log. Reading back requires `log show` (see
-  CLAUDE.md Changelog section).
+  AGENTS.md Changelog section).
 - `mise` works unchanged on macOS — same as Linux.
 
 ## Common Pitfalls

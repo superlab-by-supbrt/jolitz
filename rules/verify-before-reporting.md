@@ -21,7 +21,7 @@ source of truth.
 This is the same discipline as **Verify Before
 Running** (don't trust training data for command
 *syntax*) and **Never fabricate server facts**
-(`CLAUDE.md`), applied to *conclusions* rather than
+(`AGENTS.md`), applied to *conclusions* rather than
 to raw facts or commands.
 
 ## Before concluding, run these checks

@@ -159,7 +159,7 @@ even when the service is not in `reload-always-ask`:
   `firewall-cmd --reload`, `pfctl -f`,
   `service pf reload`). A rule error can drop SSH.
   Always ask. Covered by the "firewall changes"
-  rule in `CLAUDE.md`.
+  rule in `AGENTS.md`.
 - **Reload as part of a config change jolitz is
   making.** If jolitz just edited
   `/etc/nginx/...` in the same session, the
