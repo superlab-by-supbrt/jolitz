@@ -1,8 +1,10 @@
 # Local Model
 
 jolitz runs under OpenCode with a local model when
-`memory/opencode.json` names a provider on the
-operator's own hardware: an `ollama` section, or a
+its config names a provider on the operator's own
+hardware (`memory/opencode.json` or
+`memory/opencode.jsonc`, or `opencode.json` /
+`opencode.jsonc` at the checkout root): an `ollama` section, or a
 `baseURL` on localhost or a private address
 (`docs/opencode.md` → A local model). Then every host is
 read-only by default.
@@ -53,11 +55,13 @@ hand.
 ## How to check
 
 At session start, with the preflight
-(`CLAUDE.md` → Session Start Preflight): does
-`memory/opencode.json` exist, and does it hold a
-local provider? Read the file; do not guess from the
-model name the session shows. No file, or only
-hosted providers: this rule does not apply.
+(`CLAUDE.md` → Session Start Preflight): does one of
+`memory/opencode.json`, `memory/opencode.jsonc`,
+`opencode.json`, `opencode.jsonc` exist, and does it
+hold a local provider? Read the file (`.jsonc` may
+carry comments); do not guess from the model name the
+session shows. No file, or only hosted providers:
+this rule does not apply.
 
 ## OpenCode permissions
 
@@ -76,7 +80,13 @@ last matching rule wins, so `"*": "ask"` comes
 first. The published schema
 (https://opencode.ai/config.json) marks `permission`
 deprecated without naming a successor; the
-documentation still describes it. Keep the block
-when you copy the example. It is a backstop like the
+documentation still describes it. OpenCode 2 reads
+the same block and renames its keys on load: `bash`
+becomes `shell`, `write`, `patch` and `apply_patch`
+become `edit` (`normalizeAction` in its v1 config
+migration, read in the 2.2.5 source on 2026-11-03).
+Its native form is a `permissions` list; whether the
+last matching rule still wins there is not checked.
+Keep the block when you copy the example. It is a backstop like the
 guard, not a sandbox: a command inside `ssh host "…"`
 or built at run time is outside what a pattern sees.

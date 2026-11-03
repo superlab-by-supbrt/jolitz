@@ -186,9 +186,22 @@ fi
 
 PATH="$T/noclaude" "$DOCTOR" -d "$M" > "$T/d4.out" 2>&1; rc=$?
 ok $(( rc != 2 )) "doctor exits 2 without claude (got $rc)"
-has "$T/d4.out" 'FAIL  Claude Code: claude not in PATH' \
+has "$T/d4.out" 'FAIL  Claude Code: claude not in PATH, nor opencode' \
   "doctor: missing claude fails"
 has "$T/d4.out" 'ssh agent' "doctor keeps going without claude"
+# OpenCode alone is enough: no FAIL for the agent, the plugin
+# is checked.
+mkdir -p "$T/oconly"
+for f in "$T/noclaude"/*; do ln -s "$f" "$T/oconly/${f##*/}"; done
+printf '#!/bin/sh\necho 2.2.5\n' > "$T/oconly/opencode"
+chmod 755 "$T/oconly/opencode"
+PATH="$T/oconly" "$DOCTOR" -d "$M" > "$T/d5.out" 2>&1
+! grep -q 'FAIL  Claude Code' "$T/d5.out"
+ok $? "doctor: OpenCode alone, no FAIL for Claude Code"
+has "$T/d5.out" 'OK    Claude Code: not in PATH, OpenCode is' \
+  "doctor: says OpenCode stands in"
+has "$T/d5.out" 'OK    OpenCode 2.2.5: guard plugin' \
+  "doctor: OpenCode version and guard plugin"
 
 chmod 755 "$HOME/.cache/jolitz"
 PATH="$T/bin1:$REAL_PATH" "$DOCTOR" -d "$M" > "$T/d5.out" 2>&1

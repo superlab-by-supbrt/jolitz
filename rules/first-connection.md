@@ -1,16 +1,40 @@
 # First-Connection Checklist
 
-The ordered pipeline that runs on **every** remote
-connection — and on every local-mode session, with
-the remote-only steps skipped — before any
-user-requested command.
+The ordered pipeline that runs on the **first**
+connection to a host in a session — and at the start
+of every local-mode session, with the remote-only
+steps skipped — before any user-requested command.
+Later connections to the same host in the same
+session run the short form below.
 
 **There is no "quick question" exception.** `df -h`,
 `uptime`, `uname -a`, and every other "one-liner"
-runs this pipeline first. If following the pipeline
-will visibly delay the answer, say so up front
-("first-contact onboarding on this host — one
-moment") — don't skip.
+gets the full pipeline on its host's first
+connection. If that will visibly delay the answer,
+say so up front ("first-contact onboarding on this
+host — one moment") — don't skip.
+
+## Later connections in the same session
+
+What a session learned about a host (DNS, SSH user
+and port, OS, memory file, the last activity) stays
+true for the session. Later connections run:
+
+- **Every time:** steps 1–3. They read local lists
+  only and cost no remote command; the operator may
+  have edited them since.
+- **Before any change** (anything that asks for an
+  OK): steps 6, 7 and 10 again, in one SSH call where
+  they can share it. A lock, a teammate's claim or a
+  concurrent session can appear mid-session, and they
+  matter only when something is about to change.
+- **Not again:** steps 4, 5, 8 and 9, unless a
+  command fails in a way that points at them (host
+  key changed, login refused, a tool missing that the
+  memory says is there). Then rerun the full
+  pipeline for that host.
+
+A new session starts over with the full pipeline.
 
 ## Order
 
@@ -50,10 +74,12 @@ port (`rules/ssh-port.md` → Known port).
    See `rules/access-control.md` → Server Lock.
 8. **OS detection.** See `rules/os-detection.md`.
 9. **Server memory file.** Create on first
-   connection, read on every subsequent connection.
+   contact with the host, read on the first
+   connection of every later session.
    See `rules/server-memory.md`.
-10. **Activity check.** Every connection, not just
-    the first. See `rules/activity-check.md`.
+10. **Activity check.** On the first connection,
+    and again before every change. See
+    `rules/activity-check.md`.
 11. **Then** execute the user's request.
 
 ## Local mode
@@ -121,5 +147,8 @@ Skipping steps has caused real incidents: stale
 memory files masking ownership changes, activity
 checks missing concurrent teammate work, and
 blacklisted hosts getting commands they should
-never receive. The overhead of a few extra commands
-is acceptable; silent skipping is a bug.
+never receive. The short form keeps every check that
+guards against those at the moment it matters: the
+lists on every connection, the lock, claims and
+activity before every change. Skipping beyond the
+short form is a bug.

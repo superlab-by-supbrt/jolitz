@@ -101,8 +101,9 @@ its own SSH user.
 
 ## IP Verification
 
-On every connection to a known server, verify the
-current IP matches `- IP:` in memory. Resolve as in
+On the first connection to a known server in a
+session, verify the current IP matches `- IP:` in
+memory. Resolve as in
 Detection step 1 and compare against the full set
 of resolved IPs: round-robin DNS gives a host
 multiple A records, and any overlap with the stored

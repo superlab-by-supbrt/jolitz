@@ -122,11 +122,13 @@ ignored. The same path on Linux, FreeBSD and macOS
 (`/etc` is `/private/etc` there). Root-owned, mode
 `0644`.
 
-**When to check:** on every connection, as the
-first SSH call once the SSH user and port are known
-(`rules/first-connection.md`, step 7). Local mode
-runs the same probe in the local shell. Read it
-fresh every time, never from server memory. Run the
+**When to check:** on the first connection to a
+host in a session, as the first SSH call once the
+SSH user and port are known
+(`rules/first-connection.md`, step 7), and again
+before every change. Local mode runs the same probe
+in the local shell. Read it fresh every time, never
+from server memory. Run the
 probe in a call of its own:
 
 ```bash
